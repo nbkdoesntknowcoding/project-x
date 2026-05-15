@@ -1,0 +1,98 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const auth = Astro.locals.auth;
+if (!auth) {
+  return Astro.redirect('/auth/login');
+}
+
+const apiUrl = (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+const response = await fetch(`${apiUrl}/api/docs`, {
+  headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+});
+
+interface DocSummary {
+  id: string;
+  title: string;
+  updated_at: string;
+}
+
+let docs: DocSummary[] = [];
+if (response.ok) {
+  const body = (await response.json()) as { docs: DocSummary[] };
+  docs = body.docs;
+}
+---
+
+<BaseLayout title="BOPPL Context Engine">
+  <main class="min-h-screen p-8">
+    <div class="max-w-3xl mx-auto">
+      <header class="flex items-center justify-between mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight">Docs</h1>
+        <div class="flex items-center gap-3">
+          <span class="text-base" style="color: var(--text-tertiary);">{auth.email}</span>
+          <a href="/auth/logout" class="text-base hover:underline" style="color: var(--accent-400);">
+            Sign out
+          </a>
+        </div>
+      </header>
+
+      <form id="new-doc-form" class="mb-8">
+        <button
+          type="submit"
+          class="px-3 h-8 text-base font-medium rounded-md transition-colors hover:opacity-90"
+          style="background: var(--accent-400); color: var(--text-inverse);"
+        >
+          New doc
+        </button>
+      </form>
+
+      <ul class="space-y-1">
+        {docs.length === 0 && (
+          <li class="text-base py-3" style="color: var(--text-tertiary);">
+            No docs yet. Create your first one.
+          </li>
+        )}
+        {
+          docs.map((d) => (
+            <li>
+              <a
+                href={`/app/d/${d.id}`}
+                class="block px-3 py-2 rounded-md transition-colors"
+                style="color: var(--text-primary);"
+                onmouseover="this.style.background='var(--surface-hover)'"
+                onmouseout="this.style.background='transparent'"
+              >
+                <div class="text-base">{d.title || 'Untitled'}</div>
+                <div class="text-xs mt-0.5 font-mono" style="color: var(--text-tertiary);">
+                  Updated {new Date(d.updated_at).toLocaleString()}
+                </div>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </main>
+
+  <script>
+    const form = document.getElementById('new-doc-form') as HTMLFormElement | null;
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const apiBase =
+        (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+      const res = await fetch(`${apiBase}/api/docs`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Untitled' }),
+      });
+      if (!res.ok) {
+        alert('Failed to create doc');
+        return;
+      }
+      const { doc } = (await res.json()) as { doc: { id: string } };
+      window.location.href = `/app/d/${doc.id}`;
+    });
+  </script>
+</BaseLayout>

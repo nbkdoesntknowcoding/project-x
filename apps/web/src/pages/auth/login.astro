@@ -1,0 +1,11 @@
+---
+import { workos } from '../../lib/workos.ts';
+
+return Astro.redirect(
+  workos.userManagement.getAuthorizationUrl({
+    provider: 'authkit',
+    clientId: import.meta.env.WORKOS_CLIENT_ID as string,
+    redirectUri: import.meta.env.WORKOS_REDIRECT_URI as string,
+  }),
+);
+---

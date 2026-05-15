@@ -1,0 +1,221 @@
+import { and, desc, eq, isNull } from 'drizzle-orm';
+import type { FastifyPluginAsync } from 'fastify';
+import { nanoid } from 'nanoid';
+import { z } from 'zod';
+import { writeMarkdownIntoLiveDoc } from '../collab/writeback.js';
+import { docs } from '../db/schema.js';
+import { withTenant } from '../db/with-tenant.js';
+import { contentHash, emptyYjsState } from '../lib/yjs.js';
+
+const createSchema = z.object({
+  title: z.string().min(1).max(200).default('Untitled'),
+  markdown: z.string().default(''),
+});
+
+// 1.2: title and markdown are both optional but at least one must be present.
+// Title-only updates skip the writeback path; body changes try writeback first
+// (so connected clients see the change immediately) and fall through to a
+// direct row write if no collab session is loaded for the doc.
+const saveSchema = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    markdown: z.string().optional(),
+  })
+  .refine((d) => d.title !== undefined || d.markdown !== undefined, {
+    message: 'Provide at least one of title or markdown',
+  });
+
+interface DocRow {
+  id: string;
+  path: string;
+  title: string;
+  markdown: string;
+  contentHash: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+function shapeForResponse(row: DocRow): {
+  id: string;
+  path: string;
+  title: string;
+  markdown: string;
+  content_hash: string | null;
+  created_at: Date;
+  updated_at: Date;
+} {
+  return {
+    id: row.id,
+    path: row.path,
+    title: row.title,
+    markdown: row.markdown,
+    content_hash: row.contentHash,
+    created_at: row.createdAt,
+    updated_at: row.updatedAt,
+  };
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isUuid(s: string): boolean {
+  return UUID_RE.test(s);
+}
+
+export const docsRoutes: FastifyPluginAsync = async (app) => {
+  app.get('/api/docs', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+
+    const rows = await withTenant(req.auth.tenant_id, async (tx) => {
+      return await tx
+        .select({
+          id: docs.id,
+          path: docs.path,
+          title: docs.title,
+          created_at: docs.createdAt,
+          updated_at: docs.updatedAt,
+        })
+        .from(docs)
+        .where(isNull(docs.deletedAt))
+        .orderBy(desc(docs.updatedAt))
+        .limit(100);
+    });
+
+    return { docs: rows };
+  });
+
+  app.post('/api/docs', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const parsed = createSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'bad_request', issues: parsed.error.issues });
+    }
+    const auth = req.auth;
+    const path = `${nanoid(10)}.md`;
+
+    const created = await withTenant(auth.tenant_id, async (tx) => {
+      const inserted = await tx
+        .insert(docs)
+        .values({
+          workspaceId: auth.tenant_id,
+          path,
+          title: parsed.data.title,
+          markdown: parsed.data.markdown,
+          yjsState: emptyYjsState(),
+          contentHash: contentHash(parsed.data.markdown),
+          createdBy: auth.sub,
+          updatedBy: auth.sub,
+        })
+        .returning();
+      const row = inserted[0];
+      if (!row) throw new Error('Failed to create doc');
+      return row;
+    });
+
+    return reply.code(201).send({
+      doc: {
+        id: created.id,
+        path: created.path,
+        title: created.title,
+        markdown: created.markdown,
+        content_hash: created.contentHash,
+        created_at: created.createdAt,
+        updated_at: created.updatedAt,
+      },
+    });
+  });
+
+  app.get<{ Params: { id: string } }>('/api/docs/:id', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params;
+    if (!isUuid(id)) return reply.code(400).send({ error: 'bad_id' });
+
+    const row = await withTenant(req.auth.tenant_id, async (tx) => {
+      const rows = await tx
+        .select()
+        .from(docs)
+        .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
+        .limit(1);
+      return rows[0];
+    });
+
+    if (!row) return reply.code(404).send({ error: 'not_found' });
+
+    return {
+      doc: {
+        id: row.id,
+        path: row.path,
+        title: row.title,
+        markdown: row.markdown,
+        content_hash: row.contentHash,
+        created_at: row.createdAt,
+        updated_at: row.updatedAt,
+      },
+    };
+  });
+
+  app.post<{ Params: { id: string } }>('/api/docs/:id', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params;
+    if (!isUuid(id)) return reply.code(400).send({ error: 'bad_id' });
+
+    const parsed = saveSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'bad_request', issues: parsed.error.issues });
+    }
+    const auth = req.auth;
+    const { title, markdown } = parsed.data;
+
+    // -------- Body update path: try writeback into the live Y.Doc first.
+    let appliedViaCollab = false;
+    if (markdown !== undefined) {
+      appliedViaCollab = await writeMarkdownIntoLiveDoc(id, markdown, {
+        user_id: auth.sub,
+        tenant_id: auth.tenant_id,
+        email: auth.email,
+        doc_id: id,
+      });
+    }
+
+    // -------- Single transaction for whatever DB writes are still needed.
+    const updated = await withTenant(auth.tenant_id, async (tx) => {
+      // If body went through collab, the next debounced onStoreDocument
+      // writes the canonical body. Skip writing markdown/contentHash here.
+      const setClause: Partial<{
+        title: string;
+        markdown: string;
+        contentHash: string;
+        updatedBy: string;
+      }> = {
+        updatedBy: auth.sub,
+      };
+      if (title !== undefined) setClause.title = title;
+      if (markdown !== undefined && !appliedViaCollab) {
+        setClause.markdown = markdown;
+        setClause.contentHash = contentHash(markdown);
+      }
+
+      // No-op detection: if we'd only be touching updatedBy, skip the UPDATE
+      // and just SELECT to return the current row.
+      const hasMutation =
+        setClause.title !== undefined ||
+        setClause.markdown !== undefined;
+
+      if (!hasMutation) {
+        const rows = await tx
+          .select()
+          .from(docs)
+          .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
+          .limit(1);
+        return rows[0];
+      }
+
+      const rows = await tx
+        .update(docs)
+        .set(setClause)
+        .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
+        .returning();
+      return rows[0];
+    });
+
+    if (!updated) return reply.code(404).send({ error: 'not_found' });
+    return { doc: shapeForResponse(updated) };
+  });
+};

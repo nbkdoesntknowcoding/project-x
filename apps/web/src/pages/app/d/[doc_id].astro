@@ -1,0 +1,46 @@
+---
+import type { DocFull } from '@boppl/shared';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { DocPage } from '../../../components/editor/DocPage';
+
+const auth = Astro.locals.auth;
+if (!auth) {
+  return Astro.redirect('/auth/login');
+}
+
+const { doc_id } = Astro.params;
+if (!doc_id) {
+  return Astro.redirect('/app');
+}
+
+const apiUrl =
+  (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+const response = await fetch(`${apiUrl}/api/docs/${doc_id}`, {
+  headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+});
+
+if (response.status === 404) {
+  return new Response('Doc not found in your workspace', { status: 404 });
+}
+if (!response.ok) {
+  return new Response('Failed to load doc', { status: 500 });
+}
+
+const { doc } = (await response.json()) as { doc: DocFull };
+---
+
+<BaseLayout title={doc.title || 'Untitled'}>
+  <a
+    href="/app"
+    class="fixed top-4 left-6 text-base z-10 hover:underline"
+    style="color: var(--text-tertiary);"
+  >
+    ← Docs
+  </a>
+  <DocPage
+    initialDoc={doc}
+    jwt={auth.jwt}
+    user={{ id: auth.user_id, email: auth.email }}
+    client:only="react"
+  />
+</BaseLayout>

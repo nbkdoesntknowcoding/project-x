@@ -1,0 +1,112 @@
+@import 'tailwindcss';
+
+/*
+ * BOPPL Live Context Engine — Design System tokens.
+ * Dark-first; light mode is enabled by adding the `light` class to <html>.
+ * Source: BOPPL_Context_Engine_Design_System.md
+ */
+
+:root {
+  /* Surfaces */
+  --surface-canvas: #0b0c0e;
+  --surface-base: #14161a;
+  --surface-raised: #1c1f24;
+  --surface-overlay: #232730;
+  --surface-input: #1a1d22;
+  --surface-hover: #1f232a;
+  --surface-active: #272c34;
+  --surface-selected: rgba(139, 120, 240, 0.12);
+
+  /* Borders */
+  --border-subtle: #1d2027;
+  --border-default: #2a2e36;
+  --border-strong: #3c424c;
+  --border-focus: #8b78f0;
+
+  /* Text */
+  --text-primary: #ededed;
+  --text-secondary: #a0a4ad;
+  --text-tertiary: #6b7280;
+  --text-disabled: #4a4f59;
+  --text-inverse: #0b0c0e;
+  --text-accent: #b0a3f5;
+
+  /* Accent — primary brand */
+  --accent-50: #f3f1ff;
+  --accent-100: #e5e0ff;
+  --accent-200: #cdc2ff;
+  --accent-300: #ad9eff;
+  --accent-400: #8b78f0;
+  --accent-500: #6b5cd4;
+  --accent-600: #5444b8;
+  --accent-700: #3f3290;
+
+  /* Semantic */
+  --success-default: #22c55e;
+  --success-bg: rgba(34, 197, 94, 0.12);
+  --warning-default: #f59e0b;
+  --warning-bg: rgba(245, 158, 11, 0.12);
+  --danger-default: #ef4444;
+  --danger-bg: rgba(239, 68, 68, 0.12);
+  --info-default: #3b82f6;
+  --info-bg: rgba(59, 130, 246, 0.12);
+
+  /* Editor-specific */
+  --editor-cursor: #8b78f0;
+  --editor-selection: rgba(139, 120, 240, 0.22);
+  --editor-block-hover: rgba(255, 255, 255, 0.025);
+  --editor-handle: #4a4f59;
+  --editor-comment: #f59e0b;
+  --editor-ghost-text: #6b7280;
+  --code-bg: #0e1014;
+  --code-border: #2a2e36;
+  --mermaid-stroke: #8b78f0;
+  --mermaid-fill: #1c1f24;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-full: 9999px;
+}
+
+.light {
+  --surface-canvas: #ffffff;
+  --surface-base: #fafafa;
+  --surface-raised: #f4f5f7;
+  --surface-overlay: #ffffff;
+  --surface-input: #ffffff;
+  --surface-hover: #f0f1f4;
+  --surface-active: #e8eaee;
+
+  --text-primary: #1c1f24;
+  --text-secondary: #5a606b;
+  --text-tertiary: #8b929e;
+
+  --border-subtle: #ececef;
+  --border-default: #e4e6eb;
+  --border-strong: #c8ccd3;
+
+  --accent-400: #6b5cd4;
+}
+
+@theme {
+  --font-sans:
+    'Inter', -apple-system, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+  --font-serif: 'Source Serif 4', 'Iowan Old Style', 'Georgia', serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
+}
+
+html,
+body {
+  background-color: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

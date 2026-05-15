@@ -1,0 +1,49 @@
+import { config } from '../config/env.js';
+
+/**
+ * Single source of truth for MCP-server configuration.
+ *
+ * Read at startup from validated env. Other modules import the resolved
+ * `mcpConfig` object — they should never reach into `process.env` directly.
+ *
+ * Key URLs:
+ *   - resourceUrl                — what the AS-issued token must `aud` to.
+ *                                  Per the MCP spec, this is the canonical
+ *                                  URL of the MCP endpoint itself.
+ *   - protectedResourceMetadataUrl — where claude.ai discovers our metadata
+ *                                  (RFC 9728): `${baseUrl}/.well-known/oauth-protected-resource`.
+ *   - authorizationServer        — the AS that mints tokens for this resource.
+ *                                  Phase 2.1 = placeholder; Phase 2.2 swaps
+ *                                  for the WorkOS AuthKit issuer URL.
+ *   - mcpBaseUrl                 — externally-visible base of the api process.
+ */
+const mcpBaseUrl = config.MCP_BASE_URL.replace(/\/+$/, '');
+const authorizationServer = config.MCP_AUTHORIZATION_SERVER.replace(/\/+$/, '');
+const resourceUrl = `${mcpBaseUrl}/mcp`;
+
+export interface McpConfig {
+  readonly protocolVersion: string;
+  readonly serverName: string;
+  readonly serverVersion: string;
+  readonly mcpBaseUrl: string;
+  readonly resourceUrl: string;
+  readonly protectedResourceMetadataUrl: string;
+  readonly authorizationServer: string;
+  /** Expected `aud` claim on Bearer tokens — equals resourceUrl. */
+  readonly expectedAudience: string;
+  readonly originAllowlist: readonly string[];
+}
+
+export const mcpConfig: McpConfig = {
+  protocolVersion: config.MCP_PROTOCOL_VERSION,
+  serverName: 'boppl-context-engine',
+  serverVersion: '0.2.1',
+  mcpBaseUrl,
+  resourceUrl,
+  protectedResourceMetadataUrl: `${mcpBaseUrl}/.well-known/oauth-protected-resource`,
+  authorizationServer,
+  expectedAudience: resourceUrl,
+  originAllowlist: config.MCP_ORIGIN_ALLOWLIST.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+};

@@ -1,0 +1,370 @@
+/* === Doc page wrapper === */
+.doc-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 80px 24px 200px;
+}
+
+.doc-title {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 2.25rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.16;
+  padding: 0;
+  margin: 0 0 24px;
+}
+.doc-title::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* === Editor surface === */
+.editor-shell {
+  position: relative;
+}
+
+.editor-surface {
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+.milkdown {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+  font-family: var(--font-sans) !important;
+}
+
+.milkdown .ProseMirror {
+  outline: 0;
+  padding: 0;
+  min-height: 50vh;
+}
+
+.milkdown h1,
+.milkdown h2,
+.milkdown h3,
+.milkdown h4 {
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 32px 0 12px;
+}
+.milkdown h1 { font-size: 1.75rem;  line-height: 2.125rem; }
+.milkdown h2 { font-size: 1.375rem; line-height: 1.75rem; }
+.milkdown h3 { font-size: 1.125rem; line-height: 1.625rem; }
+.milkdown h4 { font-size: 1rem;     line-height: 1.5rem; }
+
+.milkdown p {
+  margin: 8px 0;
+}
+
+.milkdown blockquote {
+  border-left: 2px solid var(--border-default);
+  padding: 4px 0 4px 16px;
+  margin: 12px 0;
+  color: var(--text-secondary);
+}
+
+.milkdown a {
+  color: var(--accent-300);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-700);
+}
+.milkdown a:hover {
+  color: var(--accent-200);
+  text-decoration-color: var(--accent-400);
+}
+
+.milkdown ul,
+.milkdown ol {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+.milkdown li {
+  margin: 2px 0;
+}
+.milkdown li::marker {
+  color: var(--text-tertiary);
+}
+
+.milkdown hr {
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+  margin: 24px 0;
+}
+
+/* Inline code */
+.milkdown code:not(pre code) {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+/* CodeMirror block */
+.milkdown .cm-editor {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  padding: 12px 0;
+  margin: 12px 0;
+}
+.milkdown .cm-content {
+  color: var(--text-primary);
+  padding: 0 16px;
+}
+.milkdown .cm-gutters {
+  background: var(--code-bg) !important;
+  border-right: 1px solid var(--border-subtle) !important;
+  color: var(--text-tertiary);
+}
+.milkdown .cm-cursor {
+  border-color: var(--editor-cursor) !important;
+}
+
+/* Slash menu */
+.milkdown-slash-menu,
+.milkdown .milkdown-slash-menu {
+  background: var(--surface-overlay) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 8px !important;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  padding: 4px !important;
+  min-width: 240px;
+  color: var(--text-primary);
+}
+.milkdown-slash-menu .menu-item {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 0.875rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.milkdown-slash-menu .menu-item:hover,
+.milkdown-slash-menu .menu-item[data-active='true'] {
+  background: var(--surface-hover);
+}
+
+/* Selection toolbar */
+.milkdown-toolbar {
+  background: var(--surface-overlay) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 6px !important;
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  color: var(--text-primary);
+}
+
+.milkdown ::selection {
+  background: var(--editor-selection);
+}
+
+/* KaTeX */
+.milkdown .math-inline,
+.milkdown .math-display {
+  color: var(--text-primary);
+}
+
+/* === Mermaid block === */
+.mermaid-block {
+  margin: 16px 0;
+  background: var(--surface-base);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.mermaid-preview {
+  padding: 24px;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+}
+.mermaid-preview:hover {
+  background: var(--surface-hover);
+}
+.mermaid-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+.mermaid-source {
+  margin: 0;
+  padding: 12px 16px;
+  background: var(--code-bg);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  outline: 0;
+}
+.mermaid-empty {
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+}
+.mermaid-error {
+  color: var(--danger-default, #ef4444);
+  font-size: 0.875rem;
+}
+
+/* === Connection status pill (replaces the blur-save indicator) === */
+.connection-status {
+  position: fixed;
+  top: 16px;
+  right: 24px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  pointer-events: none;
+  user-select: none;
+  z-index: 100;
+}
+.connection-status--connecting   { color: var(--text-tertiary); }
+.connection-status--connected    { color: var(--text-secondary); }
+.connection-status--synced       { color: var(--success-default, #22c55e); }
+.connection-status--disconnected {
+  color: var(--danger-default, #ef4444);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* === Remote cursors (y-prosemirror) === */
+.ProseMirror .ProseMirror-yjs-cursor {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1.5px solid;
+  border-color: currentColor;
+  word-break: normal;
+  pointer-events: none;
+}
+.ProseMirror .ProseMirror-yjs-cursor > div {
+  position: absolute;
+  top: -1.4em;
+  left: -1px;
+  padding: 1px 6px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  background: currentColor;
+  border-radius: 3px;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+}
+.ProseMirror .ProseMirror-yjs-cursor > div::after {
+  color: white;
+  mix-blend-mode: difference;
+}
+
+/* ============================ Math (inline) ============================ */
+.math-inline {
+  display: inline-block;
+  vertical-align: middle;
+  cursor: text;
+  user-select: none;
+}
+.math-inline-rendered {
+  display: inline-block;
+  padding: 0 2px;
+  border-radius: 3px;
+  color: var(--text-primary);
+}
+.math-inline-rendered:hover {
+  background: var(--surface-hover);
+  cursor: pointer;
+}
+.math-inline-input {
+  display: inline-block;
+  background: var(--code-bg);
+  border: 1px solid var(--accent-400);
+  border-radius: 3px;
+  padding: 1px 6px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  outline: 0;
+  min-width: 80px;
+}
+.math-inline-rendered.math-empty,
+.math-block-rendered.math-empty {
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+}
+.math-inline-rendered.math-error,
+.math-block-rendered.math-error {
+  color: var(--danger-default, #ef4444);
+  font-family: var(--font-mono);
+}
+
+/* KaTeX color overrides for dark mode */
+.math-inline-rendered .katex,
+.math-block-rendered .katex {
+  color: var(--text-primary);
+}
+
+/* ============================ Math (block) ============================= */
+.math-block {
+  margin: 16px 0;
+  border-radius: 8px;
+  background: var(--surface-base);
+  border: 1px solid var(--border-default);
+  overflow: hidden;
+}
+.math-block-rendered {
+  padding: 24px 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  min-height: 60px;
+  color: var(--text-primary);
+}
+.math-block-rendered:hover {
+  background: var(--surface-hover);
+}
+.math-block-input {
+  display: block;
+  width: 100%;
+  min-height: 80px;
+  padding: 12px 16px;
+  background: var(--code-bg);
+  border: 0;
+  border-top: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  outline: 0;
+  resize: vertical;
+}
+.math-block-input:focus {
+  border-top: 0;
+}
+
+/* Hide the bare placeholder elements ProseMirror's toDOM creates */
+.math-inline-placeholder,
+.math-block-placeholder {
+  display: none;
+}

@@ -1,0 +1,6 @@
+---
+import { clearSession } from '../../lib/session.ts';
+
+clearSession(Astro.cookies);
+return Astro.redirect('/');
+---

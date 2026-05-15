@@ -1,0 +1,62 @@
+---
+import { workos } from '../../lib/workos.ts';
+import { setSession } from '../../lib/session.ts';
+
+const code = Astro.url.searchParams.get('code');
+if (!code) {
+  return Astro.redirect('/auth/login?error=missing_code');
+}
+
+const clientId = import.meta.env.WORKOS_CLIENT_ID as string;
+const cookiePassword = import.meta.env.WORKOS_COOKIE_PASSWORD as string;
+
+let workosResult;
+try {
+  workosResult = await workos.userManagement.authenticateWithCode({
+    code,
+    clientId,
+  });
+} catch (err) {
+  console.error('WorkOS code exchange failed', err);
+  return Astro.redirect('/auth/login?error=code_exchange_failed');
+}
+
+const { user, accessToken } = workosResult;
+const displayName = user.firstName
+  ? `${user.firstName} ${user.lastName ?? ''}`.trim()
+  : null;
+
+const response = await fetch('http://localhost:8080/api/_internal/set-session', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    internal_secret: cookiePassword,
+    email: user.email,
+    display_name: displayName,
+    workos_user_id: user.id,
+  }),
+});
+
+if (!response.ok) {
+  const text = await response.text();
+  console.error('Internal set-session failed', response.status, text);
+  return Astro.redirect('/auth/login?error=bootstrap_failed');
+}
+
+const { user_id, tenant_id, jwt } = (await response.json()) as {
+  user_id: string;
+  tenant_id: string;
+  jwt: string;
+};
+
+await setSession(Astro.cookies, {
+  user_id,
+  email: user.email,
+  tenant_id,
+  workos_user_id: user.id,
+  access_token: accessToken,
+  jwt,
+});
+
+return Astro.redirect('/app');
+---
