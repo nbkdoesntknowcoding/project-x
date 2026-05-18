@@ -8,6 +8,7 @@ import { SaveVersionMenu } from '../versions/SaveVersionMenu';
 import { VersionDiffView } from '../versions/VersionDiffView';
 import { VersionsSidebar } from '../versions/VersionsSidebar';
 import { Editor, type EditorSelection } from './Editor';
+import type { HocuspocusProvider } from '@hocuspocus/provider';
 
 interface DocPageProps {
   initialDoc: DocFull;
@@ -29,8 +30,8 @@ type Role = 'owner' | 'editor' | 'viewer' | null;
  *   - The current user's role (fetched once from /api/auth/me) so the
  *     diff overlay can hide the Restore button for viewers.
  *
- * On mount we POST /api/doc-read-state/mark-read so the doc's "unread
- * comments" indicator in the doc list clears for this user.
+ * The toolbar lives fixed in the bottom-right corner of the viewport so it
+ * doesn't compete with the doc title for visual attention.
  */
 export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
   const [title, setTitle] = useState(initialDoc.title);
@@ -39,6 +40,8 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
   const [view, setView] = useState<EditorView | null>(null);
   const [selection, setSelection] = useState<EditorSelection | null>(null);
   const lastSelectionRef = useRef<EditorSelection | null>(null);
+
+  const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
 
   const [role, setRole] = useState<Role>(null);
 
@@ -51,12 +54,16 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
   const [versionsRefreshKey, setVersionsRefreshKey] = useState(0);
   const [diffVersion, setDiffVersion] = useState<number | null>(null);
 
-  // --- title save (unchanged from prior phase) -----------------------------
+  // --- title save -----------------------------------------------------------
+  // Title save: only patches the title field — never touches markdown.
+  // Markdown is the exclusive domain of the Hocuspocus/Yjs collab layer;
+  // sending stale initialDoc.markdown here would race with the collab
+  // server and silently overwrite in-progress edits.
   const handleTitleBlur = useCallback(async (): Promise<void> => {
     if (title === savedTitle) return;
-    await api.saveDoc(initialDoc.id, { title, markdown: initialDoc.markdown });
+    await api.saveDoc(initialDoc.id, { title });
     setSavedTitle(title);
-  }, [title, savedTitle, initialDoc.id, initialDoc.markdown]);
+  }, [title, savedTitle, initialDoc.id]);
 
   // --- mark-read on mount --------------------------------------------------
   useEffect(() => {
@@ -67,16 +74,10 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ doc_id: initialDoc.id }),
-    }).catch(() => {
-      // Non-fatal — the indicator just stays for this user.
-    });
+    }).catch(() => {});
   }, [initialDoc.id]);
 
   // --- one-shot role fetch -------------------------------------------------
-  // Used by VersionDiffView to decide whether to show the Restore button.
-  // Backend still enforces the gate (POST /api/doc-versions/restore is
-  // editor+) — this is purely so viewers don't see a button that always
-  // 403s.
   useEffect(() => {
     const apiUrl =
       (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
@@ -90,16 +91,12 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
         if (body.role === 'owner' || body.role === 'editor' || body.role === 'viewer') {
           setRole(body.role);
         }
-      } catch {
-        /* leave role null; restore button stays hidden */
-      }
+      } catch {}
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  // --- initial unresolved count for the header badge ----------------------
+  // --- initial unresolved count -------------------------------------------
   useEffect(() => {
     const apiUrl =
       (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
@@ -113,13 +110,9 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
         if (!res.ok) return;
         const body = (await res.json()) as { threads: unknown[] };
         if (!cancelled) setUnresolvedCount(body.threads.length);
-      } catch {
-        /* non-fatal — sidebar open will repopulate */
-      }
+      } catch {}
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [initialDoc.id]);
 
   // --- selection tracking --------------------------------------------------
@@ -128,7 +121,7 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
     if (sel) lastSelectionRef.current = sel;
   }, []);
 
-  // --- ⌘⇧M / Ctrl+Shift+M shortcut ---------------------------------------
+  // --- ⌘⇧M shortcut -------------------------------------------------------
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
       const isModShiftM =
@@ -150,8 +143,6 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
     setCommentsRefreshKey((k) => k + 1);
   }, []);
 
-  // Open versions ↔ open comments: only one sidebar at a time (both pin
-  // to the right rail). Toggling one closes the other.
   const openCommentsExclusive = useCallback(() => {
     setCommentsSidebarOpen((v) => {
       const next = !v;
@@ -159,6 +150,7 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
       return next;
     });
   }, []);
+
   const openVersionsExclusive = useCallback(() => {
     setVersionsSidebarOpen((v) => {
       const next = !v;
@@ -169,60 +161,17 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
 
   return (
     <div className="doc-page">
-      <div className="doc-toolbar flex items-center justify-between gap-3">
-        <input
-          className="doc-title flex-1"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={handleTitleBlur}
-          placeholder="Untitled"
-          autoComplete="off"
-          spellCheck
-        />
-        <div className="flex items-center gap-2">
-          <SaveVersionMenu
-            docId={initialDoc.id}
-            onSaved={() => setVersionsRefreshKey((k) => k + 1)}
-          />
-          <button
-            type="button"
-            onClick={openVersionsExclusive}
-            className="text-sm px-3 py-1.5 rounded-md transition-colors"
-            style={{
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border-default)',
-              background: versionsSidebarOpen ? 'var(--surface-selected)' : 'transparent',
-            }}
-            aria-pressed={versionsSidebarOpen}
-          >
-            Versions
-          </button>
-          <button
-            type="button"
-            onClick={openCommentsExclusive}
-            className="text-sm px-3 py-1.5 rounded-md transition-colors flex items-center gap-2"
-            style={{
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border-default)',
-              background: commentsSidebarOpen ? 'var(--surface-selected)' : 'transparent',
-            }}
-            aria-pressed={commentsSidebarOpen}
-          >
-            <span>Comments</span>
-            {unresolvedCount > 0 && (
-              <span
-                className="text-xs px-1.5 rounded-full"
-                style={{
-                  background: 'var(--accent-400)',
-                  color: 'var(--text-inverse)',
-                }}
-              >
-                {unresolvedCount}
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
+      {/* Title-only row — above the editor body, not part of the fixed toolbar */}
+      <input
+        className="doc-title"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onBlur={handleTitleBlur}
+        placeholder="Untitled"
+        autoComplete="off"
+        spellCheck
+      />
+
       <div className="relative">
         <Editor
           docId={initialDoc.id}
@@ -231,6 +180,7 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
           user={user}
           onViewReady={setView}
           onSelectionChange={handleSelectionChange}
+          onProviderReady={setProvider}
         />
         {composerSelection && view && (
           <CommentComposer
@@ -243,6 +193,84 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
           />
         )}
       </div>
+
+      {/* Fixed bottom-right toolbar — status + actions */}
+      <div
+        className="fixed flex items-center gap-1"
+        style={{
+          bottom: 24,
+          right: 24,
+          zIndex: 50,
+          background: 'var(--surface-elevated)',
+          border: '1px solid var(--border-default)',
+          borderRadius: 'var(--radius-md)',
+          padding: '6px 8px',
+          boxShadow: 'var(--shadow-md)',
+        }}
+      >
+        <BottomStatusPill provider={provider} />
+
+        <div
+          style={{
+            width: 1,
+            height: 14,
+            background: 'var(--border-default)',
+            margin: '0 4px',
+          }}
+        />
+
+        <SaveVersionMenu
+          docId={initialDoc.id}
+          onSaved={() => setVersionsRefreshKey((k) => k + 1)}
+        />
+
+        <button
+          type="button"
+          onClick={openVersionsExclusive}
+          className="inline-flex items-center justify-center h-7 px-2.5 rounded transition-[background,color]"
+          style={{
+            fontSize: 12,
+            fontWeight: 500,
+            color: versionsSidebarOpen ? 'var(--text-primary)' : 'var(--text-secondary)',
+            background: versionsSidebarOpen ? 'var(--surface-overlay)' : 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+          aria-pressed={versionsSidebarOpen}
+        >
+          Versions
+        </button>
+
+        <button
+          type="button"
+          onClick={openCommentsExclusive}
+          className="inline-flex items-center gap-1.5 justify-center h-7 px-2.5 rounded transition-[background,color]"
+          style={{
+            fontSize: 12,
+            fontWeight: 500,
+            color: commentsSidebarOpen ? 'var(--text-primary)' : 'var(--text-secondary)',
+            background: commentsSidebarOpen ? 'var(--surface-overlay)' : 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+          aria-pressed={commentsSidebarOpen}
+        >
+          Comments
+          {unresolvedCount > 0 && (
+            <span
+              className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-medium"
+              style={{
+                background: 'var(--status-info-bg)',
+                color: 'var(--status-info)',
+                border: '1px solid var(--status-info)',
+              }}
+            >
+              {unresolvedCount}
+            </span>
+          )}
+        </button>
+      </div>
+
       <CommentsSidebar
         docId={initialDoc.id}
         view={view}
@@ -269,5 +297,67 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
         />
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Inline status pill — renders connection state as a small coloured badge
+// ---------------------------------------------------------------------------
+import type { HocuspocusProvider as HP } from '@hocuspocus/provider';
+
+function BottomStatusPill({ provider }: { provider: HP | null }): JSX.Element {
+  const [status, setStatus] = useState<'connecting' | 'connected' | 'synced' | 'disconnected'>('connecting');
+  const [peers, setPeers] = useState(0);
+
+  useEffect(() => {
+    if (!provider) return;
+    const onStatus = ({ status: s }: { status: string }) => {
+      if (s === 'connected') setStatus('connected');
+      else if (s === 'disconnected') setStatus('disconnected');
+    };
+    const onSynced = () => setStatus('synced');
+    const onAwareness = () => {
+      const states = provider.awareness?.getStates() ?? new Map<number, unknown>();
+      setPeers(Math.max(0, states.size - 1));
+    };
+    provider.on('status', onStatus);
+    provider.on('synced', onSynced);
+    provider.on('awarenessUpdate', onAwareness);
+    onAwareness();
+    return () => {
+      provider.off('status', onStatus);
+      provider.off('synced', onSynced);
+      provider.off('awarenessUpdate', onAwareness);
+    };
+  }, [provider]);
+
+  const tone =
+    status === 'synced' ? 'var(--status-success)' :
+    status === 'disconnected' ? 'var(--status-error)' :
+    'var(--text-tertiary)';
+
+  const label =
+    status === 'connecting' ? 'Connecting…' :
+    status === 'connected' ? 'Connected' :
+    status === 'synced' ? (peers > 0 ? `Synced · ${peers} other${peers === 1 ? '' : 's'}` : 'Synced') :
+    'Offline';
+
+  return (
+    <span
+      className="inline-flex items-center gap-1.5"
+      style={{ fontSize: 11, fontWeight: 500, color: tone }}
+    >
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          background: tone,
+          display: 'inline-block',
+          flexShrink: 0,
+        }}
+      />
+      {label}
+    </span>
   );
 }

@@ -84,7 +84,7 @@ export function AccountSettings({ email, displayName }: Props): JSX.Element {
           System follows your OS preference. Light and dark override it for
           this device.
         </p>
-        <ThemeToggle size="full" />
+        <ThemeToggle />
       </div>
     </div>
   );

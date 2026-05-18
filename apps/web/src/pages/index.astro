@@ -6,100 +6,174 @@ const auth = Astro.locals.auth;
 
 <PublicLayout
   title="Mnema — the live context engine"
-  description="An AI-native doc system that connects directly to Claude. Your docs stay current, your AI stays informed. By BOPPL."
+  description="AI-native docs that connect directly to Claude. Your docs stay current, your AI stays informed."
   pathname="/"
 >
-  <section class="max-w-4xl mx-auto px-6 pt-24 pb-16 text-center">
+  <!-- Hero -->
+  <section class="max-w-[720px] mx-auto px-6 pt-[128px] pb-[128px] text-center">
+    <span
+      class="font-mono uppercase block mb-4"
+      style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+    >
+      The live context engine
+    </span>
+
     <h1
-      class="text-5xl md:text-6xl font-medium tracking-tight leading-tight"
-      style="color: var(--text-primary);"
+      style="font-size: 56px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 600; color: var(--text-primary);"
     >
-      The live context engine<br />
-      for AI-native teams.
+      AI-native docs that connect directly to Claude.
     </h1>
+
     <p
-      class="mt-6 text-lg max-w-2xl mx-auto leading-relaxed"
-      style="color: var(--text-secondary);"
+      class="mx-auto mt-6 mb-8"
+      style="font-size: 18px; color: var(--text-secondary); max-width: 580px; line-height: 1.5;"
     >
-      Your docs in one place. Connected directly to Claude. No uploads. No version churn.
-      Edit a doc and your AI assistant sees the change before you finish the sentence.
+      Write your docs once. Edit them live. Claude reads them straight from the source.
+      No uploads, no version churn, no stale exports.
     </p>
-    <div class="mt-10 flex items-center justify-center gap-3">
+
+    <div class="flex items-center justify-center gap-3">
       {auth ? (
         <a
           href="/app"
-          class="px-5 py-2.5 rounded-md font-medium transition-opacity hover:opacity-90"
-          style="background: var(--accent-400); color: var(--text-inverse);"
+          class="inline-flex items-center justify-center h-10 px-4 font-medium transition-[background,border-color] rounded select-none"
+          style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border: 1px solid var(--interactive-primary); border-radius: var(--radius-md);"
+          onmouseover="this.style.background='var(--interactive-primary-hover)'"
+          onmouseout="this.style.background='var(--interactive-primary)'"
         >
           Open app
         </a>
       ) : (
-        <a
-          href="/signup"
-          class="px-5 py-2.5 rounded-md font-medium transition-opacity hover:opacity-90"
-          style="background: var(--accent-400); color: var(--text-inverse);"
-        >
-          Start free
-        </a>
+        <>
+          <a
+            href="/signup"
+            class="inline-flex items-center justify-center h-10 px-4 font-medium transition-[background,border-color] rounded select-none"
+            style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border: 1px solid var(--interactive-primary); border-radius: var(--radius-md);"
+            onmouseover="this.style.background='var(--interactive-primary-hover)'"
+            onmouseout="this.style.background='var(--interactive-primary)'"
+          >
+            Start free
+          </a>
+          <a
+            href="/pricing"
+            class="inline-flex items-center justify-center h-10 px-4 font-medium transition-[background] rounded select-none"
+            style="font-size: 14px; background: var(--interactive-secondary); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md);"
+            onmouseover="this.style.background='var(--interactive-secondary-hover)'"
+            onmouseout="this.style.background='var(--interactive-secondary)'"
+          >
+            View pricing
+          </a>
+        </>
       )}
-      <a
-        href="/docs/connect"
-        class="px-5 py-2.5 rounded-md transition-colors"
-        style="border: 1px solid var(--border-default); color: var(--text-primary);"
-        onmouseover="this.style.background='var(--surface-overlay)'"
-        onmouseout="this.style.background='transparent'"
-      >
-        How it works
-      </a>
     </div>
-  </section>
 
-  <section class="max-w-5xl mx-auto px-6 py-16 grid md:grid-cols-3 gap-10">
-    <div>
-      <h3 class="text-base font-medium mb-2" style="color: var(--text-primary);">
-        Live, not static
-      </h3>
-      <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
-        Every edit syncs instantly. The doc Claude reads at 3:14 PM is the doc your teammate
-        just updated at 3:13. No re-upload, no "let me share the latest version."
-      </p>
-    </div>
-    <div>
-      <h3 class="text-base font-medium mb-2" style="color: var(--text-primary);">
-        Search that understands
-      </h3>
-      <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
-        Search for "rate limiting" — find docs about throttling. Search for "pricing" — find
-        docs about cost, tiers, plans. Hybrid keyword + semantic, tuned for technical writing.
-      </p>
-    </div>
-    <div>
-      <h3 class="text-base font-medium mb-2" style="color: var(--text-primary);">
-        Built for Claude
-      </h3>
-      <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
-        Mnema is an MCP server. One-click connect from your Claude account. Your docs become
-        first-class context — Claude searches them, reads them, references them.
-      </p>
-    </div>
-  </section>
-
-  <section class="max-w-3xl mx-auto px-6 py-20 text-center">
-    <h2 class="text-2xl font-medium mb-3" style="color: var(--text-primary);">
-      Built by a small team that ships.
-    </h2>
-    <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
-      Mnema is built by
-      <a
-        href="https://theboringpeople.in"
-        class="underline transition-colors"
-        style="color: var(--text-secondary);"
-        onmouseover="this.style.color='var(--text-primary)'"
-        onmouseout="this.style.color='var(--text-secondary)'"
-      >
-        BOPPL
-      </a>, a Bangalore AI and creative studio. We build AI applications, not automations.
-      We use Mnema for our own context.
+    <p
+      class="mt-6 font-mono uppercase"
+      style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-quaternary);"
+    >
+      Free forever for personal use · No credit card
     </p>
+  </section>
+
+  <!-- Editor placeholder -->
+  <section
+    class="px-6 py-[96px]"
+    style="background: var(--surface-overlay);"
+  >
+    <div class="max-w-[1100px] mx-auto">
+      <div
+        class="mx-auto"
+        style="max-width: 1100px; height: 480px; background: var(--surface-sunken); border: 1px solid var(--border-default); border-radius: var(--radius-xl);"
+      ></div>
+      <p
+        class="text-center mt-4 font-mono uppercase"
+        style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+      >
+        The editor
+      </p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="max-w-[1100px] mx-auto px-6 py-[96px]">
+    <p class="text-center font-mono uppercase mb-3" style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);">
+      How it works
+    </p>
+    <h2
+      class="text-center mb-16"
+      style="font-size: 28px; line-height: 1.3; font-weight: 500; color: var(--text-primary);"
+    >
+      Three things make Mnema different.
+    </h2>
+
+    <div class="grid gap-12 md:grid-cols-3">
+      <div>
+        <span
+          class="block mb-3 font-mono uppercase"
+          style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+        >
+          01
+        </span>
+        <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+          Live, not static.
+        </h3>
+        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.55;">
+          Every edit syncs instantly. The doc Claude reads at 3:14 is the doc your teammate updated at 3:13.
+          No re-upload.
+        </p>
+      </div>
+      <div>
+        <span
+          class="block mb-3 font-mono uppercase"
+          style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+        >
+          02
+        </span>
+        <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+          Search that understands.
+        </h3>
+        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.55;">
+          Search "rate limiting" — find docs about throttling. Search "pricing" — find docs about cost,
+          tiers, plans. Hybrid keyword and semantic.
+        </p>
+      </div>
+      <div>
+        <span
+          class="block mb-3 font-mono uppercase"
+          style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+        >
+          03
+        </span>
+        <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+          Built for Claude.
+        </h3>
+        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.55;">
+          Mnema is an MCP server. One-click connect from your Claude account. Your docs become
+          first-class context.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA strip -->
+  <section class="max-w-[720px] mx-auto px-6 py-[128px] text-center">
+    <h2
+      class="mb-3"
+      style="font-size: 18px; font-weight: 500; color: var(--text-primary);"
+    >
+      Ready to try it?
+    </h2>
+    <p class="mb-8" style="font-size: 14px; color: var(--text-secondary);">
+      Set up a workspace in under a minute. Free forever for personal use.
+    </p>
+    <a
+      href="/signup"
+      class="inline-flex items-center justify-center h-10 px-4 font-medium transition-[background,border-color] rounded select-none"
+      style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border: 1px solid var(--interactive-primary); border-radius: var(--radius-md);"
+      onmouseover="this.style.background='var(--interactive-primary-hover)'"
+      onmouseout="this.style.background='var(--interactive-primary)'"
+    >
+      Start free
+    </a>
   </section>
 </PublicLayout>

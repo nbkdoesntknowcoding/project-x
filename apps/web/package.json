@@ -31,6 +31,7 @@
     "iron-session": "^8.0.0",
     "jose": "^5.0.0",
     "katex": "^0.16.46",
+    "lucide-react": "^1.16.0",
     "mermaid": "^11.15.0",
     "prosemirror-state": "^1.4.4",
     "prosemirror-view": "^1.41.8",

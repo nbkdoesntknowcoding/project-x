@@ -31,6 +31,8 @@ interface EditorProps {
   /** Called on every selection change. The parent uses this to know
    *  what range a ⌘⇧M shortcut should anchor to. */
   onSelectionChange?: (sel: EditorSelection | null) => void;
+  /** Exposes the HocuspocusProvider to the parent for status tracking. */
+  onProviderReady?: (provider: HocuspocusProvider | null) => void;
 }
 
 const USER_COLOR_PALETTE: readonly string[] = [
@@ -60,6 +62,7 @@ export function Editor({
   collabUrl,
   onViewReady,
   onSelectionChange,
+  onProviderReady,
 }: EditorProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
@@ -68,10 +71,12 @@ export function Editor({
   // whole editor on every parent rerender).
   const onViewReadyRef = useRef(onViewReady);
   const onSelectionChangeRef = useRef(onSelectionChange);
+  const onProviderReadyRef = useRef(onProviderReady);
   useEffect(() => {
     onViewReadyRef.current = onViewReady;
     onSelectionChangeRef.current = onSelectionChange;
-  }, [onViewReady, onSelectionChange]);
+    onProviderReadyRef.current = onProviderReady;
+  }, [onViewReady, onSelectionChange, onProviderReady]);
 
   useEffect(() => {
     const root = containerRef.current;
@@ -97,6 +102,7 @@ export function Editor({
     });
 
     setProvider(hp);
+    onProviderReadyRef.current?.(hp);
 
     // Crepe starts EMPTY. The Y.Doc binding owns content. Either:
     //   (a) Y.Doc loads non-empty from server → bindDoc syncs it into PM, OR
@@ -213,6 +219,7 @@ export function Editor({
         selectionPollTimer = null;
       }
       onViewReadyRef.current?.(null);
+      onProviderReadyRef.current?.(null);
       viewRef = null;
       void crepe.destroy();
       hp.destroy();

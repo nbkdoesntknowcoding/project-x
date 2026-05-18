@@ -39,7 +39,7 @@ export function SettingsNav({ currentPath }: Props): JSX.Element {
             }}
             onMouseOver={(e) => {
               if (!isActive) {
-                e.currentTarget.style.background = 'var(--surface-hover)';
+                e.currentTarget.style.background = 'var(--interactive-ghost-hover)';
                 e.currentTarget.style.color = 'var(--text-primary)';
               }
             }}

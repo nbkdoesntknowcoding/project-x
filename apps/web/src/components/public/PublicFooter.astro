@@ -1,35 +1,23 @@
 ---
 import { ThemeToggle } from '../theme/ThemeToggle';
-
-/**
- * Public-site footer. Houses BOPPL credit, secondary nav, and the
- * ThemeToggle for visitors who haven't signed up yet (the toggle is also
- * in the app header + Account settings for signed-in users).
- */
 ---
 
-<footer class="mt-24" style="border-top: 1px solid var(--border-subtle);">
+<footer style="border-top: 1px solid var(--border-subtle);">
   <div
-    class="max-w-6xl mx-auto px-6 py-8 flex items-center justify-between text-xs"
-    style="color: var(--text-tertiary);"
+    class="max-w-[1100px] mx-auto px-6 py-8 flex items-center justify-between"
   >
-    <div>
-      Mnema, by
-      <a
-        href="https://theboringpeople.in"
-        class="transition-colors"
-        style="color: var(--text-tertiary);"
-        onmouseover="this.style.color='var(--text-secondary)'"
-        onmouseout="this.style.color='var(--text-tertiary)'"
-      >
-        BOPPL
-      </a>.
-    </div>
+    <span
+      class="font-mono uppercase"
+      style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+    >
+      Mnema, by BOPPL
+    </span>
+
     <div class="flex items-center gap-6">
       <a
         href="/docs"
         class="transition-colors"
-        style="color: var(--text-tertiary);"
+        style="font-size: 12px; color: var(--text-tertiary);"
         onmouseover="this.style.color='var(--text-secondary)'"
         onmouseout="this.style.color='var(--text-tertiary)'"
       >
@@ -38,11 +26,29 @@ import { ThemeToggle } from '../theme/ThemeToggle';
       <a
         href="/pricing"
         class="transition-colors"
-        style="color: var(--text-tertiary);"
+        style="font-size: 12px; color: var(--text-tertiary);"
         onmouseover="this.style.color='var(--text-secondary)'"
         onmouseout="this.style.color='var(--text-tertiary)'"
       >
         Pricing
+      </a>
+      <a
+        href="/privacy"
+        class="transition-colors"
+        style="font-size: 12px; color: var(--text-tertiary);"
+        onmouseover="this.style.color='var(--text-secondary)'"
+        onmouseout="this.style.color='var(--text-tertiary)'"
+      >
+        Privacy
+      </a>
+      <a
+        href="/terms"
+        class="transition-colors"
+        style="font-size: 12px; color: var(--text-tertiary);"
+        onmouseover="this.style.color='var(--text-secondary)'"
+        onmouseout="this.style.color='var(--text-tertiary)'"
+      >
+        Terms
       </a>
       <ThemeToggle client:load />
     </div>

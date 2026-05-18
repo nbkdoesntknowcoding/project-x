@@ -18,7 +18,7 @@ export interface DocCreatePayload {
 
 export interface DocSavePayload {
   title: string;
-  markdown: string;
+  markdown?: string;
 }
 
 export interface DocSaveResponse {

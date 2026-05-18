@@ -2,20 +2,6 @@
 import BaseLayout from './BaseLayout.astro';
 import { SettingsNav } from '../components/settings/SettingsNav';
 
-/**
- * Wrapper layout for every page under /app/settings/*. Provides:
- *   - Auth gate (redirect to /auth/login if not signed in)
- *   - Left-rail nav (Members / Workspace / Account / Billing)
- *   - Back-to-docs link at the top of the rail
- *   - A constrained-width content column (max-w-3xl)
- *
- * Each settings page imports this layout and slots in its own content.
- *
- * The `currentPath` prop on SettingsNav drives the active-link highlight
- * without needing to read window.location client-side (avoids the
- * empty-state flash on first paint).
- */
-
 interface Props {
   title: string;
 }
@@ -29,27 +15,32 @@ if (!auth) {
 ---
 
 <BaseLayout title={`${title} · Settings · Mnema`}>
-  <div class="flex min-h-screen" style="background: var(--surface-canvas);">
+  <div class="flex min-h-screen" style="background: var(--surface-base);">
     <aside
-      class="w-56 py-6 px-3 flex flex-col"
-      style="border-right: 1px solid var(--border-default); background: var(--surface-base);"
+      class="w-52 py-6 px-3 flex flex-col flex-shrink-0"
+      style="border-right: 1px solid var(--border-subtle); background: var(--surface-base);"
     >
       <a
         href="/app"
-        class="block px-3 py-1.5 text-sm transition-colors mb-4"
-        style="color: var(--text-tertiary);"
+        class="block px-2 py-1.5 mb-4 transition-colors"
+        style="font-size: 12px; color: var(--text-tertiary);"
+        onmouseover="this.style.color='var(--text-primary)'"
+        onmouseout="this.style.color='var(--text-tertiary)'"
       >
         ← Back to docs
       </a>
       <SettingsNav client:load currentPath={Astro.url.pathname} />
-      <div class="mt-auto px-3 pt-4 text-xs" style="color: var(--text-tertiary); border-top: 1px solid var(--border-subtle);">
+      <div
+        class="mt-auto px-2 pt-4"
+        style="font-size: 11px; color: var(--text-quaternary); border-top: 1px solid var(--border-subtle);"
+      >
         Signed in as<br />
-        <span style="color: var(--text-secondary);">{auth.email}</span>
+        <span style="color: var(--text-tertiary);">{auth.email}</span>
       </div>
     </aside>
 
     <main class="flex-1 py-8 px-12">
-      <div class="max-w-3xl">
+      <div style="max-width: 640px;">
         <slot />
       </div>
     </main>

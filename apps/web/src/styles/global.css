@@ -1,165 +1,238 @@
 @import 'tailwindcss';
 
-/*
- * BOPPL Live Context Engine — Design System tokens.
- *
- * Dark-first. Light mode is enabled by setting [data-theme="light"] on
- * <html>. The attribute is the single switching mechanism — JS resolves
- * the user's choice (system / light / dark) into a concrete value before
- * paint and writes the attribute (see BaseLayout.astro's inline script).
- *
- * The brand accent (--accent-400 = #8b78f0) is intentionally identical
- * across themes; deviating breaks brand recognition in mixed-theme
- * screenshots and emails.
- *
- * Source: BOPPL_Context_Engine_Design_System.md
- */
+/* =========================================================================
+   Mnema design tokens — monochrome dark-first
+   Phase 4.5 design overhaul. Full replacement of previous token system.
+   ========================================================================= */
+
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/geist/Geist-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/geist/Geist-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/geist/Geist-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/geist/GeistMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/geist/GeistMono-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+}
 
 :root {
-  /* Surfaces */
-  --surface-canvas: #0b0c0e;
-  --surface-base: #14161a;
-  --surface-raised: #1c1f24;
-  --surface-overlay: #232730;
-  --surface-input: #1a1d22;
-  --surface-hover: #1f232a;
-  --surface-active: #272c34;
-  --surface-selected: rgba(139, 120, 240, 0.12);
+  /* -----------------------------------------------------------------------
+     SURFACE — depth comes from value, not color.
+     ----------------------------------------------------------------------- */
+  --surface-base:         #0a0a0a;
+  --surface-overlay:      #141414;
+  --surface-elevated:     #1c1c1c;
+  --surface-sunken:       #060606;
 
   /* Borders */
-  --border-subtle: #1d2027;
-  --border-default: #2a2e36;
-  --border-strong: #3c424c;
-  --border-focus: #8b78f0;
+  --border-subtle:        #1f1f1f;
+  --border-default:       #2a2a2a;
+  --border-strong:        #3a3a3a;
+  --border-focus:         #5a5a5a;
 
-  /* Text */
-  --text-primary: #ededed;
-  --text-secondary: #a0a4ad;
-  --text-tertiary: #6b7280;
-  --text-disabled: #4a4f59;
-  --text-inverse: #0b0c0e;
-  --text-accent: #b0a3f5;
+  /* -----------------------------------------------------------------------
+     TEXT — five steps.
+     ----------------------------------------------------------------------- */
+  --text-primary:         #f4f4f5;
+  --text-secondary:       #a1a1aa;
+  --text-tertiary:        #71717a;
+  --text-quaternary:      #52525b;
+  --text-inverse:         #0a0a0a;
 
-  /* Accent — primary brand */
-  --accent-50: #f3f1ff;
-  --accent-100: #e5e0ff;
-  --accent-200: #cdc2ff;
-  --accent-300: #ad9eff;
-  --accent-400: #8b78f0;
-  --accent-500: #6b5cd4;
-  --accent-600: #5444b8;
-  --accent-700: #3f3290;
+  /* -----------------------------------------------------------------------
+     STATUS — reserved for status meaning only. Never decoration.
+     ----------------------------------------------------------------------- */
+  --status-success:       #4ade80;
+  --status-success-bg:    rgba(74, 222, 128, 0.08);
+  --status-warning:       #fbbf24;
+  --status-warning-bg:    rgba(251, 191, 36, 0.08);
+  --status-error:         #f87171;
+  --status-error-bg:      rgba(248, 113, 113, 0.08);
+  --status-info:          #60a5fa;
+  --status-info-bg:       rgba(96, 165, 250, 0.08);
 
-  /* Semantic */
-  --success-default: #22c55e;
-  --success-bg: rgba(34, 197, 94, 0.12);
-  --warning-default: #f59e0b;
-  --warning-bg: rgba(245, 158, 11, 0.12);
-  --danger-default: #ef4444;
-  --danger-bg: rgba(239, 68, 68, 0.12);
-  --info-default: #3b82f6;
-  --info-bg: rgba(59, 130, 246, 0.12);
+  /* -----------------------------------------------------------------------
+     INTERACTIVE — white-on-black for primary. No accent hue.
+     ----------------------------------------------------------------------- */
+  --interactive-primary:         #f4f4f5;
+  --interactive-primary-fg:      #0a0a0a;
+  --interactive-primary-hover:   #ffffff;
+  --interactive-secondary:       #2a2a2a;
+  --interactive-secondary-hover: #3a3a3a;
+  --interactive-ghost-hover:     #1c1c1c;
 
-  /* Editor-specific */
-  --editor-cursor: #8b78f0;
-  --editor-selection: rgba(139, 120, 240, 0.22);
-  --editor-block-hover: rgba(255, 255, 255, 0.025);
-  --editor-handle: #4a4f59;
-  --editor-comment: #f59e0b;
-  --editor-ghost-text: #6b7280;
-  --code-bg: #0e1014;
-  --code-border: #2a2e36;
-  --mermaid-stroke: #8b78f0;
-  --mermaid-fill: #1c1f24;
+  --selection-bg: rgba(244, 244, 245, 0.15);
 
-  /* Radius */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
+  /* -----------------------------------------------------------------------
+     TYPOGRAPHY
+     ----------------------------------------------------------------------- */
+  --font-sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+  --text-12:  12px;
+  --text-13:  13px;
+  --text-14:  14px;
+  --text-15:  15px;
+  --text-16:  16px;
+  --text-18:  18px;
+  --text-22:  22px;
+  --text-28:  28px;
+  --text-36:  36px;
+  --text-56:  56px;
+
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+
+  --leading-tight:   1.15;
+  --leading-snug:    1.3;
+  --leading-normal:  1.5;
+  --leading-relaxed: 1.65;
+
+  --tracking-tight:  -0.02em;
+  --tracking-normal: 0;
+  --tracking-wide:   0.04em;
+  --tracking-mono:   -0.01em;
+
+  /* -----------------------------------------------------------------------
+     SPACING — 4px base
+     ----------------------------------------------------------------------- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+  --space-32: 128px;
+
+  /* -----------------------------------------------------------------------
+     RADII — small. No pill buttons, no rounded-2xl cards.
+     ----------------------------------------------------------------------- */
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:   12px;
   --radius-full: 9999px;
+
+  /* -----------------------------------------------------------------------
+     SHADOW — dark-first, used sparingly
+     ----------------------------------------------------------------------- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  /* -----------------------------------------------------------------------
+     MOTION
+     ----------------------------------------------------------------------- */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
+
+  --focus-ring: 0 0 0 2px var(--surface-base), 0 0 0 4px var(--border-focus);
 }
 
-:root[data-theme='light'] {
-  /* Surfaces — lift everything off near-black onto warm off-whites. The
-   * elevated steps invert from dark (raised → overlay get darker) to light
-   * (raised → overlay get whiter); that keeps "more elevated = brighter"
-   * intuitive on both themes. */
-  --surface-canvas: #ffffff;
-  --surface-base: #fafafa;
-  --surface-raised: #f4f5f7;
-  --surface-overlay: #ffffff;
-  --surface-input: #ffffff;
-  --surface-hover: #f0f1f4;
-  --surface-active: #e8eaee;
-  /* Selected stays at 12% accent — keeps the brand consistent and the math
-   * works on both backgrounds. */
-  --surface-selected: rgba(139, 120, 240, 0.12);
+/* =========================================================================
+   LIGHT MODE
+   ========================================================================= */
+:root[data-theme="light"] {
+  --surface-base:         #fafafa;
+  --surface-overlay:      #f4f4f5;
+  --surface-elevated:     #ffffff;
+  --surface-sunken:       #e4e4e7;
 
-  /* Borders */
-  --border-subtle: #ececef;
-  --border-default: #e4e6eb;
-  --border-strong: #c8ccd3;
-  --border-focus: #8b78f0;
+  --border-subtle:        #e4e4e7;
+  --border-default:       #d4d4d8;
+  --border-strong:        #a1a1aa;
+  --border-focus:         #71717a;
 
-  /* Text */
-  --text-primary: #1c1f24;
-  --text-secondary: #5a606b;
-  --text-tertiary: #8b929e;
-  --text-disabled: #b0b4bd;
-  --text-inverse: #ffffff;
-  --text-accent: #5444b8;
+  --text-primary:         #09090b;
+  --text-secondary:       #52525b;
+  --text-tertiary:        #71717a;
+  --text-quaternary:      #a1a1aa;
+  --text-inverse:         #fafafa;
 
-  /* Accent ramp — UNCHANGED. The brand violet is the same in both themes.
-   * Do not move --accent-400 here; it would split the brand. */
+  --status-success:       #16a34a;
+  --status-success-bg:    rgba(22, 163, 74, 0.08);
+  --status-warning:       #d97706;
+  --status-warning-bg:    rgba(217, 119, 6, 0.08);
+  --status-error:         #dc2626;
+  --status-error-bg:      rgba(220, 38, 38, 0.08);
+  --status-info:          #2563eb;
+  --status-info-bg:       rgba(37, 99, 235, 0.08);
 
-  /* Semantic — same hues, slightly softer backgrounds for light surfaces */
-  --success-bg: rgba(34, 197, 94, 0.14);
-  --warning-bg: rgba(245, 158, 11, 0.14);
-  --danger-bg: rgba(239, 68, 68, 0.14);
-  --info-bg: rgba(59, 130, 246, 0.14);
+  --interactive-primary:         #09090b;
+  --interactive-primary-fg:      #fafafa;
+  --interactive-primary-hover:   #18181b;
+  --interactive-secondary:       #e4e4e7;
+  --interactive-secondary-hover: #d4d4d8;
+  --interactive-ghost-hover:     #f4f4f5;
 
-  /* Editor-specific — needs new values, dark tokens look invisible / wrong
-   * on a white surface. */
-  --editor-block-hover: rgba(0, 0, 0, 0.04);
-  --editor-handle: #b0b4bd;
-  --editor-ghost-text: #b0b4bd;
-  --code-bg: #f4f5f7;
-  --code-border: #e4e6eb;
-  --mermaid-fill: #f4f5f7;
-  /* --editor-cursor + --editor-selection + --mermaid-stroke stay on the
-   * accent ramp; they read correctly against both palettes. */
+  --selection-bg: rgba(9, 9, 11, 0.1);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12);
 }
 
-@theme {
-  --font-sans:
-    'Inter', -apple-system, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
-  --font-serif: 'Source Serif 4', 'Iowan Old Style', 'Georgia', serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
+/* =========================================================================
+   BASE
+   ========================================================================= */
+html {
+  background: var(--surface-base);
+  color-scheme: dark;
 }
 
-html,
-body {
-  background-color: var(--surface-canvas);
-  color: var(--text-primary);
+html[data-theme="light"] {
+  color-scheme: light;
 }
 
 body {
   font-family: var(--font-sans);
+  font-size: var(--text-14);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+  background: var(--surface-base);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* Phase 4.2 — doc list unread indicator. Tiny dot prefixing a doc title
- * when there are comments authored by someone other than the current user
- * since their last visit. Source: /api/doc-read-state/unread-counts. */
-.doc-unread-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 9999px;
-  background: var(--accent-400);
-  margin-right: 6px;
-  vertical-align: middle;
+::selection {
+  background: var(--selection-bg);
+}
+
+code, pre, kbd, samp, .font-mono {
+  font-family: var(--font-mono);
+  font-feature-settings: 'ss01' 1, 'cv11' 1;
+  letter-spacing: var(--tracking-mono);
 }

@@ -1,108 +1,97 @@
-import { type JSX, useEffect, useState } from 'react';
+import { Monitor, Moon, Sun } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
-type Choice = 'system' | 'light' | 'dark';
+type Theme = 'system' | 'light' | 'dark';
 
-const STORAGE_KEY = 'mnema:theme';
+const STORAGE_KEY = 'mnema-theme';
 
-interface Props {
-  /** Optional visual variant: "compact" (default) for headers, "full" for
-   *  settings pages where the toggle has more room. */
-  size?: 'compact' | 'full';
-}
+export function ThemeToggle() {
+  const [theme, setTheme] = useState<Theme>('system');
 
-/**
- * Three-state theme toggle: system / light / dark.
- *
- * The data-theme attribute on <html> is the single switching mechanism;
- * we set it here on every click and the no-FOUC inline script in
- * BaseLayout.astro sets it on initial page load. localStorage persists
- * the user's explicit choice; "system" clears the key so future page
- * loads re-derive from prefers-color-scheme.
- *
- * When the choice is "system" we subscribe to the OS preference so a
- * mid-session OS theme change reflects immediately. When it's an
- * explicit choice the subscription is unnecessary.
- */
-export function ThemeToggle({ size = 'compact' }: Props): JSX.Element {
-  const [choice, setChoice] = useState<Choice>('system');
-
-  // Hydrate from localStorage on mount. The inline script in BaseLayout
-  // already applied the right theme before paint — we just need to know
-  // which radio to mark as selected.
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY) as Choice | null;
-      if (stored === 'light' || stored === 'dark') {
-        setChoice(stored);
-      } else {
-        setChoice('system');
-      }
+      const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
+      if (stored === 'light' || stored === 'dark') setTheme(stored);
     } catch {
-      /* private-mode browsers throw — fall back to default state */
+      // private-mode browsers throw on localStorage access
     }
   }, []);
 
-  function apply(c: Choice): void {
-    setChoice(c);
+  function apply(next: Theme) {
+    setTheme(next);
     try {
-      if (c === 'system') {
+      if (next === 'system') {
         localStorage.removeItem(STORAGE_KEY);
-        const sysLight = window.matchMedia('(prefers-color-scheme: light)').matches;
-        document.documentElement.setAttribute('data-theme', sysLight ? 'light' : 'dark');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.dataset.theme = prefersDark ? 'dark' : 'light';
       } else {
-        localStorage.setItem(STORAGE_KEY, c);
-        document.documentElement.setAttribute('data-theme', c);
+        localStorage.setItem(STORAGE_KEY, next);
+        document.documentElement.dataset.theme = next;
       }
     } catch {
-      /* private-mode browsers throw on localStorage write; we still apply
-       * the data-theme so the page recolors for this session even if it
-       * doesn't persist. */
-      document.documentElement.setAttribute(
-        'data-theme',
-        c === 'system' ? 'dark' : c,
-      );
+      document.documentElement.dataset.theme = next === 'system' ? 'dark' : next;
     }
   }
 
-  // Keep tracking OS preference while the user is on "system".
+  // Track OS preference changes while on "system"
   useEffect(() => {
-    if (choice !== 'system') return;
-    const media = window.matchMedia('(prefers-color-scheme: light)');
-    function handler(e: MediaQueryListEvent): void {
-      document.documentElement.setAttribute('data-theme', e.matches ? 'light' : 'dark');
-    }
+    if (theme !== 'system') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      document.documentElement.dataset.theme = e.matches ? 'dark' : 'light';
+    };
     media.addEventListener('change', handler);
     return () => media.removeEventListener('change', handler);
-  }, [choice]);
+  }, [theme]);
 
-  const pad = size === 'full' ? 'px-3 py-1.5 text-sm' : 'px-2.5 py-1 text-xs';
+  const options: { value: Theme; Icon: typeof Monitor; label: string }[] = [
+    { value: 'system', Icon: Monitor, label: 'System' },
+    { value: 'light', Icon: Sun, label: 'Light' },
+    { value: 'dark', Icon: Moon, label: 'Dark' },
+  ];
 
   return (
     <div
       role="radiogroup"
       aria-label="Theme"
-      className="inline-flex rounded-md p-0.5"
-      style={{ border: '1px solid var(--border-default)', background: 'var(--surface-base)' }}
+      className="inline-flex items-center gap-0.5 p-0.5"
+      style={{
+        background: 'var(--surface-sunken)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-md)',
+      }}
     >
-      {(['system', 'light', 'dark'] as Choice[]).map((c) => {
-        const selected = choice === c;
-        return (
-          <button
-            key={c}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            onClick={() => apply(c)}
-            className={`${pad} rounded transition-colors`}
-            style={{
-              background: selected ? 'var(--surface-overlay)' : 'transparent',
-              color: selected ? 'var(--text-primary)' : 'var(--text-tertiary)',
-            }}
-          >
-            {c[0]!.toUpperCase() + c.slice(1)}
-          </button>
-        );
-      })}
+      {options.map(({ value, Icon, label }) => (
+        <button
+          key={value}
+          type="button"
+          role="radio"
+          aria-checked={theme === value}
+          aria-label={label}
+          onClick={() => apply(value)}
+          className="inline-flex items-center justify-center w-6 h-6 outline-none transition-[background,color]"
+          style={{
+            borderRadius: 'var(--radius-sm)',
+            background: theme === value ? 'var(--surface-overlay)' : 'transparent',
+            color: theme === value ? 'var(--text-primary)' : 'var(--text-tertiary)',
+            boxShadow: 'none',
+          }}
+          onMouseOver={(e) => {
+            if (theme !== value) e.currentTarget.style.color = 'var(--text-secondary)';
+          }}
+          onMouseOut={(e) => {
+            if (theme !== value) e.currentTarget.style.color = 'var(--text-tertiary)';
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.boxShadow = 'var(--focus-ring)';
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <Icon size={14} strokeWidth={1.75} />
+        </button>
+      ))}
     </div>
   );
 }

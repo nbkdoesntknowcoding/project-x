@@ -1,27 +1,24 @@
 ---
-/**
- * Public-site header. Visible on every marketing page.
- *
- * Reads `Astro.locals.auth` (populated by middleware on every route in
- * Phase 4.3) to decide between "Sign in / Sign up" and "Open app".
- */
 const auth = Astro.locals.auth;
 ---
 
-<header style="border-bottom: 1px solid var(--border-subtle);">
-  <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+<header
+  class="fixed top-0 left-0 right-0 z-50 h-[60px] flex items-center"
+  style="border-bottom: 1px solid var(--border-subtle); background: var(--surface-base);"
+>
+  <div class="max-w-[1100px] mx-auto px-6 w-full flex items-center justify-between">
     <a
       href="/"
-      class="text-base font-medium transition-colors"
-      style="color: var(--text-primary);"
+      style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em; color: var(--text-primary);"
     >
       Mnema
     </a>
-    <nav class="flex items-center gap-6 text-sm">
+
+    <nav class="flex items-center gap-1">
       <a
         href="/docs"
-        class="transition-colors"
-        style="color: var(--text-secondary);"
+        class="transition-colors px-2 py-1"
+        style="font-size: 13px; color: var(--text-secondary);"
         onmouseover="this.style.color='var(--text-primary)'"
         onmouseout="this.style.color='var(--text-secondary)'"
       >
@@ -29,18 +26,23 @@ const auth = Astro.locals.auth;
       </a>
       <a
         href="/pricing"
-        class="transition-colors"
-        style="color: var(--text-secondary);"
+        class="transition-colors px-2 py-1"
+        style="font-size: 13px; color: var(--text-secondary);"
         onmouseover="this.style.color='var(--text-primary)'"
         onmouseout="this.style.color='var(--text-secondary)'"
       >
         Pricing
       </a>
+    </nav>
+
+    <div class="flex items-center gap-2">
       {auth ? (
         <a
           href="/app"
-          class="px-3 py-1.5 rounded-md font-medium transition-opacity hover:opacity-90"
-          style="background: var(--accent-400); color: var(--text-inverse);"
+          class="inline-flex items-center justify-center h-7 px-2.5 font-medium transition-[background,border-color,color] rounded select-none"
+          style="font-size: 12px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border: 1px solid var(--interactive-primary);"
+          onmouseover="this.style.background='var(--interactive-primary-hover)'"
+          onmouseout="this.style.background='var(--interactive-primary)'"
         >
           Open app
         </a>
@@ -48,22 +50,26 @@ const auth = Astro.locals.auth;
         <>
           <a
             href="/auth/login"
-            class="transition-colors"
-            style="color: var(--text-secondary);"
-            onmouseover="this.style.color='var(--text-primary)'"
-            onmouseout="this.style.color='var(--text-secondary)'"
+            class="inline-flex items-center justify-center h-7 px-2.5 font-medium transition-[background,color] rounded select-none"
+            style="font-size: 12px; color: var(--text-secondary); border: 1px solid transparent;"
+            onmouseover="this.style.background='var(--interactive-ghost-hover)';this.style.color='var(--text-primary)'"
+            onmouseout="this.style.background='transparent';this.style.color='var(--text-secondary)'"
           >
             Sign in
           </a>
           <a
             href="/signup"
-            class="px-3 py-1.5 rounded-md font-medium transition-opacity hover:opacity-90"
-            style="background: var(--accent-400); color: var(--text-inverse);"
+            class="inline-flex items-center justify-center h-7 px-2.5 font-medium transition-[background,border-color,color] rounded select-none"
+            style="font-size: 12px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border: 1px solid var(--interactive-primary);"
+            onmouseover="this.style.background='var(--interactive-primary-hover)'"
+            onmouseout="this.style.background='var(--interactive-primary)'"
           >
             Sign up
           </a>
         </>
       )}
-    </nav>
+    </div>
   </div>
 </header>
+
+<div class="h-[60px]"></div>

@@ -30,12 +30,16 @@ const { title, description, pathname, ogImage } = Astro.props;
     <title>{title}</title>
     <meta name="description" content={description} />
 
+    <link rel="preload" href="/fonts/geist/Geist-Regular.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/geist/Geist-Medium.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/geist/GeistMono-Regular.woff2" as="font" type="font/woff2" crossorigin />
+
     {/* No-FOUC theme script — same shape as BaseLayout's, kept inline
        because Astro otherwise defers separate scripts past first paint. */}
     <script is:inline>
       (function () {
         try {
-          var stored = localStorage.getItem('mnema:theme');
+          var stored = localStorage.getItem('mnema-theme');
           var resolved = stored === 'light' || stored === 'dark' ? stored : null;
           if (!resolved) {
             resolved = window.matchMedia('(prefers-color-scheme: light)').matches

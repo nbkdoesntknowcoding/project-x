@@ -159,8 +159,24 @@ export function createAutocompletePlugin(
   function acceptSuggestion(view: EditorView): boolean {
     const current = autocompletePluginKey.getState(view.state);
     if (!current?.suggestion || current.suggestionAtPos === null) return false;
+
+    const pos = current.suggestionAtPos;
+    const suggestion = current.suggestion;
+
+    // Space-guard: if the character immediately before the insertion point
+    // is not whitespace AND the suggestion doesn't open with whitespace,
+    // prepend a single space. This prevents "smooth" + "Hocuspocus" → "smoothHocuspocus"
+    // when the user accepted before typing a trailing space.
+    const charBefore = pos > 0
+      ? view.state.doc.textBetween(pos - 1, pos, '\n')
+      : '';
+    const needsSpace =
+      charBefore.length > 0 &&
+      !/\s/.test(charBefore) &&
+      !/^\s/.test(suggestion);
+
     const tr = view.state.tr;
-    tr.insertText(current.suggestion, current.suggestionAtPos);
+    tr.insertText(needsSpace ? ' ' + suggestion : suggestion, pos);
     const meta: SuggestionMeta = { suggestion: null, suggestionAtPos: null };
     tr.setMeta(META_KEY, meta);
     view.dispatch(tr);

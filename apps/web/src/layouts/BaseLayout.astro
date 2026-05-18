@@ -15,6 +15,10 @@ const { title = 'BOPPL Context Engine' } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
 
+    <link rel="preload" href="/fonts/geist/Geist-Regular.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/geist/Geist-Medium.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/geist/GeistMono-Regular.woff2" as="font" type="font/woff2" crossorigin />
+
     {/*
       Phase 4.3 — no-FOUC theme script.
 
@@ -34,7 +38,7 @@ const { title = 'BOPPL Context Engine' } = Astro.props;
     <script is:inline>
       (function () {
         try {
-          var stored = localStorage.getItem('mnema:theme');
+          var stored = localStorage.getItem('mnema-theme');
           var resolved = stored === 'light' || stored === 'dark' ? stored : null;
           if (!resolved) {
             resolved = window.matchMedia('(prefers-color-scheme: light)').matches
