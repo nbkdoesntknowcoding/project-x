@@ -122,7 +122,7 @@ export function VersionDiffView({
                 disabled={restoring}
                 className="px-3 py-1.5 text-xs rounded-md disabled:opacity-50"
                 style={{
-                  background: 'var(--accent-400)',
+                  background: 'var(--interactive-primary)',
                   color: 'var(--text-inverse)',
                 }}
               >

@@ -121,7 +121,7 @@ export function SaveVersionMenu({ docId, onSaved }: Props): JSX.Element {
               disabled={submitting || !comment.trim()}
               className="px-3 py-1 text-xs rounded-md disabled:opacity-50"
               style={{
-                background: 'var(--accent-400)',
+                background: 'var(--interactive-primary)',
                 color: 'var(--text-inverse)',
               }}
             >

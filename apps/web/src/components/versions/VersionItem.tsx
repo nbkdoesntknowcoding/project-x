@@ -22,7 +22,7 @@ export function VersionItem({ version, onClick, selected }: Props): JSX.Element 
       onClick={onClick}
       className="w-full text-left px-4 py-2.5 transition-colors"
       style={{
-        borderLeft: selected ? '2px solid var(--accent-400)' : '2px solid transparent',
+        borderLeft: selected ? '2px solid var(--border-strong)' : '2px solid transparent',
         background: selected ? 'var(--surface-overlay)' : 'transparent',
       }}
       onMouseEnter={(e) => {

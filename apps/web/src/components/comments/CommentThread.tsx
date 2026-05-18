@@ -164,7 +164,7 @@ export function CommentThread({ thread, anchorPmPos, onChange, onHoverChange }: 
               onClick={postReply}
               disabled={busy || !replyBody.trim()}
               className="px-3 py-1 text-xs rounded-md disabled:opacity-50"
-              style={{ background: 'var(--accent-400)', color: 'var(--text-inverse)' }}
+              style={{ background: 'var(--interactive-primary)', color: 'var(--text-inverse)' }}
             >
               {busy ? 'Sending…' : 'Reply'}
             </button>

@@ -45,7 +45,7 @@ export function SignupForm(): JSX.Element {
         disabled={submitting}
         className="w-full px-4 py-2.5 rounded-md font-medium transition-opacity disabled:opacity-50"
         style={{
-          background: 'var(--accent-400)',
+          background: 'var(--interactive-primary)',
           color: 'var(--text-inverse)',
         }}
       >

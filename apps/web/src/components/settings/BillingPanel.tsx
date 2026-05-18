@@ -91,7 +91,7 @@ export function BillingPanel(): JSX.Element {
               display: 'inline-block',
               padding: '0.5rem 1rem',
               borderRadius: '0.375rem',
-              background: 'var(--accent)',
+              background: 'var(--interactive-primary)',
               color: 'white',
               fontWeight: 500,
               textDecoration: 'none',

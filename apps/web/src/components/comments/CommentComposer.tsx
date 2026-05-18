@@ -128,7 +128,7 @@ export function CommentComposer({
           disabled={submitting || !body.trim()}
           className="px-3 py-1 text-xs rounded-md disabled:opacity-50"
           style={{
-            background: 'var(--accent-400)',
+            background: 'var(--interactive-primary)',
             color: 'var(--text-inverse)',
           }}
         >

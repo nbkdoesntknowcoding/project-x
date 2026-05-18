@@ -36,7 +36,7 @@ interface EditorProps {
 }
 
 const USER_COLOR_PALETTE: readonly string[] = [
-  '#8b78f0',
+  '#60a5fa',
   '#22c55e',
   '#f59e0b',
   '#3b82f6',
@@ -51,7 +51,7 @@ function colorForUser(userId: string): string {
   for (let i = 0; i < userId.length; i += 1) {
     hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;
   }
-  return USER_COLOR_PALETTE[hash % USER_COLOR_PALETTE.length] ?? '#8b78f0';
+  return USER_COLOR_PALETTE[hash % USER_COLOR_PALETTE.length] ?? '#60a5fa';
 }
 
 export function Editor({

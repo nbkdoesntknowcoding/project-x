@@ -12,20 +12,20 @@ const MERMAID_VARS = {
   dark: {
     primaryColor: '#1c1f24',
     primaryTextColor: '#ededed',
-    primaryBorderColor: '#8b78f0',
-    lineColor: '#8b78f0',
+    primaryBorderColor: '#3a3a3a',
+    lineColor: '#52525b',
     secondaryColor: '#14161a',
     tertiaryColor: '#0b0c0e',
-    fontFamily: 'Inter, system-ui, sans-serif',
+    fontFamily: 'Geist, system-ui, sans-serif',
   },
   light: {
     primaryColor: '#f4f5f7',
     primaryTextColor: '#1c1f24',
-    primaryBorderColor: '#8b78f0',
-    lineColor: '#8b78f0',
+    primaryBorderColor: '#a1a1aa',
+    lineColor: '#71717a',
     secondaryColor: '#fafafa',
     tertiaryColor: '#ffffff',
-    fontFamily: 'Inter, system-ui, sans-serif',
+    fontFamily: 'Geist, system-ui, sans-serif',
   },
 } as const;
 

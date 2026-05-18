@@ -106,7 +106,7 @@ export function InviteMemberForm({
         disabled={submitting || email.trim().length === 0}
         className="h-9 px-4 rounded-md text-sm font-medium transition-opacity disabled:opacity-50"
         style={{
-          background: 'var(--accent-400)',
+          background: 'var(--interactive-primary)',
           color: 'var(--text-inverse)',
         }}
       >
