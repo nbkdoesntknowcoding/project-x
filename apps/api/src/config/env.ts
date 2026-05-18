@@ -44,6 +44,11 @@ const envSchema = z.object({
   // once WorkOS-issued tokens replace the local-secret path.
   JWT_AUDIENCE_MCP: z.string().url().default('http://localhost:8080/mcp'),
 
+  // Phase 4.1 — canonical web origin used in invitation accept URLs and
+  // other server-rendered links back into the app. Production swaps this
+  // for the live web hostname; local dev points at the Astro server.
+  WEB_BASE_URL: z.string().url().default('http://localhost:5173'),
+
   // MCP (Phase 2.1)
   // The wire-protocol version we advertise on initialize.
   MCP_PROTOCOL_VERSION: z.string().min(1).default('2025-11-25'),
@@ -60,6 +65,63 @@ const envSchema = z.object({
   MCP_ORIGIN_ALLOWLIST: z
     .string()
     .default('http://localhost:5173,http://localhost:6274'),
+
+  // Voyage AI (Phase 3.1)
+  // The user obtained this from voyageai.com — the worker crashes loudly
+  // if it's missing rather than silently no-op'ing the embedding pipeline.
+  VOYAGE_API_KEY: z.string().min(1),
+  EMBEDDING_MODEL: z.string().default('voyage-3-large'),
+  // 1024 matches the schema's `vector(1024)` column. Don't change without
+  // a migration — pgvector enforces dimension at insert time.
+  EMBEDDING_DIM: z.coerce.number().int().positive().default(1024),
+  // Heading-aware chunker tuning. 500 target / 50 overlap is the recipe
+  // from the brief; bump only with retrieval-quality data to back it.
+  EMBEDDING_CHUNK_TARGET_TOKENS: z.coerce.number().int().positive().default(500),
+  EMBEDDING_CHUNK_OVERLAP_TOKENS: z.coerce.number().int().nonnegative().default(50),
+  // Voyage caps batch input at 128. Stay at-or-below.
+  EMBEDDING_BATCH_SIZE: z.coerce.number().int().positive().max(128).default(128),
+  // Per-process worker concurrency. Combined with the BullMQ rate limiter
+  // (3 jobs/sec) keeps us well under Voyage's free-tier limits.
+  EMBEDDING_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(2),
+
+  // Autocomplete (Phase 3.3 stub, Phase 3.4 production)
+  // 350ms is what Cursor uses — shorter and we fire too often, longer and
+  // the UX feels laggy. The cap is declared here so 3.4 can tune from
+  // data without touching application code.
+  AUTOCOMPLETE_DEBOUNCE_MS: z.coerce.number().int().nonnegative().default(350),
+  // Prefix/suffix character caps — matter most in 3.4 where they bound the
+  // LLM token budget. Declared in 3.3 so the request contract is stable.
+  AUTOCOMPLETE_MAX_PREFIX_CHARS: z.coerce.number().int().positive().default(2000),
+  AUTOCOMPLETE_MAX_SUFFIX_CHARS: z.coerce.number().int().nonnegative().default(500),
+
+  // Gemini (Phase 3.4) — user obtains from aistudio.google.com.
+  // Crashes loudly if missing — we never silently no-op the production path.
+  GEMINI_API_KEY: z.string().min(1),
+  // Pinned model. Don't swap mid-build — model swaps are tuning decisions,
+  // not build decisions, per the 3.4 spec.
+  AUTOCOMPLETE_MODEL: z.string().default('gemini-2.5-flash-lite'),
+  // 60 tokens is the autocomplete sweet spot — longer feels laggy and
+  // rarely improves quality. Don't raise without latency data.
+  AUTOCOMPLETE_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(60),
+  // Stop sequences — paragraph break terminates the completion so it
+  // doesn't run on past the current sentence/list item. CSV in env;
+  // `\\n` is converted to a real newline at parse time.
+  AUTOCOMPLETE_STOP_SEQUENCES: z
+    .string()
+    .default('\\n\\n')
+    .transform((s) =>
+      s
+        .split(',')
+        .map((x) => x.replace(/\\n/g, '\n'))
+        .filter((x) => x.length > 0),
+    ),
+
+  // Rate limits (Phase 3.4) — per-user sliding window + per-tenant daily cost cap.
+  // 60/min and 1000/day catch sustained-overuse, not bursts. The per-tenant
+  // budget unit ≈ $0.0001; default 50,000 units = $5/day cost ceiling.
+  RATE_LIMIT_USER_PER_MIN: z.coerce.number().int().positive().default(60),
+  RATE_LIMIT_USER_PER_DAY: z.coerce.number().int().positive().default(1000),
+  RATE_LIMIT_TENANT_DAILY_UNITS: z.coerce.number().int().positive().default(50000),
 });
 
 const parsed = envSchema.safeParse(process.env);

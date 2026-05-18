@@ -1,0 +1,64 @@
+---
+import '../styles/global.css';
+import OgMeta from '../components/og/OgMeta.astro';
+import PublicFooter from '../components/public/PublicFooter.astro';
+import PublicHeader from '../components/public/PublicHeader.astro';
+
+/**
+ * Marketing-page shell.
+ *
+ * Owns the no-FOUC theme script (same one BaseLayout uses for app pages),
+ * the OG / Twitter meta, the shared public header + footer, and a min-
+ * height flex column so the footer always sits at the bottom even on
+ * short pages.
+ */
+interface Props {
+  title: string;
+  description: string;
+  pathname: string;
+  ogImage?: string;
+}
+
+const { title, description, pathname, ogImage } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+
+    {/* No-FOUC theme script — same shape as BaseLayout's, kept inline
+       because Astro otherwise defers separate scripts past first paint. */}
+    <script is:inline>
+      (function () {
+        try {
+          var stored = localStorage.getItem('mnema:theme');
+          var resolved = stored === 'light' || stored === 'dark' ? stored : null;
+          if (!resolved) {
+            resolved = window.matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark';
+          }
+          document.documentElement.setAttribute('data-theme', resolved);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
+
+    <OgMeta title={title} description={description} pathname={pathname} image={ogImage} />
+  </head>
+  <body
+    class="font-sans min-h-screen flex flex-col"
+    style="background: var(--surface-canvas); color: var(--text-primary);"
+  >
+    <PublicHeader />
+    <main class="flex-1">
+      <slot />
+    </main>
+    <PublicFooter />
+  </body>
+</html>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!--
+    Phase 4.3 placeholder OG card. Phase 5 polish swaps this for a
+    designed PNG once we have real product screenshots to show. Static
+    SVG renders cleanly in Slack, Twitter, LinkedIn link previews.
+  -->
+  <rect width="1200" height="630" fill="#0b0c0e"/>
+  <circle cx="1090" cy="120" r="48" fill="#8b78f0"/>
+  <text x="60" y="320" fill="#ededed" font-family="Inter, system-ui, sans-serif" font-size="88" font-weight="500" letter-spacing="-2">Mnema</text>
+  <text x="60" y="380" fill="#a0a4ad" font-family="Inter, system-ui, sans-serif" font-size="32" font-weight="400">The live context engine for AI-native teams.</text>
+  <line x1="60" y1="540" x2="200" y2="540" stroke="#2a2e36" stroke-width="2"/>
+  <text x="60" y="580" fill="#6b7280" font-family="Inter, system-ui, sans-serif" font-size="20" font-weight="400">By BOPPL · context.theboringpeople.in</text>
+</svg>

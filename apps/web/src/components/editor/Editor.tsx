@@ -1,13 +1,23 @@
 import { Crepe } from '@milkdown/crepe';
 import '@milkdown/crepe/theme/common/style.css';
 import { collab, collabServiceCtx } from '@milkdown/plugin-collab';
+import { editorViewCtx } from '@milkdown/core';
 import { HocuspocusProvider } from '@hocuspocus/provider';
+import type { EditorView } from 'prosemirror-view';
 import { type JSX, useEffect, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import './editor.css';
+import { $prose } from '@milkdown/kit/utils';
 import { ConnectionStatus } from './ConnectionStatus';
+import { createAutocompletePlugin } from './plugins/autocomplete/plugin';
 import { mathPlugin } from './plugins/math';
 import { configureMermaidPreview } from './plugins/mermaid';
+import { createCommentAnchorPlugin } from '../comments/CommentAnchorPlugin';
+
+export interface EditorSelection {
+  from: number;
+  to: number;
+}
 
 interface EditorProps {
   docId: string;
@@ -15,6 +25,12 @@ interface EditorProps {
   jwt: string;
   user: { id: string; email: string };
   collabUrl?: string;
+  /** Called once the EditorView is mounted (and again with null on
+   *  teardown). The parent uses this to drive the comments overlay. */
+  onViewReady?: (view: EditorView | null) => void;
+  /** Called on every selection change. The parent uses this to know
+   *  what range a ⌘⇧M shortcut should anchor to. */
+  onSelectionChange?: (sel: EditorSelection | null) => void;
 }
 
 const USER_COLOR_PALETTE: readonly string[] = [
@@ -42,9 +58,20 @@ export function Editor({
   jwt,
   user,
   collabUrl,
+  onViewReady,
+  onSelectionChange,
 }: EditorProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [provider, setProvider] = useState<HocuspocusProvider | null>(null);
+  // Stash callbacks in refs so the mount-once effect doesn't need them
+  // in its deps (changing onSelectionChange would otherwise tear down the
+  // whole editor on every parent rerender).
+  const onViewReadyRef = useRef(onViewReady);
+  const onSelectionChangeRef = useRef(onSelectionChange);
+  useEffect(() => {
+    onViewReadyRef.current = onViewReady;
+    onSelectionChangeRef.current = onSelectionChange;
+  }, [onViewReady, onSelectionChange]);
 
   useEffect(() => {
     const root = containerRef.current;
@@ -101,7 +128,30 @@ export function Editor({
     crepe.editor.config(configureMermaidPreview);
     crepe.editor.use(collab);
 
+    // Phase 3.3 autocomplete: stub backend; debounce + AbortController
+    // owned per editor mount. The hard-coded values mirror env defaults
+    // — 3.4 will read these from PUBLIC_AUTOCOMPLETE_* for runtime tuning.
+    const autocompletePlugin = $prose(() =>
+      createAutocompletePlugin({
+        docId,
+        debounceMs: 350,
+        maxPrefixChars: 2000,
+        maxSuffixChars: 500,
+      }),
+    );
+    crepe.editor.use(autocompletePlugin);
+
+    // Phase 4.2 — comment anchor decoration plugin. Source of truth lives
+    // in React; this plugin just renders the highlighted ranges React
+    // pushes in via setMeta.
+    const commentAnchorProsePlugin = $prose(() => createCommentAnchorPlugin());
+    crepe.editor.use(commentAnchorProsePlugin);
+
     let disposed = false;
+    let viewRef: EditorView | null = null;
+    let selectionPollTimer: ReturnType<typeof setInterval> | null = null;
+    let lastSelectionKey = '';
+
     crepe
       .create()
       .then(() => {
@@ -126,6 +176,30 @@ export function Editor({
           } else {
             hp.on('synced', seedIfEmpty);
           }
+
+          // Capture the EditorView for the parent. We don't try to wire
+          // a prosemirror Plugin.view dispatch listener here (Milkdown owns
+          // plugin registration), and instead poll selection on a short
+          // interval — cheap, and avoids reaching into Milkdown internals.
+          try {
+            viewRef = ctx.get(editorViewCtx);
+          } catch {
+            viewRef = null;
+          }
+          if (viewRef) {
+            onViewReadyRef.current?.(viewRef);
+            selectionPollTimer = setInterval(() => {
+              const v = viewRef;
+              if (!v) return;
+              const sel = v.state.selection;
+              const key = sel.empty ? 'empty' : `${sel.from}:${sel.to}`;
+              if (key === lastSelectionKey) return;
+              lastSelectionKey = key;
+              onSelectionChangeRef.current?.(
+                sel.empty ? null : { from: sel.from, to: sel.to },
+              );
+            }, 120);
+          }
         });
       })
       .catch((err: unknown) => {
@@ -134,6 +208,12 @@ export function Editor({
 
     return () => {
       disposed = true;
+      if (selectionPollTimer !== null) {
+        clearInterval(selectionPollTimer);
+        selectionPollTimer = null;
+      }
+      onViewReadyRef.current?.(null);
+      viewRef = null;
       void crepe.destroy();
       hp.destroy();
       ydoc.destroy();

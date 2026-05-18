@@ -57,6 +57,12 @@ jobs:
       MCP_AUTHORIZATION_SERVER: http://localhost:8080
       MCP_PROTOCOL_VERSION: 2025-11-25
       MCP_ORIGIN_ALLOWLIST: http://localhost:5173,http://localhost:6274
+      # Voyage + Gemini are required-by-Zod at config load time, even for
+      # tests that don't make real provider calls. Real keys live only in
+      # local .env; CI uses dummies. Provider mocks via vi.mock prevent
+      # any actual outbound HTTP regardless.
+      VOYAGE_API_KEY: ci_dummy_key_not_used_due_to_mock
+      GEMINI_API_KEY: ci_dummy_key_not_used_due_to_mock
 
     steps:
       - uses: actions/checkout@v4
@@ -97,6 +103,45 @@ jobs:
 
       - name: MCP search
         run: pnpm --filter @boppl/api test src/tests/mcp-search.test.ts
+        env:
+          NODE_ENV: test
+
+      - name: Chunker unit
+        run: pnpm --filter @boppl/api test src/tests/chunker.test.ts
+        env:
+          NODE_ENV: test
+          # Test-only — chunker is pure CPU but env.ts validates VOYAGE_API_KEY at import time.
+          VOYAGE_API_KEY: ci_dummy_key_not_used_chunker_is_pure
+
+      - name: Embeddings integration
+        run: pnpm --filter @boppl/api test src/tests/embeddings-integration.test.ts
+        env:
+          NODE_ENV: test
+          # Test-only — Voyage call is mocked via vi.mock; never burns real quota.
+          VOYAGE_API_KEY: ci_dummy_key_not_used_due_to_mock
+
+      - name: MCP hybrid search
+        run: pnpm --filter @boppl/api test src/tests/mcp-search-hybrid.test.ts
+        env:
+          NODE_ENV: test
+          VOYAGE_API_KEY: ci_dummy_key_not_used_due_to_mock
+
+      - name: Autocomplete trigger
+        run: pnpm --filter @boppl/web test
+        env:
+          NODE_ENV: test
+
+      - name: Rate limit
+        run: pnpm --filter @boppl/api test src/tests/complete-rate-limit.test.ts
+        env:
+          NODE_ENV: test
+          # Rate-limit test only exercises Redis sliding-window logic.
+          # No real Gemini call is made in this test; placeholder satisfies
+          # env.ts's required-key Zod check at module load time.
+          GEMINI_API_KEY: ci_dummy_key_not_used_due_to_test_scope
+
+      - name: Invitations
+        run: pnpm --filter @boppl/api test src/tests/invitations.test.ts
         env:
           NODE_ENV: test
 

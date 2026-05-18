@@ -1,0 +1,49 @@
+---
+import PublicLayout from '../../layouts/PublicLayout.astro';
+---
+
+<PublicLayout
+  title="Docs — Mnema"
+  description="Documentation for Mnema, the live context engine for Claude."
+  pathname="/docs"
+>
+  <section class="max-w-3xl mx-auto px-6 py-20">
+    <h1 class="text-3xl font-medium mb-2" style="color: var(--text-primary);">
+      Documentation
+    </h1>
+    <p class="text-sm mb-12" style="color: var(--text-secondary);">
+      Everything you need to use Mnema.
+    </p>
+
+    <nav class="space-y-3">
+      <a
+        href="/docs/getting-started"
+        class="block p-4 rounded-md transition-colors"
+        style="border: 1px solid var(--border-default);"
+        onmouseover="this.style.background='var(--surface-overlay)'"
+        onmouseout="this.style.background='transparent'"
+      >
+        <h3 class="text-base font-medium mb-1" style="color: var(--text-primary);">
+          Getting started
+        </h3>
+        <p class="text-sm" style="color: var(--text-secondary);">
+          A 5-minute tour: invite a teammate, create a doc, try search.
+        </p>
+      </a>
+      <a
+        href="/docs/connect"
+        class="block p-4 rounded-md transition-colors"
+        style="border: 1px solid var(--border-default);"
+        onmouseover="this.style.background='var(--surface-overlay)'"
+        onmouseout="this.style.background='transparent'"
+      >
+        <h3 class="text-base font-medium mb-1" style="color: var(--text-primary);">
+          Connect to Claude
+        </h3>
+        <p class="text-sm" style="color: var(--text-secondary);">
+          Step-by-step setup for the MCP connector.
+        </p>
+      </a>
+    </nav>
+  </section>
+</PublicLayout>

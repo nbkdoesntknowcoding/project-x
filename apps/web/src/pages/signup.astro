@@ -1,0 +1,47 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { SignupForm } from '../components/auth/SignupForm';
+
+// Already signed in → skip the signup screen entirely.
+const auth = Astro.locals.auth;
+if (auth) {
+  return Astro.redirect('/app');
+}
+---
+
+<BaseLayout title="Sign up · Mnema">
+  <main
+    class="min-h-screen flex items-center justify-center px-4"
+    style="background: var(--surface-canvas);"
+  >
+    <div class="w-full max-w-md">
+      <div class="mb-8 text-center">
+        <h1
+          class="text-2xl font-medium tracking-tight"
+          style="color: var(--text-primary);"
+        >
+          Sign up for Mnema
+        </h1>
+        <p class="mt-2 text-sm" style="color: var(--text-secondary);">
+          The live context engine for AI-native teams.
+        </p>
+      </div>
+
+      <SignupForm client:load />
+
+      <p
+        class="mt-6 text-center text-sm"
+        style="color: var(--text-secondary);"
+      >
+        Already have an account?
+        <a
+          href="/auth/login"
+          class="underline transition-colors"
+          style="color: var(--text-primary);"
+        >
+          Sign in
+        </a>
+      </p>
+    </div>
+  </main>
+</BaseLayout>

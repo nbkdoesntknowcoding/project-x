@@ -15,6 +15,27 @@
       "when": 1747286400000,
       "tag": "0001_app_user_role",
       "breakpoints": false
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1747987200000,
+      "tag": "0002_invitations_and_system_role",
+      "breakpoints": false
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1747987200001,
+      "tag": "0003_workspace_members_rls_and_public_lookup",
+      "breakpoints": false
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778889600000,
+      "tag": "0004_comments_threads_versions_read_state",
+      "breakpoints": false
     }
   ]
 }

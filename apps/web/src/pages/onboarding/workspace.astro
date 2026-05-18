@@ -1,0 +1,58 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { WorkspaceOnboarding } from '../../components/auth/WorkspaceOnboarding';
+
+const auth = Astro.locals.auth;
+if (!auth) {
+  return Astro.redirect('/auth/login');
+}
+
+// If the user already has at least one workspace, skip onboarding —
+// they'll land in their existing workspace at /app. The workspace-naming
+// flow is only meaningful for a brand-new user with no memberships.
+const apiUrl =
+  (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+const wsResponse = await fetch(`${apiUrl}/api/auth/workspaces`, {
+  headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+});
+if (wsResponse.ok) {
+  const { workspaces } = (await wsResponse.json()) as {
+    workspaces: Array<unknown>;
+  };
+  if (workspaces.length > 0) {
+    return Astro.redirect('/app');
+  }
+}
+
+// Pre-fill the workspace name from the user's email domain (e.g.
+// `nischaybk@theboringpeople.in` → `theboringpeople`). Pure UX — the
+// server only cares about the name after submit.
+const domainPart = auth.email.split('@')[1]?.split('.')[0] ?? '';
+const suggestedName = domainPart
+  ? domainPart.charAt(0).toUpperCase() + domainPart.slice(1)
+  : 'My workspace';
+---
+
+<BaseLayout title="Create your workspace · Mnema">
+  <main
+    class="min-h-screen flex items-center justify-center px-4"
+    style="background: var(--surface-canvas);"
+  >
+    <div class="w-full max-w-md">
+      <div class="mb-8">
+        <h1
+          class="text-2xl font-medium tracking-tight"
+          style="color: var(--text-primary);"
+        >
+          Create your workspace
+        </h1>
+        <p class="mt-2 text-sm" style="color: var(--text-secondary);">
+          This is where your team's docs will live. You can rename it later
+          in Settings.
+        </p>
+      </div>
+
+      <WorkspaceOnboarding client:load suggestedName={suggestedName} />
+    </div>
+  </main>
+</BaseLayout>

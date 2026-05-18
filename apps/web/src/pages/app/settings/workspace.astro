@@ -1,0 +1,43 @@
+---
+import SettingsLayout from '../../../layouts/SettingsLayout.astro';
+import { WorkspaceSettings } from '../../../components/settings/WorkspaceSettings';
+
+const auth = Astro.locals.auth;
+if (!auth) {
+  return Astro.redirect('/auth/login');
+}
+
+const apiUrl =
+  (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+const meRes = await fetch(`${apiUrl}/api/auth/me`, {
+  headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+});
+let role: 'owner' | 'editor' | 'viewer' = 'viewer';
+if (meRes.ok) {
+  const body = (await meRes.json()) as { role?: string };
+  if (body.role === 'owner' || body.role === 'editor' || body.role === 'viewer') {
+    role = body.role;
+  }
+}
+---
+
+<SettingsLayout title="Workspace">
+  <h1
+    class="text-xl font-medium mb-1"
+    style="color: var(--text-primary);"
+  >
+    Workspace
+  </h1>
+  <p
+    class="text-sm mb-8"
+    style="color: var(--text-secondary);"
+  >
+    {
+      role === 'owner'
+        ? 'Rename this workspace or change its URL slug. Only owners can edit.'
+        : 'Only workspace owners can change these settings.'
+    }
+  </p>
+
+  <WorkspaceSettings client:load currentUserRole={role} />
+</SettingsLayout>

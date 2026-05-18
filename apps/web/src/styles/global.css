@@ -2,7 +2,16 @@
 
 /*
  * BOPPL Live Context Engine — Design System tokens.
- * Dark-first; light mode is enabled by adding the `light` class to <html>.
+ *
+ * Dark-first. Light mode is enabled by setting [data-theme="light"] on
+ * <html>. The attribute is the single switching mechanism — JS resolves
+ * the user's choice (system / light / dark) into a concrete value before
+ * paint and writes the attribute (see BaseLayout.astro's inline script).
+ *
+ * The brand accent (--accent-400 = #8b78f0) is intentionally identical
+ * across themes; deviating breaks brand recognition in mixed-theme
+ * screenshots and emails.
+ *
  * Source: BOPPL_Context_Engine_Design_System.md
  */
 
@@ -72,7 +81,11 @@
   --radius-full: 9999px;
 }
 
-.light {
+:root[data-theme='light'] {
+  /* Surfaces — lift everything off near-black onto warm off-whites. The
+   * elevated steps invert from dark (raised → overlay get darker) to light
+   * (raised → overlay get whiter); that keeps "more elevated = brighter"
+   * intuitive on both themes. */
   --surface-canvas: #ffffff;
   --surface-base: #fafafa;
   --surface-raised: #f4f5f7;
@@ -80,16 +93,43 @@
   --surface-input: #ffffff;
   --surface-hover: #f0f1f4;
   --surface-active: #e8eaee;
+  /* Selected stays at 12% accent — keeps the brand consistent and the math
+   * works on both backgrounds. */
+  --surface-selected: rgba(139, 120, 240, 0.12);
 
-  --text-primary: #1c1f24;
-  --text-secondary: #5a606b;
-  --text-tertiary: #8b929e;
-
+  /* Borders */
   --border-subtle: #ececef;
   --border-default: #e4e6eb;
   --border-strong: #c8ccd3;
+  --border-focus: #8b78f0;
 
-  --accent-400: #6b5cd4;
+  /* Text */
+  --text-primary: #1c1f24;
+  --text-secondary: #5a606b;
+  --text-tertiary: #8b929e;
+  --text-disabled: #b0b4bd;
+  --text-inverse: #ffffff;
+  --text-accent: #5444b8;
+
+  /* Accent ramp — UNCHANGED. The brand violet is the same in both themes.
+   * Do not move --accent-400 here; it would split the brand. */
+
+  /* Semantic — same hues, slightly softer backgrounds for light surfaces */
+  --success-bg: rgba(34, 197, 94, 0.14);
+  --warning-bg: rgba(245, 158, 11, 0.14);
+  --danger-bg: rgba(239, 68, 68, 0.14);
+  --info-bg: rgba(59, 130, 246, 0.14);
+
+  /* Editor-specific — needs new values, dark tokens look invisible / wrong
+   * on a white surface. */
+  --editor-block-hover: rgba(0, 0, 0, 0.04);
+  --editor-handle: #b0b4bd;
+  --editor-ghost-text: #b0b4bd;
+  --code-bg: #f4f5f7;
+  --code-border: #e4e6eb;
+  --mermaid-fill: #f4f5f7;
+  /* --editor-cursor + --editor-selection + --mermaid-stroke stay on the
+   * accent ramp; they read correctly against both palettes. */
 }
 
 @theme {
@@ -109,4 +149,17 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Phase 4.2 — doc list unread indicator. Tiny dot prefixing a doc title
+ * when there are comments authored by someone other than the current user
+ * since their last visit. Source: /api/doc-read-state/unread-counts. */
+.doc-unread-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--accent-400);
+  margin-right: 6px;
+  vertical-align: middle;
 }

@@ -4,31 +4,31 @@ import { withTenant } from '../../db/with-tenant.js';
 import type { McpAuthContext } from '../auth.js';
 import { requireScope } from '../scope.js';
 import { withAudit } from './audit.js';
+import { embedQuery } from './query-embedding.js';
 
 /**
- * MCP tool: `search_docs` (Phase 2.4 — keyword mode only).
+ * MCP tool: `search_docs` — Phase 3.2 multi-mode (keyword | semantic | hybrid).
  *
- * The `mode` parameter exists today with one accepted value (`"keyword"`)
- * so Phase 3 can add `"semantic"` and `"hybrid"` without changing the
- * tool signature claude.ai already learned. Don't widen the enum until
- * those modes actually ship.
+ * The `mode` enum was introduced in 2.4 with one value (`"keyword"`) so 3.2
+ * could grow it without changing the tool signature claude.ai already learned.
+ * `"hybrid"` is now the default — it composes both signals via Reciprocal
+ * Rank Fusion (RRF, k=60) in pure SQL inside one CTE.
  *
- * The query path:
- *   - `websearch_to_tsquery('english', $1)` for forgiving Google-style
- *     input (quoted phrases, OR, leading `-` for negation)
- *   - `ts_rank_cd(d.tsv, q.tsquery)` honors the schema's per-column
- *     weights (title = A = 1.0, body = B = 0.4)
- *   - `ts_headline` builds <mark>-tagged snippets natively
- *   - Two boolean expressions per row resolve `match_type` without a
- *     second round-trip
+ * Why RRF over weighted-sum fusion: keyword scores (`ts_rank_cd`) and
+ * semantic scores (cosine distance) live in different distributions; the
+ * "right" α to blend them varies per query type. RRF only cares about
+ * rank position, doesn't need tuning, and composes cleanly with future
+ * signals (recency, tags). It's the IR-literature consensus.
  *
- * Don't swap to `plainto_tsquery` "for simplicity" — the websearch flavor
- * is the right Claude-driven query shape.
+ * Why `DISTINCT ON (doc_id)` on the semantic side: a single doc can have
+ * multiple matching chunks. Without collapsing, those chunks each
+ * contribute an RRF term and the doc unfairly outranks docs with one
+ * strong hit. We keep the chunk with the smallest cosine distance.
  */
 export const SEARCH_DOCS_TOOL = {
   name: 'search_docs',
   description: [
-    'Searches docs in the current workspace by keyword. Use this when the user mentions a topic, term, or concept and you do not already know which doc to fetch.',
+    'Searches docs in the current workspace by keyword, semantic similarity, or a hybrid of both. Use this when the user mentions a topic, term, or concept and you do not already know which doc to fetch.',
     '',
     'Use this when:',
     ' - The user asks "what do we have on X", "find docs about Y", "search for Z"',
@@ -39,11 +39,16 @@ export const SEARCH_DOCS_TOOL = {
     ' - You already know the doc id or path — call get_doc directly',
     ' - The user wants a directory listing — call list_docs',
     '',
-    'Results are ranked by relevance and include a snippet with <mark> tags around hits, plus match_type ("title" / "body" / "both") so you can judge confidence — title matches are usually the strongest signal.',
+    'Modes:',
+    ' - "hybrid" (default, recommended): Combines keyword and semantic search using Reciprocal Rank Fusion. Best for almost all queries — handles both specific terms and conceptual questions.',
+    ' - "keyword": Postgres full-text search only. Use when the user gives an exact term (an error code, a proper noun, a specific phrase) and you want lexical precision over semantic similarity.',
+    ' - "semantic": pgvector cosine similarity only. Use for purely conceptual queries where the exact words might not appear in the docs (e.g., "how do we handle rate limiting" against a doc that calls it "throttling").',
     '',
-    'The mode parameter currently accepts only "keyword". Semantic and hybrid modes will arrive in a future version; for now, prefer specific terms over abstract concepts (the keyword index understands stemming but not paraphrase). Quote multi-word phrases to require exact-order matches.',
+    'Results include rank, match_type ("title" / "body" / "both" / "chunk"), and a snippet with <mark> tags around hits (keyword) or the matching chunk text (semantic/hybrid). For semantic/hybrid hits, the heading_path field shows which section of the doc matched.',
     '',
-    'Typical latency: under 100ms.',
+    'Quote multi-word phrases in keyword mode to require exact-order matches. Negation supported via "-term".',
+    '',
+    'Typical latency: 50-150ms warm cache, 200-400ms cold cache for semantic/hybrid.',
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,
@@ -52,12 +57,13 @@ export const SEARCH_DOCS_TOOL = {
         type: 'string',
         minLength: 1,
         description:
-          'The search query. Accepts plain words ("pricing tiers"), quoted phrases ("\\"customer onboarding\\""), and negation ("-deprecated").',
+          'The search query. Free-form text. Quotes and -negation supported in keyword mode.',
       },
       mode: {
         type: 'string',
-        enum: ['keyword'],
-        description: 'Search mode. Currently only "keyword" is supported. Defaults to "keyword".',
+        enum: ['hybrid', 'keyword', 'semantic'],
+        description:
+          'Search mode. Defaults to "hybrid". Pick "keyword" for exact terms, "semantic" for conceptual queries, "hybrid" for everything else.',
       },
       limit: {
         type: 'number',
@@ -78,9 +84,11 @@ const argsSchema = z.object({
     .refine((q) => q.trim().length > 0, {
       message: 'Query cannot be empty or whitespace-only',
     }),
-  mode: z.enum(['keyword']).optional().default('keyword'),
+  mode: z.enum(['hybrid', 'keyword', 'semantic']).optional().default('hybrid'),
   limit: z.number().int().min(1).max(20).optional().default(10),
 });
+
+export type Mode = 'hybrid' | 'keyword' | 'semantic';
 
 export interface SearchHit {
   id: string;
@@ -88,23 +96,50 @@ export interface SearchHit {
   path: string;
   updated_at: string;
   rank: number;
-  match_type: 'title' | 'body' | 'both';
+  match_type: 'title' | 'body' | 'both' | 'chunk';
   snippet: string;
+  heading_path?: string;
 }
 
 export interface SearchResult {
   query: string;
-  mode: 'keyword';
+  mode: Mode;
   results: SearchHit[];
 }
 
-/**
- * Row shape returned by the SQL below. postgres-js + drizzle return
- * snake_case keys directly from the SELECT — no auto camelCase mapping
- * happens for `tx.execute(sql`...`)`. The generic on `tx.execute<RawRow>`
- * threads this type through to the RowList.
- */
-interface RawRow extends Record<string, unknown> {
+export async function searchDocs(
+  ctx: McpAuthContext,
+  rawArgs: Record<string, unknown>,
+): Promise<SearchResult> {
+  // Scope check FIRST so a forbidden bubbles before audit/DB/Voyage work.
+  requireScope(ctx, 'docs:read');
+
+  const args = argsSchema.parse(rawArgs);
+
+  return await withAudit(
+    ctx,
+    { tool_name: SEARCH_DOCS_TOOL.name, args: args as Record<string, unknown> },
+    async () => {
+      switch (args.mode) {
+        case 'keyword':
+          return await runKeyword(ctx, args.query, args.limit);
+        case 'semantic':
+          return await runSemantic(ctx, args.query, args.limit);
+        case 'hybrid':
+          return await runHybrid(ctx, args.query, args.limit);
+      }
+    },
+    (result) => ({ mode: result.mode, result_count: result.results.length }),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Keyword path — unchanged from Phase 2.4 in shape and behavior. Still uses
+// websearch_to_tsquery + ts_rank_cd + ts_headline. Title/body match flags
+// stay in the response so Claude can reason about lexical confidence.
+// ---------------------------------------------------------------------------
+
+interface KeywordRow extends Record<string, unknown> {
   id: string;
   title: string;
   path: string;
@@ -115,84 +150,264 @@ interface RawRow extends Record<string, unknown> {
   body_match: boolean;
 }
 
-export async function searchDocs(
+async function runKeyword(
   ctx: McpAuthContext,
-  rawArgs: Record<string, unknown>,
+  query: string,
+  limit: number,
 ): Promise<SearchResult> {
-  // Scope check FIRST — bubbles McpForbiddenError before audit / DB.
-  requireScope(ctx, 'docs:read');
-
-  const args = argsSchema.parse(rawArgs);
-
-  return await withAudit(
-    ctx,
-    { tool_name: SEARCH_DOCS_TOOL.name, args: args as Record<string, unknown> },
-    async () =>
-      withTenant(ctx.tenant_id, async (tx) => {
-        // The CTE binds `tsquery` once so we don't reparse the user input
-        // four times (in the WHERE, the ts_rank_cd, the ts_headline, and
-        // each match_type predicate).
-        //
-        // RLS is doing the workspace_id scoping for us via the
-        // docs_tenant_select policy + app.tenant_id GUC; we only need the
-        // soft-delete predicate here.
-        const result = await tx.execute<RawRow>(sql`
-          WITH q AS (
-            SELECT websearch_to_tsquery('english', ${args.query}) AS tsquery
-          )
-          SELECT
-            d.id,
-            d.title,
-            d.path,
-            d.updated_at,
-            ts_rank_cd(d.tsv, q.tsquery) AS rank,
-            ts_headline(
-              'english',
-              d.markdown,
-              q.tsquery,
-              'StartSel=<mark>, StopSel=</mark>, MaxFragments=2, MaxWords=15, MinWords=5, ShortWord=2'
-            ) AS snippet,
-            (to_tsvector('english', coalesce(d.title, '')) @@ q.tsquery) AS title_match,
-            (to_tsvector('english', coalesce(d.markdown, '')) @@ q.tsquery) AS body_match
-          FROM docs d, q
-          WHERE
-            d.tsv @@ q.tsquery
-            AND d.deleted_at IS NULL
-          ORDER BY rank DESC
-          LIMIT ${args.limit}
-        `);
-
-        // postgres-js RowList is array-like; iterate directly. Don't
-        // dereference `.rows` — that's the node-postgres driver's shape,
-        // not postgres-js.
-        const hits: SearchHit[] = [];
-        for (const r of result) {
-          const matchType: SearchHit['match_type'] =
-            r.title_match && r.body_match
-              ? 'both'
-              : r.title_match
-                ? 'title'
-                : 'body';
-          hits.push({
-            id: r.id,
-            title: r.title,
-            path: r.path,
-            updated_at:
-              r.updated_at instanceof Date
-                ? r.updated_at.toISOString()
-                : new Date(r.updated_at).toISOString(),
-            rank: Number(r.rank),
-            match_type: matchType,
-            snippet: r.snippet,
-          });
-        }
-
-        return {
-          query: args.query,
-          mode: 'keyword' as const,
-          results: hits,
-        };
-      }),
-    (result) => ({ result_count: result.results.length }),
+  const result = await withTenant(ctx.tenant_id, async (tx) =>
+    tx.execute<KeywordRow>(sql`
+      WITH q AS (SELECT websearch_to_tsquery('english', ${query}) AS tsquery)
+      SELECT
+        d.id, d.title, d.path, d.updated_at,
+        ts_rank_cd(d.tsv, q.tsquery) AS rank,
+        ts_headline('english', d.markdown, q.tsquery,
+          'StartSel=<mark>, StopSel=</mark>, MaxFragments=2, MaxWords=15, MinWords=5'
+        ) AS snippet,
+        (to_tsvector('english', coalesce(d.title, '')) @@ q.tsquery) AS title_match,
+        (to_tsvector('english', coalesce(d.markdown, '')) @@ q.tsquery) AS body_match
+      FROM docs d, q
+      WHERE d.tsv @@ q.tsquery AND d.deleted_at IS NULL
+      ORDER BY rank DESC
+      LIMIT ${limit}
+    `),
   );
+
+  const hits: SearchHit[] = [];
+  for (const r of result) {
+    const matchType: SearchHit['match_type'] = r.title_match && r.body_match
+      ? 'both'
+      : r.title_match
+        ? 'title'
+        : 'body';
+    hits.push({
+      id: r.id,
+      title: r.title,
+      path: r.path,
+      updated_at: dateToIso(r.updated_at),
+      rank: Number(r.rank),
+      match_type: matchType,
+      snippet: r.snippet,
+    });
+  }
+
+  return { query, mode: 'keyword', results: hits };
+}
+
+// ---------------------------------------------------------------------------
+// Semantic path — embed the query (cached), cosine-distance search against
+// the HNSW index, collapse to one row per doc via DISTINCT ON.
+// ---------------------------------------------------------------------------
+
+interface SemanticRow extends Record<string, unknown> {
+  doc_id: string;
+  title: string;
+  path: string;
+  updated_at: Date | string;
+  rank: number | string;
+  chunk_index: number;
+  chunk_text: string;
+  heading_path: string | null;
+  distance: number | string;
+}
+
+async function runSemantic(
+  ctx: McpAuthContext,
+  query: string,
+  limit: number,
+): Promise<SearchResult> {
+  const vector = await embedQuery(ctx.tenant_id, query);
+  const vectorLiteral = formatVectorLiteral(vector);
+
+  const result = await withTenant(ctx.tenant_id, async (tx) =>
+    tx.execute<SemanticRow>(sql`
+      WITH semantic_results AS (
+        SELECT
+          e.doc_id, d.title, d.path, d.updated_at,
+          ROW_NUMBER() OVER (ORDER BY e.embedding <=> ${vectorLiteral}::vector ASC) AS rank,
+          e.chunk_index, e.chunk_text, e.heading_path,
+          (e.embedding <=> ${vectorLiteral}::vector) AS distance
+        FROM embeddings e
+        JOIN docs d ON d.id = e.doc_id
+        WHERE d.deleted_at IS NULL
+        ORDER BY e.embedding <=> ${vectorLiteral}::vector
+        LIMIT 50
+      )
+      SELECT DISTINCT ON (doc_id) *
+      FROM semantic_results
+      ORDER BY doc_id, distance ASC
+      LIMIT ${limit}
+    `),
+  );
+
+  // DISTINCT ON loses the original distance ordering when grouping by doc_id;
+  // restore it so callers see best matches first.
+  const rows = [...result].sort(
+    (a, b) => Number(a.distance) - Number(b.distance),
+  );
+
+  return {
+    query,
+    mode: 'semantic',
+    results: rows.map((r) => ({
+      id: r.doc_id,
+      title: r.title,
+      path: r.path,
+      updated_at: dateToIso(r.updated_at),
+      // Surface similarity (1 - distance) as `rank` so higher = better,
+      // matching keyword's convention. Cosine distance is in [0, 2].
+      rank: 1 - Number(r.distance),
+      match_type: 'chunk' as const,
+      snippet: chunkToSnippet(r.chunk_text),
+      heading_path: r.heading_path ?? undefined,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Hybrid path — keyword + semantic in one CTE, fused via RRF, ordered by
+// the fused score. Doc must appear in either side to be in the result.
+// ---------------------------------------------------------------------------
+
+interface HybridRow extends Record<string, unknown> {
+  doc_id: string;
+  title: string;
+  path: string;
+  updated_at: Date | string;
+  rrf_score: number | string;
+  in_keyword: boolean;
+  in_semantic: boolean;
+  keyword_snippet: string | null;
+  semantic_chunk_text: string | null;
+  semantic_heading_path: string | null;
+}
+
+async function runHybrid(
+  ctx: McpAuthContext,
+  query: string,
+  limit: number,
+): Promise<SearchResult> {
+  const vector = await embedQuery(ctx.tenant_id, query);
+  const vectorLiteral = formatVectorLiteral(vector);
+
+  const result = await withTenant(ctx.tenant_id, async (tx) =>
+    tx.execute<HybridRow>(sql`
+      WITH
+        q AS (SELECT websearch_to_tsquery('english', ${query}) AS tsquery),
+        keyword_results AS (
+          SELECT
+            d.id AS doc_id, d.title, d.path, d.updated_at,
+            ROW_NUMBER() OVER (ORDER BY ts_rank_cd(d.tsv, q.tsquery) DESC) AS rank,
+            ts_headline('english', d.markdown, q.tsquery,
+              'StartSel=<mark>, StopSel=</mark>, MaxFragments=2, MaxWords=15, MinWords=5'
+            ) AS snippet
+          FROM docs d, q
+          WHERE d.tsv @@ q.tsquery AND d.deleted_at IS NULL
+          LIMIT 50
+        ),
+        semantic_results AS (
+          SELECT
+            e.doc_id, d.title, d.path, d.updated_at,
+            ROW_NUMBER() OVER (ORDER BY e.embedding <=> ${vectorLiteral}::vector ASC) AS rank,
+            e.chunk_text, e.heading_path,
+            (e.embedding <=> ${vectorLiteral}::vector) AS distance
+          FROM embeddings e
+          JOIN docs d ON d.id = e.doc_id
+          WHERE d.deleted_at IS NULL
+          ORDER BY e.embedding <=> ${vectorLiteral}::vector
+          LIMIT 50
+        ),
+        semantic_best AS (
+          SELECT DISTINCT ON (doc_id) *
+          FROM semantic_results
+          ORDER BY doc_id, distance ASC
+        ),
+        fused AS (
+          SELECT
+            COALESCE(k.doc_id, s.doc_id) AS doc_id,
+            COALESCE(k.title, s.title) AS title,
+            COALESCE(k.path, s.path) AS path,
+            COALESCE(k.updated_at, s.updated_at) AS updated_at,
+            COALESCE(1.0 / (60.0 + k.rank), 0) + COALESCE(1.0 / (60.0 + s.rank), 0) AS rrf_score,
+            (k.doc_id IS NOT NULL) AS in_keyword,
+            (s.doc_id IS NOT NULL) AS in_semantic,
+            k.snippet AS keyword_snippet,
+            s.chunk_text AS semantic_chunk_text,
+            s.heading_path AS semantic_heading_path
+          FROM keyword_results k
+          FULL OUTER JOIN semantic_best s ON k.doc_id = s.doc_id
+        )
+      SELECT * FROM fused
+      ORDER BY rrf_score DESC
+      LIMIT ${limit}
+    `),
+  );
+
+  const hits: SearchHit[] = [];
+  for (const r of result) {
+    let snippet = '';
+    let heading_path: string | undefined;
+    let match_type: SearchHit['match_type'];
+
+    if (r.in_keyword && r.in_semantic) {
+      // Prefer the semantic chunk text — richer than ts_headline's
+      // 15-word fragments. Fall back to the keyword snippet if the
+      // semantic chunk is somehow empty.
+      snippet = r.semantic_chunk_text
+        ? chunkToSnippet(r.semantic_chunk_text)
+        : (r.keyword_snippet ?? '');
+      heading_path = r.semantic_heading_path ?? undefined;
+      match_type = 'both';
+    } else if (r.in_semantic) {
+      snippet = r.semantic_chunk_text ? chunkToSnippet(r.semantic_chunk_text) : '';
+      heading_path = r.semantic_heading_path ?? undefined;
+      match_type = 'chunk';
+    } else {
+      snippet = r.keyword_snippet ?? '';
+      match_type = 'body';
+    }
+
+    hits.push({
+      id: r.doc_id,
+      title: r.title,
+      path: r.path,
+      updated_at: dateToIso(r.updated_at),
+      rank: Number(r.rrf_score),
+      match_type,
+      snippet,
+      heading_path,
+    });
+  }
+
+  return { query, mode: 'hybrid', results: hits };
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function dateToIso(d: Date | string): string {
+  return d instanceof Date ? d.toISOString() : new Date(d).toISOString();
+}
+
+/**
+ * Format a JS number array as the pgvector text literal: `[v1,v2,...]`.
+ * pgvector parses the cast `'[…]'::vector(N)` reliably; sending the array
+ * via Drizzle's parameter binding ensures we never SQL-inject.
+ *
+ * `toFixed(6)` keeps each component to ~10 chars → ~10KB SQL string at 1024d
+ * — well under any practical query-size limit.
+ */
+function formatVectorLiteral(vec: number[]): string {
+  return `[${vec.map((v) => v.toFixed(6)).join(',')}]`;
+}
+
+/**
+ * Render a chunk's stored text into a search snippet:
+ *   - strip the leading heading line (we surface heading_path separately)
+ *   - cap at 250 chars with an ellipsis so result payloads stay token-sane
+ */
+function chunkToSnippet(chunkText: string): string {
+  const stripped = chunkText.replace(/^#+\s+.+\n?/, '').trim();
+  return stripped.length > 250 ? stripped.slice(0, 247) + '...' : stripped;
 }

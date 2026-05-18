@@ -1,14 +1,105 @@
 ---
-import BaseLayout from '../layouts/BaseLayout.astro';
+import PublicLayout from '../layouts/PublicLayout.astro';
+
+const auth = Astro.locals.auth;
 ---
 
-<BaseLayout title="BOPPL Context Engine">
-  <main class="min-h-screen flex items-center justify-center">
-    <div class="text-center">
-      <h1 class="text-3xl font-semibold tracking-tight">BOPPL Context Engine</h1>
-      <p class="mt-2 text-base" style="color: var(--text-secondary);">
-        Local dev environment is up.
+<PublicLayout
+  title="Mnema — the live context engine"
+  description="An AI-native doc system that connects directly to Claude. Your docs stay current, your AI stays informed. By BOPPL."
+  pathname="/"
+>
+  <section class="max-w-4xl mx-auto px-6 pt-24 pb-16 text-center">
+    <h1
+      class="text-5xl md:text-6xl font-medium tracking-tight leading-tight"
+      style="color: var(--text-primary);"
+    >
+      The live context engine<br />
+      for AI-native teams.
+    </h1>
+    <p
+      class="mt-6 text-lg max-w-2xl mx-auto leading-relaxed"
+      style="color: var(--text-secondary);"
+    >
+      Your docs in one place. Connected directly to Claude. No uploads. No version churn.
+      Edit a doc and your AI assistant sees the change before you finish the sentence.
+    </p>
+    <div class="mt-10 flex items-center justify-center gap-3">
+      {auth ? (
+        <a
+          href="/app"
+          class="px-5 py-2.5 rounded-md font-medium transition-opacity hover:opacity-90"
+          style="background: var(--accent-400); color: var(--text-inverse);"
+        >
+          Open app
+        </a>
+      ) : (
+        <a
+          href="/signup"
+          class="px-5 py-2.5 rounded-md font-medium transition-opacity hover:opacity-90"
+          style="background: var(--accent-400); color: var(--text-inverse);"
+        >
+          Start free
+        </a>
+      )}
+      <a
+        href="/docs/connect"
+        class="px-5 py-2.5 rounded-md transition-colors"
+        style="border: 1px solid var(--border-default); color: var(--text-primary);"
+        onmouseover="this.style.background='var(--surface-overlay)'"
+        onmouseout="this.style.background='transparent'"
+      >
+        How it works
+      </a>
+    </div>
+  </section>
+
+  <section class="max-w-5xl mx-auto px-6 py-16 grid md:grid-cols-3 gap-10">
+    <div>
+      <h3 class="text-base font-medium mb-2" style="color: var(--text-primary);">
+        Live, not static
+      </h3>
+      <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+        Every edit syncs instantly. The doc Claude reads at 3:14 PM is the doc your teammate
+        just updated at 3:13. No re-upload, no "let me share the latest version."
       </p>
     </div>
-  </main>
-</BaseLayout>
+    <div>
+      <h3 class="text-base font-medium mb-2" style="color: var(--text-primary);">
+        Search that understands
+      </h3>
+      <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+        Search for "rate limiting" — find docs about throttling. Search for "pricing" — find
+        docs about cost, tiers, plans. Hybrid keyword + semantic, tuned for technical writing.
+      </p>
+    </div>
+    <div>
+      <h3 class="text-base font-medium mb-2" style="color: var(--text-primary);">
+        Built for Claude
+      </h3>
+      <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+        Mnema is an MCP server. One-click connect from your Claude account. Your docs become
+        first-class context — Claude searches them, reads them, references them.
+      </p>
+    </div>
+  </section>
+
+  <section class="max-w-3xl mx-auto px-6 py-20 text-center">
+    <h2 class="text-2xl font-medium mb-3" style="color: var(--text-primary);">
+      Built by a small team that ships.
+    </h2>
+    <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+      Mnema is built by
+      <a
+        href="https://theboringpeople.in"
+        class="underline transition-colors"
+        style="color: var(--text-secondary);"
+        onmouseover="this.style.color='var(--text-primary)'"
+        onmouseout="this.style.color='var(--text-secondary)'"
+      >
+        BOPPL
+      </a>, a Bangalore AI and creative studio. We build AI applications, not automations.
+      We use Mnema for our own context.
+    </p>
+  </section>
+</PublicLayout>

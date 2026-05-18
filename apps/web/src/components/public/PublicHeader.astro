@@ -1,0 +1,69 @@
+---
+/**
+ * Public-site header. Visible on every marketing page.
+ *
+ * Reads `Astro.locals.auth` (populated by middleware on every route in
+ * Phase 4.3) to decide between "Sign in / Sign up" and "Open app".
+ */
+const auth = Astro.locals.auth;
+---
+
+<header style="border-bottom: 1px solid var(--border-subtle);">
+  <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+    <a
+      href="/"
+      class="text-base font-medium transition-colors"
+      style="color: var(--text-primary);"
+    >
+      Mnema
+    </a>
+    <nav class="flex items-center gap-6 text-sm">
+      <a
+        href="/docs"
+        class="transition-colors"
+        style="color: var(--text-secondary);"
+        onmouseover="this.style.color='var(--text-primary)'"
+        onmouseout="this.style.color='var(--text-secondary)'"
+      >
+        Docs
+      </a>
+      <a
+        href="/pricing"
+        class="transition-colors"
+        style="color: var(--text-secondary);"
+        onmouseover="this.style.color='var(--text-primary)'"
+        onmouseout="this.style.color='var(--text-secondary)'"
+      >
+        Pricing
+      </a>
+      {auth ? (
+        <a
+          href="/app"
+          class="px-3 py-1.5 rounded-md font-medium transition-opacity hover:opacity-90"
+          style="background: var(--accent-400); color: var(--text-inverse);"
+        >
+          Open app
+        </a>
+      ) : (
+        <>
+          <a
+            href="/auth/login"
+            class="transition-colors"
+            style="color: var(--text-secondary);"
+            onmouseover="this.style.color='var(--text-primary)'"
+            onmouseout="this.style.color='var(--text-secondary)'"
+          >
+            Sign in
+          </a>
+          <a
+            href="/signup"
+            class="px-3 py-1.5 rounded-md font-medium transition-opacity hover:opacity-90"
+            style="background: var(--accent-400); color: var(--text-inverse);"
+          >
+            Sign up
+          </a>
+        </>
+      )}
+    </nav>
+  </div>
+</header>

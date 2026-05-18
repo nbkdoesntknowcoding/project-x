@@ -1,0 +1,51 @@
+---
+import SettingsLayout from '../../../layouts/SettingsLayout.astro';
+import { AccountSettings } from '../../../components/settings/AccountSettings';
+
+const auth = Astro.locals.auth;
+if (!auth) {
+  return Astro.redirect('/auth/login');
+}
+
+// Fetch display_name from /api/auth/me (the users table has display_name
+// which WorkOS callback populates from firstName/lastName).
+const apiUrl =
+  (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+const meRes = await fetch(`${apiUrl}/api/auth/me`, {
+  headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+});
+
+interface Me {
+  user?: { id: string; email: string };
+  workspace?: { name?: string };
+  role?: string;
+}
+
+// /api/auth/me doesn't currently surface display_name. Fall back to the
+// user portion of the email if unavailable — a future refinement could
+// extend the endpoint, but 4.1 keeps the API surface conservative.
+let displayName: string | null = null;
+if (meRes.ok) {
+  const _body = (await meRes.json()) as Me;
+  // displayName isn't returned by /api/auth/me yet; leave null so the UI
+  // shows "Not set" rather than fabricating something misleading.
+  displayName = null;
+}
+---
+
+<SettingsLayout title="Account">
+  <h1
+    class="text-xl font-medium mb-1"
+    style="color: var(--text-primary);"
+  >
+    Account
+  </h1>
+  <p
+    class="text-sm mb-8"
+    style="color: var(--text-secondary);"
+  >
+    Your identity across Mnema.
+  </p>
+
+  <AccountSettings client:load email={auth.email} displayName={displayName} />
+</SettingsLayout>

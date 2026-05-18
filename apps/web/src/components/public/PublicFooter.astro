@@ -1,0 +1,50 @@
+---
+import { ThemeToggle } from '../theme/ThemeToggle';
+
+/**
+ * Public-site footer. Houses BOPPL credit, secondary nav, and the
+ * ThemeToggle for visitors who haven't signed up yet (the toggle is also
+ * in the app header + Account settings for signed-in users).
+ */
+---
+
+<footer class="mt-24" style="border-top: 1px solid var(--border-subtle);">
+  <div
+    class="max-w-6xl mx-auto px-6 py-8 flex items-center justify-between text-xs"
+    style="color: var(--text-tertiary);"
+  >
+    <div>
+      Mnema, by
+      <a
+        href="https://theboringpeople.in"
+        class="transition-colors"
+        style="color: var(--text-tertiary);"
+        onmouseover="this.style.color='var(--text-secondary)'"
+        onmouseout="this.style.color='var(--text-tertiary)'"
+      >
+        BOPPL
+      </a>.
+    </div>
+    <div class="flex items-center gap-6">
+      <a
+        href="/docs"
+        class="transition-colors"
+        style="color: var(--text-tertiary);"
+        onmouseover="this.style.color='var(--text-secondary)'"
+        onmouseout="this.style.color='var(--text-tertiary)'"
+      >
+        Docs
+      </a>
+      <a
+        href="/pricing"
+        class="transition-colors"
+        style="color: var(--text-tertiary);"
+        onmouseover="this.style.color='var(--text-secondary)'"
+        onmouseout="this.style.color='var(--text-tertiary)'"
+      >
+        Pricing
+      </a>
+      <ThemeToggle client:load />
+    </div>
+  </div>
+</footer>

@@ -368,3 +368,173 @@
 .math-block-placeholder {
   display: none;
 }
+
+/* Crepe's "virtual cursor" plugin sets `caret-color: transparent` on the
+   editor root (`.virtual-cursor-enabled`) and replaces the OS caret with a
+   JS-drawn DIV using `border-left: 2px solid var(--prosemirror-virtual-cursor-color)`.
+   That CSS variable isn't shipped by Milkdown/Crepe — leaving it undefined
+   makes the border render at 0px width (no cursor). Bind it to our
+   primary text color so it shows up cleanly in both themes. */
+:root {
+  --prosemirror-virtual-cursor-color: var(--text-primary);
+}
+
+/* ============================ Autocomplete ============================ */
+
+.autocomplete-ghost-wrapper {
+  display: inline;
+  pointer-events: none;
+  user-select: none;
+  position: relative;
+}
+
+.autocomplete-ghost-text {
+  color: var(--editor-ghost-text);
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  white-space: pre-wrap;
+}
+
+.autocomplete-ai-pill {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  font-size: 0.6875rem;            /* matches design system's --text-xs */
+  font-weight: 500;
+  font-family: var(--font-sans);
+  color: var(--text-tertiary);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-default);
+  border-radius: 3px;
+  vertical-align: 1px;
+  opacity: 0;
+  /* 200ms-delayed fade-in: ghost text appears first, pill follows so it
+     never feels like a centerpiece during transient suggestions. */
+  animation: autocomplete-pill-fade-in 200ms ease-out 200ms forwards;
+}
+
+@keyframes autocomplete-pill-fade-in {
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .autocomplete-ai-pill {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* === Phase 4.2 — comment anchor highlights ===
+ *
+ * Source of truth: CommentAnchorPlugin in apps/web/src/components/comments/.
+ * Each open thread paints a Decoration.inline over its anchored range with
+ * the `comment-anchor` class. Multiple overlapping ranges naturally stack
+ * — every additional layer adds the same tint, so deeper overlaps render
+ * slightly darker. The `--active` variant is added when the user hovers
+ * a thread in the sidebar.
+ */
+.milkdown .ProseMirror .comment-anchor {
+  background-color: color-mix(in srgb, var(--accent-400) 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent-400) 45%, transparent);
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+
+.milkdown .ProseMirror .comment-anchor:hover,
+.milkdown .ProseMirror .comment-anchor.comment-anchor--active {
+  background-color: color-mix(in srgb, var(--accent-400) 28%, transparent);
+}
+
+/* === Phase 4.2 — doc page toolbar
+ *
+ * Wraps the doc title input and the Comments toggle button on the same
+ * row. Existing .doc-title kept its 2.25rem size and margins; we just give
+ * the flex container the same bottom spacing the title used to own.
+ */
+.doc-toolbar {
+  margin: 0 0 24px;
+}
+.doc-toolbar .doc-title {
+  margin: 0;
+}
+
+/* === Phase 4.2 — version diff chunks ===
+ *
+ * Rendered as preformatted lines inside the VersionDiffView overlay.
+ * The semantic colors stay slightly tinted so the diff is still readable
+ * on the dark surface — color-mix lets us reuse the design tokens for
+ * dark/light without forking the palette.
+ */
+.diff-add {
+  background-color: color-mix(in srgb, var(--success-default) 14%, transparent);
+  color: var(--text-primary);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.diff-remove {
+  background-color: color-mix(in srgb, var(--danger-default) 14%, transparent);
+  color: var(--text-secondary);
+  text-decoration: line-through;
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.diff-context {
+  color: var(--text-secondary);
+  padding: 1px 4px;
+}
+
+/* === Phase 4.3 — light-mode editor overrides ===
+ *
+ * Most editor styles already cascade off the design tokens that swap
+ * per theme (see global.css). These overrides catch the few spots that
+ * referenced specific accent ramp stops or used dark-only shadow values.
+ *
+ * Links in the editor:
+ *   Dark uses --accent-300 / --accent-200 (the pale stops) because they
+ *   read well on near-black. On white those stops disappear; bump to
+ *   --accent-500 / --accent-400 for legibility.
+ *
+ * Floating UI shadows:
+ *   The dark slash-menu/toolbar shadow is `rgba(0, 0, 0, 0.5)` which is
+ *   correct on dark surfaces but produces a muddy halo on white. Drop
+ *   the inset highlight (meaningless on white) and weaken the alpha.
+ *
+ * Comment anchors:
+ *   The dark 14%/28% tints look slightly under-saturated on a white
+ *   surface; bumping by ~4-6% restores parity without going neon.
+ */
+:root[data-theme='light'] .milkdown a {
+  color: var(--accent-500);
+  text-decoration-color: var(--accent-300);
+}
+:root[data-theme='light'] .milkdown a:hover {
+  color: var(--accent-600);
+  text-decoration-color: var(--accent-400);
+}
+
+:root[data-theme='light'] .milkdown-slash-menu,
+:root[data-theme='light'] .milkdown .milkdown-slash-menu {
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+:root[data-theme='light'] .milkdown-toolbar {
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+:root[data-theme='light'] .milkdown .ProseMirror .comment-anchor {
+  background-color: color-mix(in srgb, var(--accent-400) 18%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--accent-400) 55%, transparent);
+}
+:root[data-theme='light'] .milkdown .ProseMirror .comment-anchor:hover,
+:root[data-theme='light'] .milkdown .ProseMirror .comment-anchor.comment-anchor--active {
+  background-color: color-mix(in srgb, var(--accent-400) 34%, transparent);
+}
+

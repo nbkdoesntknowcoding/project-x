@@ -126,7 +126,13 @@ const server = new Server<ConnectionContext>({
       await direct.disconnect();
     }
     // Throwing terminates Hocuspocus's onRequest chain — signals "handled".
-    throw new Error('handled');
+    // The contract is THROW A FALSY VALUE: Hocuspocus's handler does
+    // `if (error) throw error`, so a real Error gets re-thrown and crashes
+    // the process. Use `throw null` so the "handled" signal is delivered
+    // without triggering the upstream re-throw. (This regression killed
+    // the collab process after every writeback when it was previously
+    // `throw new Error('handled')` — see Phase 1.2 notes.)
+    throw null;
   },
 });
 

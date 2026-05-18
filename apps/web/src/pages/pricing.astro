@@ -1,0 +1,154 @@
+---
+import PublicLayout from '../layouts/PublicLayout.astro';
+---
+
+<PublicLayout
+  title="Pricing — Mnema"
+  description="Three plans, simple pricing, free tier with no credit card."
+  pathname="/pricing"
+>
+  <section class="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
+    <h1 class="text-4xl font-medium mb-3" style="color: var(--text-primary);">
+      Simple, transparent pricing.
+    </h1>
+    <p class="text-base" style="color: var(--text-secondary);">
+      Start free. Upgrade when your team grows.
+    </p>
+  </section>
+
+  <section class="max-w-5xl mx-auto px-6 grid md:grid-cols-3 gap-6">
+    <article
+      class="rounded-lg p-6"
+      style="background: var(--surface-overlay); border: 1px solid var(--border-default);"
+    >
+      <h3 class="text-lg font-medium mb-1" style="color: var(--text-primary);">Free</h3>
+      <p class="text-sm mb-4" style="color: var(--text-tertiary);">For trying it out.</p>
+      <p class="text-3xl font-medium mb-1" style="color: var(--text-primary);">$0</p>
+      <p class="text-xs mb-6" style="color: var(--text-tertiary);">forever</p>
+      <a
+        href="/signup?plan=free"
+        class="block text-center w-full px-4 py-2 rounded-md transition-colors"
+        style="border: 1px solid var(--border-default); color: var(--text-primary);"
+        onmouseover="this.style.background='var(--surface-base)'"
+        onmouseout="this.style.background='transparent'"
+      >
+        Get started
+      </a>
+      <ul class="mt-6 space-y-2 text-sm" style="color: var(--text-secondary);">
+        <li>1 workspace</li>
+        <li>Up to 3 teammates</li>
+        <li>100 docs</li>
+        <li>500 MCP calls / month</li>
+        <li>Real-time collaboration</li>
+        <li>Hybrid search</li>
+      </ul>
+    </article>
+
+    <article
+      class="rounded-lg p-6 relative"
+      style="background: var(--surface-overlay); border: 2px solid var(--accent-400);"
+    >
+      <span
+        class="absolute -top-2.5 left-1/2 -translate-x-1/2 text-xs font-medium px-2 py-0.5 rounded"
+        style="background: var(--accent-400); color: var(--text-inverse);"
+      >
+        Most popular
+      </span>
+      <h3 class="text-lg font-medium mb-1" style="color: var(--text-primary);">Pro</h3>
+      <p class="text-sm mb-4" style="color: var(--text-tertiary);">For small teams.</p>
+      <p class="text-3xl font-medium mb-1" style="color: var(--text-primary);">$15</p>
+      <p class="text-xs mb-6" style="color: var(--text-tertiary);">per seat / month</p>
+      <a
+        href="/signup?plan=pro"
+        class="block text-center w-full px-4 py-2 rounded-md font-medium transition-opacity hover:opacity-90"
+        style="background: var(--accent-400); color: var(--text-inverse);"
+      >
+        Start Pro trial
+      </a>
+      <ul class="mt-6 space-y-2 text-sm" style="color: var(--text-secondary);">
+        <li>Up to 5 teammates</li>
+        <li>Unlimited docs</li>
+        <li>5,000 MCP calls / month</li>
+        <li>AI autocomplete</li>
+        <li>Version history</li>
+        <li>Email support</li>
+      </ul>
+    </article>
+
+    <article
+      class="rounded-lg p-6"
+      style="background: var(--surface-overlay); border: 1px solid var(--border-default);"
+    >
+      <h3 class="text-lg font-medium mb-1" style="color: var(--text-primary);">Team</h3>
+      <p class="text-sm mb-4" style="color: var(--text-tertiary);">For growing companies.</p>
+      <p class="text-3xl font-medium mb-1" style="color: var(--text-primary);">$25</p>
+      <p class="text-xs mb-6" style="color: var(--text-tertiary);">per seat / month</p>
+      <a
+        href="/signup?plan=team"
+        class="block text-center w-full px-4 py-2 rounded-md transition-colors"
+        style="border: 1px solid var(--border-default); color: var(--text-primary);"
+        onmouseover="this.style.background='var(--surface-base)'"
+        onmouseout="this.style.background='transparent'"
+      >
+        Contact sales
+      </a>
+      <ul class="mt-6 space-y-2 text-sm" style="color: var(--text-secondary);">
+        <li>Unlimited teammates</li>
+        <li>Unlimited docs</li>
+        <li>Unlimited MCP calls</li>
+        <li>AI autocomplete</li>
+        <li>Priority support</li>
+        <li>SSO (coming soon)</li>
+      </ul>
+    </article>
+  </section>
+
+  <section class="max-w-3xl mx-auto px-6 py-20">
+    <h2 class="text-xl font-medium mb-6" style="color: var(--text-primary);">
+      Frequently asked questions
+    </h2>
+    <div class="space-y-6">
+      <div>
+        <h3 class="text-sm font-medium mb-1" style="color: var(--text-primary);">
+          What's an MCP call?
+        </h3>
+        <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+          Every time Claude searches or reads a doc through Mnema, it counts as one call.
+          A normal hour of conversation typically uses 10-30 calls.
+        </p>
+      </div>
+      <div>
+        <h3 class="text-sm font-medium mb-1" style="color: var(--text-primary);">
+          Do I need a paid Claude account?
+        </h3>
+        <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+          You need Claude Pro or higher to use MCP connectors. Mnema connects to your existing Claude account.
+        </p>
+      </div>
+      <div>
+        <h3 class="text-sm font-medium mb-1" style="color: var(--text-primary);">
+          Can I switch plans later?
+        </h3>
+        <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+          Yes. Upgrade or downgrade any time from your workspace settings. Changes prorate within the billing cycle.
+        </p>
+      </div>
+      <div>
+        <h3 class="text-sm font-medium mb-1" style="color: var(--text-primary);">
+          Where is my data stored?
+        </h3>
+        <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+          On Neon Postgres in ap-south-1 (Mumbai). We're working on additional regions for teams that need EU or US residency.
+        </p>
+      </div>
+      <div>
+        <h3 class="text-sm font-medium mb-1" style="color: var(--text-primary);">
+          Is there an annual discount?
+        </h3>
+        <p class="text-sm leading-relaxed" style="color: var(--text-secondary);">
+          Yes. Annual plans are billed once with a 15% discount. Contact us when you're ready to switch.
+        </p>
+      </div>
+    </div>
+  </section>
+</PublicLayout>

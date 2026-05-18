@@ -14,6 +14,39 @@ const { title = 'BOPPL Context Engine' } = Astro.props;
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
+
+    {/*
+      Phase 4.3 — no-FOUC theme script.
+
+      Runs synchronously before any stylesheet evaluates, so the page's
+      first paint already has the right data-theme. is:inline keeps Astro
+      from hoisting/deferring it.
+
+      Resolution order:
+        1. localStorage['mnema:theme']  → 'light' | 'dark' | (absent = system)
+        2. prefers-color-scheme media query
+        3. fallback to 'dark' (the dark surface tokens are the design's
+           dark-first default)
+
+      Wrapped in try/catch because some private-mode browsers throw on
+      localStorage access; the fallback keeps the site visible.
+    */}
+    <script is:inline>
+      (function () {
+        try {
+          var stored = localStorage.getItem('mnema:theme');
+          var resolved = stored === 'light' || stored === 'dark' ? stored : null;
+          if (!resolved) {
+            resolved = window.matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark';
+          }
+          document.documentElement.setAttribute('data-theme', resolved);
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
   </head>
   <body class="font-sans">
     <slot />

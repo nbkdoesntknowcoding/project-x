@@ -7,8 +7,19 @@ import { mcpPlugin } from './mcp/plugin.js';
 import { authPlugin } from './plugins/auth.js';
 import { loggerOptions } from './plugins/logger.js';
 import { authRoutes } from './routes/auth.js';
+import { billingRoutes } from './routes/billing.js';
+import { commentsRoutes } from './routes/comments.js';
+import { razorpayRoutes } from './routes/razorpay.js';
+// STRIPE: ENABLE WHEN APPROVED
+// import { stripeRoutes } from './routes/stripe.js';
+import { completeRoutes } from './routes/complete.js';
+import { docReadStateRoutes } from './routes/doc-read-state.js';
+import { docVersionsRoutes } from './routes/doc-versions.js';
 import { docsRoutes } from './routes/docs.js';
 import { healthRoutes } from './routes/health.js';
+import { invitationsRoutes } from './routes/invitations.js';
+import { membersRoutes } from './routes/members.js';
+import { workspacesRoutes } from './routes/workspaces.js';
 import { setSessionRoutes } from './routes/_internal/set-session.js';
 
 const app = Fastify({ logger: loggerOptions });
@@ -26,6 +37,15 @@ await app.register(healthRoutes);
 await app.register(setSessionRoutes);
 await app.register(authRoutes);
 await app.register(docsRoutes);
+await app.register(invitationsRoutes);
+await app.register(membersRoutes);
+await app.register(workspacesRoutes);
+await app.register(commentsRoutes);
+await app.register(docVersionsRoutes);
+await app.register(docReadStateRoutes);
+await app.register(completeRoutes);
+await app.register(razorpayRoutes);
+await app.register(billingRoutes);
 await app.register(mcpPlugin);
 
 const port = config.API_PORT;

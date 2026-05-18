@@ -1,5 +1,7 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { WorkspaceSwitcher } from '../../components/nav/WorkspaceSwitcher';
+import { ThemeToggle } from '../../components/theme/ThemeToggle';
 
 const auth = Astro.locals.auth;
 if (!auth) {
@@ -7,9 +9,15 @@ if (!auth) {
 }
 
 const apiUrl = (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
-const response = await fetch(`${apiUrl}/api/docs`, {
-  headers: { Cookie: `boppl_jwt=${auth.jwt}` },
-});
+// Fetch docs + unread-comment counts in parallel. The unread call is
+// best-effort — if it fails we just skip the dot rather than failing the
+// whole page render.
+const [docsRes, unreadRes] = await Promise.all([
+  fetch(`${apiUrl}/api/docs`, { headers: { Cookie: `boppl_jwt=${auth.jwt}` } }),
+  fetch(`${apiUrl}/api/doc-read-state/unread-counts`, {
+    headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+  }),
+]);
 
 interface DocSummary {
   id: string;
@@ -18,9 +26,19 @@ interface DocSummary {
 }
 
 let docs: DocSummary[] = [];
-if (response.ok) {
-  const body = (await response.json()) as { docs: DocSummary[] };
+if (docsRes.ok) {
+  const body = (await docsRes.json()) as { docs: DocSummary[] };
   docs = body.docs;
+}
+
+const unreadByDoc = new Map<string, number>();
+if (unreadRes.ok) {
+  const body = (await unreadRes.json()) as {
+    unread: Array<{ doc_id: string; unread_comment_count: number }>;
+  };
+  for (const row of body.unread ?? []) {
+    unreadByDoc.set(row.doc_id, row.unread_comment_count);
+  }
 }
 ---
 
@@ -30,8 +48,20 @@ if (response.ok) {
       <header class="flex items-center justify-between mb-8">
         <h1 class="text-3xl font-semibold tracking-tight">Docs</h1>
         <div class="flex items-center gap-3">
-          <span class="text-base" style="color: var(--text-tertiary);">{auth.email}</span>
-          <a href="/auth/logout" class="text-base hover:underline" style="color: var(--accent-400);">
+          <WorkspaceSwitcher
+            client:load
+            currentWorkspaceId={auth.tenant_id}
+          />
+          <ThemeToggle client:load />
+          <a
+            href="/app/settings/members"
+            class="text-sm transition-colors"
+            style="color: var(--text-secondary);"
+          >
+            Settings
+          </a>
+          <span class="text-sm" style="color: var(--text-tertiary);">{auth.email}</span>
+          <a href="/auth/logout" class="text-sm hover:underline" style="color: var(--accent-400);">
             Sign out
           </a>
         </div>
@@ -54,22 +84,38 @@ if (response.ok) {
           </li>
         )}
         {
-          docs.map((d) => (
-            <li>
-              <a
-                href={`/app/d/${d.id}`}
-                class="block px-3 py-2 rounded-md transition-colors"
-                style="color: var(--text-primary);"
-                onmouseover="this.style.background='var(--surface-hover)'"
-                onmouseout="this.style.background='transparent'"
-              >
-                <div class="text-base">{d.title || 'Untitled'}</div>
-                <div class="text-xs mt-0.5 font-mono" style="color: var(--text-tertiary);">
-                  Updated {new Date(d.updated_at).toLocaleString()}
-                </div>
-              </a>
-            </li>
-          ))
+          docs.map((d) => {
+            const unread = unreadByDoc.get(d.id) ?? 0;
+            return (
+              <li>
+                <a
+                  href={`/app/d/${d.id}`}
+                  class="block px-3 py-2 rounded-md transition-colors"
+                  style="color: var(--text-primary);"
+                  onmouseover="this.style.background='var(--surface-hover)'"
+                  onmouseout="this.style.background='transparent'"
+                  aria-label={
+                    unread > 0
+                      ? `${d.title || 'Untitled'} (${unread} unread comment${unread === 1 ? '' : 's'})`
+                      : d.title || 'Untitled'
+                  }
+                >
+                  <div class="text-base">
+                    {unread > 0 && (
+                      <span
+                        class="doc-unread-dot"
+                        title={`${unread} unread comment${unread === 1 ? '' : 's'}`}
+                      />
+                    )}
+                    {d.title || 'Untitled'}
+                  </div>
+                  <div class="text-xs mt-0.5 font-mono" style="color: var(--text-tertiary);">
+                    Updated {new Date(d.updated_at).toLocaleString()}
+                  </div>
+                </a>
+              </li>
+            );
+          })
         }
       </ul>
     </div>

@@ -1,0 +1,47 @@
+---
+import SettingsLayout from '../../../layouts/SettingsLayout.astro';
+import { MembersPageRoot } from '../../../components/settings/MembersPageRoot';
+
+const auth = Astro.locals.auth;
+// SettingsLayout handles the auth-gate redirect, but the type system here
+// needs us to narrow `auth` to non-null before passing to the React child.
+if (!auth) {
+  return Astro.redirect('/auth/login');
+}
+
+// Fetch the current user's role server-side so the page renders in the
+// correct shape on first paint (owners see role dropdowns; editors don't).
+const apiUrl =
+  (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+const meRes = await fetch(`${apiUrl}/api/auth/me`, {
+  headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+});
+let role: 'owner' | 'editor' | 'viewer' = 'viewer';
+if (meRes.ok) {
+  const body = (await meRes.json()) as { role?: string };
+  if (body.role === 'owner' || body.role === 'editor' || body.role === 'viewer') {
+    role = body.role;
+  }
+}
+---
+
+<SettingsLayout title="Members">
+  <h1
+    class="text-xl font-medium mb-1"
+    style="color: var(--text-primary);"
+  >
+    Members
+  </h1>
+  <p
+    class="text-sm mb-8"
+    style="color: var(--text-secondary);"
+  >
+    Manage who has access to this workspace.
+  </p>
+
+  <MembersPageRoot
+    client:load
+    currentUserId={auth.user_id}
+    currentUserRole={role}
+  />
+</SettingsLayout>

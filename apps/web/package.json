@@ -8,7 +8,9 @@
     "build": "astro build",
     "preview": "astro preview",
     "typecheck": "astro check",
-    "lint": "eslint --no-error-on-unmatched-pattern \"src/**/*.{ts,tsx,js,jsx}\" --max-warnings 0"
+    "lint": "eslint --no-error-on-unmatched-pattern \"src/**/*.{ts,tsx,js,jsx}\" --max-warnings 0",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.4",
@@ -30,7 +32,6 @@
     "jose": "^5.0.0",
     "katex": "^0.16.46",
     "mermaid": "^11.15.0",
-    "prosemirror-model": "^1.25.5",
     "prosemirror-state": "^1.4.4",
     "prosemirror-view": "^1.41.8",
     "react": "^19.0.0",
@@ -43,6 +44,8 @@
   "devDependencies": {
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.6.0"
+    "prosemirror-model": "^1.25.5",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.9"
   }
 }

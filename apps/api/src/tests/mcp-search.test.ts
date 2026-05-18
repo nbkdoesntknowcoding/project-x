@@ -124,9 +124,14 @@ async function call(
   const client = new Client({ name: 'test', version: '0.0.0' }, { capabilities: {} });
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
 
+  // This file targets the keyword path (it predates Phase 3.2's hybrid default).
+  // Force mode:'keyword' unless a test explicitly overrides — the hybrid path
+  // gets its own coverage in mcp-search-hybrid.test.ts.
+  const args = { mode: 'keyword' as const, ...extra, query };
+
   const res = await client.callTool({
     name: 'search_docs',
-    arguments: { query, ...extra },
+    arguments: args,
   });
 
   await Promise.all([client.close(), server.close()]);
@@ -198,7 +203,9 @@ describe('search_docs — keyword mode', () => {
   });
 
   it('rejects unknown mode value with isError', async () => {
-    const { isError } = await call('pricing', { mode: 'semantic' });
+    // Phase 3.2 widened the enum to include 'semantic' and 'hybrid'.
+    // Use a value that is definitely outside the enum.
+    const { isError } = await call('pricing', { mode: 'magic' });
     expect(isError).toBe(true);
   });
 });

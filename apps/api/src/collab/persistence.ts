@@ -3,6 +3,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import * as Y from 'yjs';
 import { docVersions, docs } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
+import { enqueueEmbeddingJob } from '../queue/embeddings.js';
 import type { ConnectionContext } from './auth.js';
 import { markdownToYjsState, yjsStateToMarkdown } from './markdown-bridge.js';
 
@@ -71,7 +72,7 @@ export async function storeDocumentState(
   const newYjsState = Buffer.from(encoded);
   const newHash = contentHash(newMarkdown);
 
-  return await withTenant(ctx.tenant_id, async (tx) => {
+  const result = await withTenant(ctx.tenant_id, async (tx) => {
     const existing = await tx
       .select({ contentHash: docs.contentHash })
       .from(docs)
@@ -116,4 +117,28 @@ export async function storeDocumentState(
 
     return { contentChanged, snapshotted };
   });
+
+  // Phase 3.1: fire-and-forget enqueue an embedding job whenever content
+  // actually changed. The enqueue is deduped at the BullMQ layer by
+  // `${doc_id}:${content_hash}` so retried Hocuspocus stores don't burn
+  // Voyage tokens. A Redis blip here MUST NOT fail the save itself —
+  // worst case the doc lags on embeddings until the next edit re-triggers.
+  if (result.contentChanged) {
+    try {
+      await enqueueEmbeddingJob({
+        doc_id: ctx.doc_id,
+        tenant_id: ctx.tenant_id,
+        content_hash: newHash,
+      });
+    } catch (err) {
+      // Don't bring down the persistence path on a queue outage.
+      process.stderr.write(
+        `[persistence] embeddings enqueue failed for ${ctx.doc_id}: ${
+          err instanceof Error ? err.message : String(err)
+        }\n`,
+      );
+    }
+  }
+
+  return result;
 }

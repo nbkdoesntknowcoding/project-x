@@ -99,6 +99,47 @@ export const workspaceMembers = pgTable(
   }),
 );
 
+/**
+ * Pending or historical workspace invitations.
+ *
+ * Each invitation is paired with a signed JWT (token_jti = the JWT's jti
+ * claim). The JWT carries the data inline (workspace_id, role, email,
+ * inviter); this row is the revocation/acceptance/expiry audit trail.
+ * The accept flow validates BOTH the JWT signature AND the row state
+ * (not revoked, not already accepted, not expired) before granting access.
+ *
+ * RLS is enabled in the 0002 migration. The `invitations_pending_idx`
+ * partial index makes the per-workspace "show me pending invites" query
+ * O(log N) over pending rows only.
+ */
+export const invitations = pgTable(
+  'invitations',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    email: citext('email').notNull(),
+    role: workspaceRole('role').notNull(),
+    invitedBy: uuid('invited_by')
+      .notNull()
+      .references(() => users.id),
+    tokenJti: text('token_jti').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+    acceptedBy: uuid('accepted_by').references(() => users.id),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    workspaceIdx: index('invitations_workspace_idx').on(table.workspaceId),
+    emailIdx: index('invitations_email_idx').on(table.email),
+    pendingIdx: index('invitations_pending_idx')
+      .on(table.workspaceId, table.email)
+      .where(sql`accepted_at IS NULL AND revoked_at IS NULL`),
+  }),
+);
+
 export const docs = pgTable(
   'docs',
   {
@@ -150,25 +191,85 @@ export const docVersions = pgTable(
   }),
 );
 
-export const comments = pgTable(
-  'comments',
+/**
+ * Phase 4.2 comments model.
+ *
+ * Threads carry the Yjs anchor (start + end RelativePositions serialized as
+ * BYTEA), the resolved/unresolved state, and the workspace_id used for RLS.
+ * Individual replies live in the `comments` table below and are scoped to a
+ * thread; the comments policy joins through to comment_threads for tenant
+ * isolation rather than duplicating workspace_id on every row.
+ *
+ * The original Phase-1.2 single-table comments shape (with block_id /
+ * parent_id) was scaffolded but never wired into any code path; migration
+ * 0004 drops it before recreating these.
+ */
+export const commentThreads = pgTable(
+  'comment_threads',
   {
     id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
     docId: uuid('doc_id')
       .notNull()
       .references(() => docs.id, { onDelete: 'cascade' }),
-    blockId: text('block_id'),
-    parentId: uuid('parent_id'),
-    authorId: uuid('author_id')
+    anchorStart: bytea('anchor_start').notNull(),
+    anchorEnd: bytea('anchor_end').notNull(),
+    resolved: boolean('resolved').notNull().default(false),
+    resolvedBy: uuid('resolved_by').references(() => users.id),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    createdBy: uuid('created_by')
       .notNull()
       .references(() => users.id),
-    body: text('body').notNull(),
-    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    docIdx: index('comments_doc_idx').on(table.docId, table.createdAt.desc()),
+    docIdx: index('comment_threads_doc_idx').on(table.docId, table.resolved),
+  }),
+);
+
+export const comments = pgTable(
+  'comments',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    threadId: uuid('thread_id')
+      .notNull()
+      .references(() => commentThreads.id, { onDelete: 'cascade' }),
+    body: text('body').notNull(),
+    authorId: uuid('author_id')
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    editedAt: timestamp('edited_at', { withTimezone: true }),
+  },
+  (table) => ({
+    threadIdx: index('comments_thread_idx').on(table.threadId, table.createdAt),
+  }),
+);
+
+/**
+ * Per-user last-seen timestamp for a doc. Drives the "unread comments" dot
+ * in the doc list: a doc is unread if there's a comment newer than this
+ * row's last_seen_at and authored by someone other than the user.
+ */
+export const docReadState = pgTable(
+  'doc_read_state',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    docId: uuid('doc_id')
+      .notNull()
+      .references(() => docs.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.docId] }),
   }),
 );
 
