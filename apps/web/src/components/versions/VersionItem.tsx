@@ -26,7 +26,7 @@ export function VersionItem({ version, onClick, selected }: Props): JSX.Element 
         background: selected ? 'var(--surface-overlay)' : 'transparent',
       }}
       onMouseEnter={(e) => {
-        if (!selected) e.currentTarget.style.background = 'var(--surface-hover)';
+        if (!selected) e.currentTarget.style.background = 'var(--interactive-ghost-hover)';
       }}
       onMouseLeave={(e) => {
         if (!selected) e.currentTarget.style.background = 'transparent';

@@ -36,29 +36,55 @@
   font-display: swap;
 }
 
+/* Instrument Serif — display only. Hero headlines + stat-tile numerics.
+   NEVER use in app UI. Self-hosted from Google Fonts. */
+@font-face {
+  font-family: 'Instrument Serif';
+  src: url('/fonts/instrument-serif/InstrumentSerif-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  src: url('/fonts/instrument-serif/InstrumentSerif-Italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root {
   /* -----------------------------------------------------------------------
-     SURFACE — depth comes from value, not color.
+     SURFACE — pure black void, depth from barely-perceptible steps.
+     Phase 4.5.1: #000 base so radial glows read as actual light sources.
      ----------------------------------------------------------------------- */
-  --surface-base:         #0a0a0a;
-  --surface-overlay:      #141414;
-  --surface-elevated:     #1c1c1c;
-  --surface-sunken:       #060606;
+  --surface-base:         #000000;
+  --surface-overlay:      #0a0a0a;   /* one step — cards, sidebars */
+  --surface-elevated:     #141414;   /* two steps — modals, popovers */
+  --surface-sunken:       #000000;   /* equal to base; inset shadow does the work */
 
-  /* Borders */
-  --border-subtle:        #1f1f1f;
+  /* Borders — slightly more present to read on pure black */
+  --border-subtle:        #1a1a1a;
   --border-default:       #2a2a2a;
   --border-strong:        #3a3a3a;
   --border-focus:         #5a5a5a;
 
   /* -----------------------------------------------------------------------
-     TEXT — five steps.
+     TEXT — five steps, +brightness for pure-black background.
      ----------------------------------------------------------------------- */
-  --text-primary:         #f4f4f5;
+  --text-primary:         #fafafa;   /* brighter than f4f4f5 — needed on #000 */
   --text-secondary:       #a1a1aa;
   --text-tertiary:        #71717a;
   --text-quaternary:      #52525b;
-  --text-inverse:         #0a0a0a;
+  --text-inverse:         #000000;
+
+  /* -----------------------------------------------------------------------
+     AMBIENT LIGHT — tokens for RadialGlow component.
+     Phase 4.5.1: new; used ONLY in RadialGlow, never for decoration.
+     ----------------------------------------------------------------------- */
+  --glow-color-warm:      rgba(255, 245, 235, 0.04);
+  --glow-color-neutral:   rgba(255, 255, 255, 0.05);
+  --glow-color-soft:      rgba(255, 255, 255, 0.025);
 
   /* -----------------------------------------------------------------------
      STATUS — reserved for status meaning only. Never decoration.
@@ -75,8 +101,8 @@
   /* -----------------------------------------------------------------------
      INTERACTIVE — white-on-black for primary. No accent hue.
      ----------------------------------------------------------------------- */
-  --interactive-primary:         #f4f4f5;
-  --interactive-primary-fg:      #0a0a0a;
+  --interactive-primary:         #fafafa;
+  --interactive-primary-fg:      #000000;
   --interactive-primary-hover:   #ffffff;
   --interactive-secondary:       #2a2a2a;
   --interactive-secondary-hover: #3a3a3a;
@@ -87,8 +113,15 @@
   /* -----------------------------------------------------------------------
      TYPOGRAPHY
      ----------------------------------------------------------------------- */
-  --font-sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'Geist Mono', 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --font-display: 'Instrument Serif', 'Iowan Old Style', 'Apple Garamond', Georgia, serif;
+  --font-sans:    'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:    'Geist Mono', 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+  /* Display sizes — for Instrument Serif headlines */
+  --display-sm:  40px;
+  --display-md:  56px;
+  --display-lg:  72px;
+  --display-xl:  96px;
 
   --text-12:  12px;
   --text-13:  13px;
@@ -158,6 +191,16 @@
   --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
 
   --focus-ring: 0 0 0 2px var(--surface-base), 0 0 0 4px var(--border-focus);
+
+  /* -----------------------------------------------------------------------
+     CHART — restrained warm palette for data viz ONLY.
+     Never use these for buttons, links, or decoration.
+     ----------------------------------------------------------------------- */
+  --chart-primary:   #e8e4d8;
+  --chart-secondary: #6b6862;
+  --chart-tertiary:  #3a3833;
+  --chart-axis:      #2a2a2a;
+  --chart-label:     #71717a;
 }
 
 /* =========================================================================
@@ -180,6 +223,11 @@
   --text-quaternary:      #a1a1aa;
   --text-inverse:         #fafafa;
 
+  /* In light mode, ambient glow becomes a barely-visible soft shadow vibe */
+  --glow-color-warm:      rgba(0, 0, 0, 0.03);
+  --glow-color-neutral:   rgba(0, 0, 0, 0.02);
+  --glow-color-soft:      rgba(0, 0, 0, 0.01);
+
   --status-success:       #16a34a;
   --status-success-bg:    rgba(22, 163, 74, 0.08);
   --status-warning:       #d97706;
@@ -201,6 +249,12 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12);
+
+  --chart-primary:   #18181b;
+  --chart-secondary: #71717a;
+  --chart-tertiary:  #d4d4d8;
+  --chart-axis:      #d4d4d8;
+  --chart-label:     #71717a;
 }
 
 /* =========================================================================

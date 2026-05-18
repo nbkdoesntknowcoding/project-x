@@ -126,28 +126,44 @@ function relativeTime(dateStr: string): string {
 
         <!-- Doc list -->
         {docs.length === 0 ? (
-          <div class="flex flex-col items-center justify-center py-16 px-6 text-center">
-            <div style="color: var(--text-tertiary); margin-bottom: 16px;">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-              </svg>
-            </div>
-            <p style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">
-              No documents yet.
-            </p>
-            <p style="font-size: 13px; color: var(--text-tertiary); max-width: 340px; margin-bottom: 24px;">
-              Create your first doc to start building your live context.
-            </p>
-            <form id="new-doc-form-empty">
-              <button
-                type="submit"
-                class="inline-flex items-center justify-center h-8 px-3 font-medium transition-[background,border-color] rounded select-none"
-                style="font-size: 13px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border: 1px solid var(--interactive-primary); border-radius: var(--radius-md);"
+          <div
+            class="relative flex items-center justify-center px-6"
+            style="height: 60vh; background: var(--surface-base);"
+          >
+            <!-- RadialGlow: ambient atmosphere for empty state -->
+            <div
+              aria-hidden="true"
+              style="position: absolute; inset: 0; pointer-events: none; z-index: 0; background-image: radial-gradient(circle at 50% 50%, var(--glow-color-soft), transparent 40%); opacity: 0.6;"
+            />
+            <div class="relative text-center max-w-md mx-auto" style="z-index: 2;">
+              <span
+                class="font-mono uppercase block mb-4"
+                style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
               >
-                Create document
-              </button>
-            </form>
+                Empty workspace
+              </span>
+              <h2
+                style="font-family: var(--font-display); font-size: 40px; line-height: 1.05; letter-spacing: -0.02em; font-weight: 400; color: var(--text-primary); margin-bottom: 16px;"
+              >
+                Start with your first doc.
+              </h2>
+              <p
+                class="mb-8"
+                style="font-size: 14px; line-height: 1.6; color: var(--text-secondary);"
+              >
+                Every doc you create here can be read by Claude through your MCP
+                connector. No upload step.
+              </p>
+              <form id="new-doc-form-empty">
+                <button
+                  type="submit"
+                  class="inline-flex items-center justify-center h-10 px-5 font-medium transition-[background] rounded select-none"
+                  style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border-radius: var(--radius-md);"
+                >
+                  Create document
+                </button>
+              </form>
+            </div>
           </div>
         ) : (
           <ul style="border-top: 1px solid var(--border-subtle);">

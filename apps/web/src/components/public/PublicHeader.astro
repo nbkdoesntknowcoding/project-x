@@ -1,5 +1,11 @@
 ---
 const auth = Astro.locals.auth;
+const pathname = Astro.url.pathname;
+
+const navLinks = [
+  { href: '/docs', label: 'Docs' },
+  { href: '/pricing', label: 'Pricing' },
+];
 ---
 
 <header
@@ -14,33 +20,34 @@ const auth = Astro.locals.auth;
       Mnema
     </a>
 
+    <!-- Nav with pill active state -->
     <nav class="flex items-center gap-1">
-      <a
-        href="/docs"
-        class="transition-colors px-2 py-1"
-        style="font-size: 13px; color: var(--text-secondary);"
-        onmouseover="this.style.color='var(--text-primary)'"
-        onmouseout="this.style.color='var(--text-secondary)'"
-      >
-        Docs
-      </a>
-      <a
-        href="/pricing"
-        class="transition-colors px-2 py-1"
-        style="font-size: 13px; color: var(--text-secondary);"
-        onmouseover="this.style.color='var(--text-primary)'"
-        onmouseout="this.style.color='var(--text-secondary)'"
-      >
-        Pricing
-      </a>
+      {navLinks.map(({ href, label }) => {
+        const isActive = pathname === href || pathname.startsWith(href + '/');
+        return (
+          <a
+            href={href}
+            class="inline-flex items-center px-2.5 h-7 transition-[background,color] rounded select-none"
+            style={
+              isActive
+                ? `font-size: 13px; background: var(--surface-overlay); color: var(--text-primary); border-radius: var(--radius-md);`
+                : `font-size: 13px; color: var(--text-tertiary); border-radius: var(--radius-md);`
+            }
+            onmouseover={!isActive ? "this.style.color='var(--text-primary)'" : ''}
+            onmouseout={!isActive ? "this.style.color='var(--text-tertiary)'" : ''}
+          >
+            {label}
+          </a>
+        );
+      })}
     </nav>
 
     <div class="flex items-center gap-2">
       {auth ? (
         <a
           href="/app"
-          class="inline-flex items-center justify-center h-7 px-2.5 font-medium transition-[background,border-color,color] rounded select-none"
-          style="font-size: 12px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border: 1px solid var(--interactive-primary);"
+          class="inline-flex items-center justify-center h-7 px-2.5 font-medium transition-[background] rounded select-none"
+          style="font-size: 12px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border-radius: var(--radius-md);"
           onmouseover="this.style.background='var(--interactive-primary-hover)'"
           onmouseout="this.style.background='var(--interactive-primary)'"
         >
@@ -51,7 +58,7 @@ const auth = Astro.locals.auth;
           <a
             href="/auth/login"
             class="inline-flex items-center justify-center h-7 px-2.5 font-medium transition-[background,color] rounded select-none"
-            style="font-size: 12px; color: var(--text-secondary); border: 1px solid transparent;"
+            style="font-size: 12px; color: var(--text-secondary);"
             onmouseover="this.style.background='var(--interactive-ghost-hover)';this.style.color='var(--text-primary)'"
             onmouseout="this.style.background='transparent';this.style.color='var(--text-secondary)'"
           >
@@ -59,8 +66,8 @@ const auth = Astro.locals.auth;
           </a>
           <a
             href="/signup"
-            class="inline-flex items-center justify-center h-7 px-2.5 font-medium transition-[background,border-color,color] rounded select-none"
-            style="font-size: 12px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border: 1px solid var(--interactive-primary);"
+            class="inline-flex items-center justify-center h-7 px-2.5 font-medium transition-[background] rounded select-none"
+            style="font-size: 12px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border-radius: var(--radius-md);"
             onmouseover="this.style.background='var(--interactive-primary-hover)'"
             onmouseout="this.style.background='var(--interactive-primary)'"
           >

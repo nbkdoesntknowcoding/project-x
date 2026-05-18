@@ -1,5 +1,8 @@
 ---
 import PublicLayout from '../layouts/PublicLayout.astro';
+import { RadialGlow } from '../components/ui/RadialGlow';
+import { NoiseOverlay } from '../components/ui/NoiseOverlay';
+import { ConstellationMark } from '../components/ui/ConstellationMark';
 
 const auth = Astro.locals.auth;
 ---
@@ -9,104 +12,203 @@ const auth = Astro.locals.auth;
   description="AI-native docs that connect directly to Claude. Your docs stay current, your AI stays informed."
   pathname="/"
 >
-  <!-- Hero -->
-  <section class="max-w-[720px] mx-auto px-6 pt-[128px] pb-[128px] text-center">
-    <span
-      class="font-mono uppercase block mb-4"
-      style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
-    >
-      The live context engine
-    </span>
 
-    <h1
-      style="font-size: 56px; line-height: 1.15; letter-spacing: -0.02em; font-weight: 600; color: var(--text-primary);"
-    >
-      AI-native docs that connect directly to Claude.
-    </h1>
+  <!-- ===== HERO ===== -->
+  <section class="relative overflow-hidden" style="height: 720px; background: var(--surface-base);">
+    <RadialGlow cx={50} cy={42} radius={55} tone="warm" intensity={1.2} />
+    <NoiseOverlay opacity={0.04} />
 
-    <p
-      class="mx-auto mt-6 mb-8"
-      style="font-size: 18px; color: var(--text-secondary); max-width: 580px; line-height: 1.5;"
-    >
-      Write your docs once. Edit them live. Claude reads them straight from the source.
-      No uploads, no version churn, no stale exports.
-    </p>
+    <!-- Constellation marks — placed asymmetrically, never symmetric -->
+    <ConstellationMark
+      label="Hybrid Search"
+      hint="0.07s"
+      position={{ top: '22%', left: '6%' }}
+      marker="triangle"
+      side="right"
+    />
+    <ConstellationMark
+      label="MCP Bridge"
+      position={{ top: '16%', right: '8%' }}
+      marker="circle"
+      side="left"
+    />
+    <ConstellationMark
+      label="Live Sync"
+      hint="N-S2"
+      position={{ bottom: '32%', left: '10%' }}
+      marker="plus"
+      side="right"
+    />
+    <ConstellationMark
+      label="Comments"
+      hint="v.04"
+      position={{ bottom: '24%', right: '9%' }}
+      marker="square"
+      side="left"
+    />
+    <ConstellationMark
+      label="Versions"
+      position={{ top: '54%', left: '4%' }}
+      marker="circle"
+      side="right"
+    />
 
-    <div class="flex items-center justify-center gap-3">
-      {auth ? (
-        <a
-          href="/app"
-          class="inline-flex items-center justify-center h-10 px-4 font-medium transition-[background,border-color] rounded select-none"
-          style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border: 1px solid var(--interactive-primary); border-radius: var(--radius-md);"
-          onmouseover="this.style.background='var(--interactive-primary-hover)'"
-          onmouseout="this.style.background='var(--interactive-primary)'"
-        >
-          Open app
-        </a>
-      ) : (
-        <>
+    <!-- Hero content — z-index 2 sits above glow + noise -->
+    <div
+      class="relative h-full flex flex-col items-center justify-center max-w-3xl mx-auto px-6 text-center"
+      style="z-index: 2;"
+    >
+      <span
+        class="font-mono uppercase block mb-5"
+        style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+      >
+        The live context engine
+      </span>
+
+      <!-- MixedHeading: Geist Sans base, Instrument Serif italic emphasis -->
+      <h1
+        class="font-sans font-medium tracking-[-0.02em]"
+        style="font-size: 64px; line-height: 1.05; color: var(--text-primary);"
+      >
+        AI-native docs that connect
+        <em
+          style="font-family: var(--font-display); font-style: italic; font-weight: 400;"
+        >directly to Claude</em>.
+      </h1>
+
+      <p
+        class="mt-6 max-w-xl mx-auto"
+        style="font-size: 16px; line-height: 1.65; color: var(--text-secondary);"
+      >
+        Write your docs once. Edit them live. Claude reads them straight from the source.
+        No uploads, no version churn, no stale exports.
+      </p>
+
+      <div class="mt-10 flex items-center justify-center gap-3">
+        {auth ? (
           <a
-            href="/signup"
-            class="inline-flex items-center justify-center h-10 px-4 font-medium transition-[background,border-color] rounded select-none"
-            style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border: 1px solid var(--interactive-primary); border-radius: var(--radius-md);"
+            href="/app"
+            class="inline-flex items-center justify-center h-10 px-5 font-medium transition-[background] rounded select-none"
+            style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border-radius: var(--radius-md);"
             onmouseover="this.style.background='var(--interactive-primary-hover)'"
             onmouseout="this.style.background='var(--interactive-primary)'"
           >
-            Start free
+            Open app
           </a>
-          <a
-            href="/pricing"
-            class="inline-flex items-center justify-center h-10 px-4 font-medium transition-[background] rounded select-none"
-            style="font-size: 14px; background: var(--interactive-secondary); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md);"
-            onmouseover="this.style.background='var(--interactive-secondary-hover)'"
-            onmouseout="this.style.background='var(--interactive-secondary)'"
-          >
-            View pricing
-          </a>
-        </>
-      )}
-    </div>
+        ) : (
+          <>
+            <a
+              href="/signup"
+              class="inline-flex items-center justify-center h-10 px-5 font-medium transition-[background] rounded select-none"
+              style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border-radius: var(--radius-md);"
+              onmouseover="this.style.background='var(--interactive-primary-hover)'"
+              onmouseout="this.style.background='var(--interactive-primary)'"
+            >
+              Start free
+            </a>
+            <a
+              href="/pricing"
+              class="inline-flex items-center justify-center h-10 px-5 font-medium transition-[background] rounded select-none"
+              style="font-size: 14px; background: var(--interactive-secondary); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md);"
+              onmouseover="this.style.background='var(--interactive-secondary-hover)'"
+              onmouseout="this.style.background='var(--interactive-secondary)'"
+            >
+              View pricing
+            </a>
+          </>
+        )}
+      </div>
 
-    <p
-      class="mt-6 font-mono uppercase"
-      style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-quaternary);"
-    >
-      Free forever for personal use · No credit card
-    </p>
-  </section>
-
-  <!-- Editor placeholder -->
-  <section
-    class="px-6 py-[96px]"
-    style="background: var(--surface-overlay);"
-  >
-    <div class="max-w-[1100px] mx-auto">
-      <div
-        class="mx-auto"
-        style="max-width: 1100px; height: 480px; background: var(--surface-sunken); border: 1px solid var(--border-default); border-radius: var(--radius-xl);"
-      ></div>
       <p
-        class="text-center mt-4 font-mono uppercase"
-        style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+        class="mt-6 font-mono uppercase"
+        style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-quaternary);"
       >
-        The editor
+        Free forever for personal use · No credit card
       </p>
     </div>
   </section>
 
-  <!-- Features -->
-  <section class="max-w-[1100px] mx-auto px-6 py-[96px]">
-    <p class="text-center font-mono uppercase mb-3" style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);">
-      How it works
-    </p>
-    <h2
-      class="text-center mb-16"
-      style="font-size: 28px; line-height: 1.3; font-weight: 500; color: var(--text-primary);"
-    >
-      Three things make Mnema different.
-    </h2>
+  <!-- ===== PRODUCT SCREENSHOT PLACEHOLDER ===== -->
+  <section class="relative py-24" style="background: var(--surface-base);">
+    <div class="max-w-6xl mx-auto px-6">
+      <div
+        class="relative overflow-hidden"
+        style="aspect-ratio: 16 / 10; background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-xl);"
+      >
+        <RadialGlow cx={50} cy={20} radius={60} tone="soft" />
+        <div
+          class="absolute inset-0 flex items-center justify-center"
+          style="z-index: 2;"
+        >
+          <span
+            class="font-mono uppercase"
+            style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+          >
+            Editor preview
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
 
-    <div class="grid gap-12 md:grid-cols-3">
+  <!-- ===== STAT TILES ===== -->
+  <section class="relative py-24" style="background: var(--surface-base);">
+    <div class="max-w-6xl mx-auto px-6">
+      <span
+        class="font-mono uppercase block text-center mb-3"
+        style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+      >
+        Built for trust
+      </span>
+      <h2
+        class="text-center max-w-2xl mx-auto mb-16"
+        style="font-family: var(--font-display); font-size: var(--display-sm); line-height: 1.1; letter-spacing: -0.02em; font-weight: 400; color: var(--text-primary);"
+      >
+        Three things make Mnema feel different.
+      </h2>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <!-- Stat tile 1: Search latency -->
+        <div style="background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;">
+          <div class="flex items-baseline gap-2">
+            <span style="font-family: var(--font-display); font-size: var(--display-sm); line-height: 1; color: var(--text-primary);">~50ms</span>
+            <span class="font-mono text-[11px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]">p50</span>
+          </div>
+          <span class="font-mono uppercase block mt-3" style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);">Search Latency</span>
+        </div>
+        <!-- Stat tile 2: Sync reliability with DialRing -->
+        <div style="background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <div class="flex items-baseline gap-2">
+                <span style="font-family: var(--font-display); font-size: var(--display-sm); line-height: 1; color: var(--text-primary);">Live</span>
+              </div>
+              <span class="font-mono uppercase block mt-3" style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);">Sync Reliability</span>
+            </div>
+            <!-- Inline DialRing: pure SVG, no React needed -->
+            <svg width="56" height="56" viewBox="0 0 56 56" class="block shrink-0" aria-hidden="true">
+              <circle cx="28" cy="28" r="25.25" stroke="var(--border-subtle)" stroke-width="1.5" fill="none"/>
+              <circle cx="28" cy="28" r="25.25" stroke="var(--text-primary)" stroke-width="1.5" fill="none"
+                stroke-linecap="round" stroke-dasharray="158.7" stroke-dashoffset="0.32"
+                transform="rotate(-90 28 28)"/>
+            </svg>
+          </div>
+        </div>
+        <!-- Stat tile 3: MCP native -->
+        <div style="background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;">
+          <div class="flex items-baseline gap-2">
+            <span style="font-family: var(--font-display); font-size: var(--display-sm); line-height: 1; color: var(--text-primary);">MCP</span>
+            <span class="font-mono text-[11px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]">Spec 2025-11-25</span>
+          </div>
+          <span class="font-mono uppercase block mt-3" style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);">Native Connection</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FEATURE BLOCKS ===== -->
+  <section class="py-24" style="background: var(--surface-base);">
+    <div class="max-w-6xl mx-auto px-6 grid gap-12 md:grid-cols-3">
       <div>
         <span
           class="block mb-3 font-mono uppercase"
@@ -117,9 +219,9 @@ const auth = Astro.locals.auth;
         <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
           Live, not static.
         </h3>
-        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.55;">
-          Every edit syncs instantly. The doc Claude reads at 3:14 is the doc your teammate updated at 3:13.
-          No re-upload.
+        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
+          Every edit syncs instantly. The doc Claude reads at 3:14 is the doc your
+          teammate updated at 3:13. No re-upload.
         </p>
       </div>
       <div>
@@ -132,9 +234,9 @@ const auth = Astro.locals.auth;
         <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
           Search that understands.
         </h3>
-        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.55;">
-          Search "rate limiting" — find docs about throttling. Search "pricing" — find docs about cost,
-          tiers, plans. Hybrid keyword and semantic.
+        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
+          Search "rate limiting" — find docs about throttling. Search "pricing" — find
+          docs about cost, tiers, plans. Hybrid keyword and semantic.
         </p>
       </div>
       <div>
@@ -147,33 +249,42 @@ const auth = Astro.locals.auth;
         <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
           Built for Claude.
         </h3>
-        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.55;">
-          Mnema is an MCP server. One-click connect from your Claude account. Your docs become
-          first-class context.
+        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
+          Mnema is an MCP server. One-click connect from your Claude account. Your docs
+          become first-class context.
         </p>
       </div>
     </div>
   </section>
 
-  <!-- CTA strip -->
-  <section class="max-w-[720px] mx-auto px-6 py-[128px] text-center">
-    <h2
-      class="mb-3"
-      style="font-size: 18px; font-weight: 500; color: var(--text-primary);"
+  <!-- ===== CTA STRIP ===== -->
+  <section class="relative py-32" style="background: var(--surface-base);">
+    <RadialGlow cx={50} cy={50} radius={45} tone="warm" intensity={0.8} />
+    <div
+      class="relative max-w-2xl mx-auto px-6 text-center"
+      style="z-index: 2;"
     >
-      Ready to try it?
-    </h2>
-    <p class="mb-8" style="font-size: 14px; color: var(--text-secondary);">
-      Set up a workspace in under a minute. Free forever for personal use.
-    </p>
-    <a
-      href="/signup"
-      class="inline-flex items-center justify-center h-10 px-4 font-medium transition-[background,border-color] rounded select-none"
-      style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border: 1px solid var(--interactive-primary); border-radius: var(--radius-md);"
-      onmouseover="this.style.background='var(--interactive-primary-hover)'"
-      onmouseout="this.style.background='var(--interactive-primary)'"
-    >
-      Start free
-    </a>
+      <h2
+        style="font-family: var(--font-display); font-size: var(--display-sm); line-height: 1.1; letter-spacing: -0.02em; font-weight: 400; color: var(--text-primary); margin-bottom: 16px;"
+      >
+        Ready to try it?
+      </h2>
+      <p
+        class="mb-8"
+        style="font-size: 15px; color: var(--text-secondary);"
+      >
+        Set up a workspace in under a minute. Free forever for personal use.
+      </p>
+      <a
+        href="/signup"
+        class="inline-flex items-center justify-center h-10 px-5 font-medium transition-[background] rounded select-none"
+        style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border-radius: var(--radius-md);"
+        onmouseover="this.style.background='var(--interactive-primary-hover)'"
+        onmouseout="this.style.background='var(--interactive-primary)'"
+      >
+        Start free
+      </a>
+    </div>
   </section>
+
 </PublicLayout>

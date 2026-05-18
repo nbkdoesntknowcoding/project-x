@@ -1,15 +1,16 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { WorkspaceOnboarding } from '../../components/auth/WorkspaceOnboarding';
+import { RadialGlow } from '../../components/ui/RadialGlow';
+import { NoiseOverlay } from '../../components/ui/NoiseOverlay';
+import { DialRing } from '../../components/charts/DialRing';
 
 const auth = Astro.locals.auth;
 if (!auth) {
   return Astro.redirect('/auth/login');
 }
 
-// If the user already has at least one workspace, skip onboarding —
-// they'll land in their existing workspace at /app. The workspace-naming
-// flow is only meaningful for a brand-new user with no memberships.
+// If the user already has at least one workspace, skip onboarding.
 const apiUrl =
   (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
 const wsResponse = await fetch(`${apiUrl}/api/auth/workspaces`, {
@@ -24,9 +25,6 @@ if (wsResponse.ok) {
   }
 }
 
-// Pre-fill the workspace name from the user's email domain (e.g.
-// `nischaybk@theboringpeople.in` → `theboringpeople`). Pure UX — the
-// server only cares about the name after submit.
 const domainPart = auth.email.split('@')[1]?.split('.')[0] ?? '';
 const suggestedName = domainPart
   ? domainPart.charAt(0).toUpperCase() + domainPart.slice(1)
@@ -35,24 +33,51 @@ const suggestedName = domainPart
 
 <BaseLayout title="Create your workspace · Mnema">
   <main
-    class="min-h-screen flex items-center justify-center px-4"
-    style="background: var(--surface-canvas);"
+    class="relative min-h-screen flex flex-col items-center justify-center px-6"
+    style="background: var(--surface-base);"
   >
-    <div class="w-full max-w-md">
-      <div class="mb-8">
-        <h1
-          class="text-2xl font-medium tracking-tight"
-          style="color: var(--text-primary);"
+    <RadialGlow cx={50} cy={40} radius={50} tone="warm" intensity={1} />
+    <NoiseOverlay opacity={0.03} />
+
+    <!-- Step 01 dial — borrowed from the DeFi Wallet reference panel -->
+    <div class="relative inline-block mb-12" style="z-index: 2;">
+      <DialRing value={25} size={160} stroke={1.5} />
+      <div class="absolute inset-0 flex flex-col items-center justify-center">
+        <span
+          class="font-mono uppercase"
+          style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
         >
-          Create your workspace
-        </h1>
-        <p class="mt-2 text-sm" style="color: var(--text-secondary);">
-          This is where your team's docs will live. You can rename it later
-          in Settings.
-        </p>
+          Step
+        </span>
+        <span
+          style="font-family: var(--font-display); font-size: 56px; line-height: 1; color: var(--text-primary); margin-top: 4px;"
+        >
+          01
+        </span>
       </div>
+    </div>
+
+    <div class="relative text-center max-w-md w-full" style="z-index: 2;">
+      <h1
+        style="font-family: var(--font-display); font-size: var(--display-sm); line-height: 1.1; letter-spacing: -0.02em; font-weight: 400; color: var(--text-primary); margin-bottom: 12px;"
+      >
+        Create your workspace
+      </h1>
+      <p
+        class="mb-10"
+        style="font-size: 15px; color: var(--text-secondary); line-height: 1.6;"
+      >
+        This is where your team's docs will live. You can rename it later in Settings.
+      </p>
 
       <WorkspaceOnboarding client:load suggestedName={suggestedName} />
+
+      <p
+        class="mt-12 font-mono uppercase"
+        style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-quaternary);"
+      >
+        Next — Invite teammates · Connect Claude
+      </p>
     </div>
   </main>
 </BaseLayout>

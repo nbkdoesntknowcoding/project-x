@@ -35,7 +35,7 @@ export function SettingsNav({ currentPath }: Props): JSX.Element {
             className="block px-3 py-1.5 text-sm rounded-md transition-colors"
             style={{
               color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-              background: isActive ? 'var(--surface-overlay)' : 'transparent',
+              background: isActive ? 'var(--surface-elevated)' : 'transparent',
             }}
             onMouseOver={(e) => {
               if (!isActive) {

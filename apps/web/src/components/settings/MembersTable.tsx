@@ -188,7 +188,7 @@ export function MembersTable({ currentUserId, currentUserRole }: Props): JSX.Ele
                   className="text-xs px-2 py-1 rounded transition-colors disabled:opacity-50"
                   style={{ color: 'var(--text-secondary)' }}
                   onMouseOver={(e) => {
-                    e.currentTarget.style.background = 'var(--surface-hover)';
+                    e.currentTarget.style.background = 'var(--interactive-ghost-hover)';
                     e.currentTarget.style.color = 'var(--danger-default)';
                   }}
                   onMouseOut={(e) => {

@@ -162,7 +162,7 @@ export function WorkspaceSwitcher({ currentWorkspaceId }: Props): JSX.Element | 
                     background: isCurrent ? 'var(--surface-selected)' : 'transparent',
                   }}
                   onMouseOver={(e) => {
-                    if (!isCurrent) e.currentTarget.style.background = 'var(--surface-hover)';
+                    if (!isCurrent) e.currentTarget.style.background = 'var(--interactive-ghost-hover)';
                   }}
                   onMouseOut={(e) => {
                     if (!isCurrent) e.currentTarget.style.background = 'transparent';

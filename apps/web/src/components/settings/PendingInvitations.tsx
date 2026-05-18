@@ -102,7 +102,7 @@ export function PendingInvitations({ reloadKey = 0 }: Props): JSX.Element {
                 color: 'var(--text-secondary)',
               }}
               onMouseOver={(e) => {
-                e.currentTarget.style.background = 'var(--surface-hover)';
+                e.currentTarget.style.background = 'var(--interactive-ghost-hover)';
                 e.currentTarget.style.color = 'var(--danger-default)';
               }}
               onMouseOut={(e) => {
