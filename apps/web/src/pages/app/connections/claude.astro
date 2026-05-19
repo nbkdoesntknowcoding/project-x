@@ -1,146 +1,310 @@
 ---
 import AppLayout from '../../../layouts/AppLayout.astro';
-import { MonoLabel } from '../../../components/ui/typography';
-import { Plug } from 'lucide-react';
 
 const auth = Astro.locals.auth;
 if (!auth) {
   return Astro.redirect('/auth/login');
 }
 
-// The MCP endpoint URL points at the production API host so users can
-// paste it directly into Claude. In dev this is overridable via env.
 const mcpHost =
   (import.meta.env.PUBLIC_API_URL as string | undefined) ??
   'https://context.theboringpeople.in';
 const mcpEndpoint = `${mcpHost}/mcp`;
+
+const domainPart = auth.email.split('@')[1]?.split('.')[0] ?? '';
+const workspaceName = domainPart
+  ? domainPart.charAt(0).toUpperCase() + domainPart.slice(1)
+  : 'Workspace';
 ---
 
-<AppLayout title="Claude connection — Mnema" workspaceName="Workspace" email={auth.email}>
-  <div class="max-w-3xl mx-auto px-8 py-12">
-    <div class="mb-12">
-      <div class="mb-3">
-        <MonoLabel>Connections</MonoLabel>
-      </div>
-      <h1
-        class="font-sans font-medium"
-        style="font-size: 28px; line-height: 1.2; letter-spacing: -0.01em; color: var(--text-primary); margin-bottom: 12px;"
-      >
+<style>
+  .cc-main { overflow-y: auto; }
+  .cc-wrap { max-width: 880px; margin: 0 auto; padding: 40px 32px 80px; }
+
+  .cc-pre {
+    font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-muted); margin-bottom: 14px;
+  }
+  .cc-h1 {
+    display: flex; align-items: center; gap: 12px;
+    margin: 0 0 12px; font: 500 32px/1 var(--sans); letter-spacing: -0.02em; color: var(--ink);
+  }
+  .cc-logo {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: linear-gradient(135deg, #FFB370, #FF7A8A);
+    color: white; font: 700 20px/1 var(--sans);
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .cc-sub { margin: 0 0 32px; font-size: 15px; line-height: 1.6; color: var(--ink-soft); max-width: 36rem; }
+
+  .cc-section { margin-bottom: 32px; }
+  .cc-sec-label {
+    font: 500 10.5px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-muted); margin-bottom: 12px;
+  }
+  .cc-sec-h { margin: 0 0 12px; font: 500 15px/1.3 var(--sans); letter-spacing: -0.005em; color: var(--ink); }
+
+  /* STATUS CARD */
+  .cc-status-card {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  }
+  .cc-status-lhs { display: flex; flex-direction: column; gap: 12px; }
+  .cc-status-row { display: flex; align-items: center; gap: 10px; }
+  .cc-status-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--status-sync);
+    animation: cc-pulse 2s ease-in-out infinite;
+  }
+  @keyframes cc-pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(107,227,155,0.55); }
+    50% { box-shadow: 0 0 0 4px rgba(107,227,155,0); }
+  }
+  .cc-status-label { font: 500 10.5px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+  .cc-status-state { font: 500 13px/1 var(--sans); color: var(--ink); }
+  .cc-status-meta { display: flex; gap: 24px; }
+  .cc-status-item { display: flex; flex-direction: column; gap: 3px; }
+  .cc-status-k { font: 500 9.5px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+  .cc-status-v { font: 400 13px/1 var(--sans); color: var(--ink); }
+
+  /* ENDPOINT BLOCK */
+  .cc-endpoint-block {
+    display: flex; align-items: stretch;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  }
+  .cc-url {
+    flex: 1; padding: 10px 14px;
+    font: 400 13px/1 var(--mono); color: var(--ink-soft);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cc-copy {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 14px; border: 0; border-left: 1px solid var(--line);
+    background: var(--surface-2); color: var(--ink-muted);
+    font: 500 11px/1 var(--mono); letter-spacing: 0.04em; cursor: pointer;
+    transition: background 140ms ease, color 140ms ease; white-space: nowrap; flex-shrink: 0;
+  }
+  .cc-copy:hover { background: var(--surface-3); color: var(--ink); }
+  .cc-copy.copied { color: var(--status-sync); }
+  .cc-endpoint-help { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-muted); }
+
+  /* STEPS */
+  .cc-steps { display: flex; flex-direction: column; }
+  .cc-step {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 14px 0; border-bottom: 1px solid var(--line);
+  }
+  .cc-step:last-child { border-bottom: 0; }
+  .cc-step-num {
+    width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
+    background: var(--surface-2); border: 1px solid var(--line);
+    display: inline-flex; align-items: center; justify-content: center;
+    font: 500 11px/1 var(--mono); color: var(--ink-muted);
+  }
+  .cc-step.done .cc-step-num { background: rgba(107,227,155,0.12); border-color: rgba(107,227,155,0.28); color: var(--status-sync); }
+  .cc-step-body { flex: 1; padding-top: 3px; font: 400 13.5px/1.6 var(--sans); color: var(--ink-soft); }
+  .cc-step-body b { color: var(--ink); font-weight: 500; }
+  .cc-step-body code { font-family: var(--mono); font-size: 12px; padding: 1px 5px; background: var(--surface-3); border-radius: 4px; color: var(--ink); }
+
+  /* SCOPES */
+  .cc-scopes { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .cc-scope-row {
+    display: grid; grid-template-columns: 22px minmax(0, 120px) 1fr 70px;
+    align-items: center; gap: 12px;
+    padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 13px;
+  }
+  .cc-scope-row:last-child { border-bottom: 0; }
+  .cc-scope-row.locked { opacity: 0.6; }
+  .cc-scope-check { color: var(--status-sync); display: flex; align-items: center; }
+  .cc-scope-row.locked .cc-scope-check { color: var(--ink-muted); }
+  .cc-scope-name { font: 500 12.5px/1 var(--mono); color: var(--ink); }
+  .cc-scope-desc { font-size: 12.5px; color: var(--ink-muted); }
+  .cc-scope-tag {
+    font: 500 9.5px/1 var(--mono); letter-spacing: 0.06em; padding: 3px 7px; border-radius: 4px; text-align: center;
+    background: rgba(107,227,155,0.10); border: 1px solid rgba(107,227,155,0.28); color: var(--status-sync);
+  }
+  .cc-scope-row.locked .cc-scope-tag { background: var(--surface-2); border-color: var(--line); color: var(--ink-muted); }
+
+  /* DANGER */
+  .cc-danger {
+    margin-top: 48px; padding: 20px 22px;
+    border-top: 1px solid rgba(255,122,138,0.20);
+    background: linear-gradient(180deg, rgba(255,122,138,0.025), transparent 60%);
+    border-radius: 8px;
+  }
+  .cc-danger-pre { font: 500 10.5px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--status-warn); margin-bottom: 12px; }
+  .cc-danger-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .cc-danger-info { flex: 1; }
+  .cc-danger-info h3 { margin: 0 0 4px; font: 500 14px/1.3 var(--sans); color: var(--ink); }
+  .cc-danger-info p { margin: 0; font: 400 12.5px/1.5 var(--sans); color: var(--ink-muted); max-width: 36rem; }
+  .cc-danger-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 12px; border-radius: 6px; cursor: pointer;
+    background: rgba(255,122,138,0.10); color: var(--status-warn);
+    border: 1px solid rgba(255,122,138,0.28); font: 500 12.5px/1 var(--sans); white-space: nowrap;
+  }
+  .cc-danger-btn:hover { background: rgba(255,122,138,0.16); }
+
+  .cc-btn-sec {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 12px; border-radius: 6px; cursor: pointer;
+    background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line-strong); font: 500 12px/1 var(--sans);
+  }
+  .cc-btn-sec:hover { background: var(--surface-3); border-color: var(--line-bright); }
+</style>
+
+<AppLayout title="Claude connection — Mnema" workspaceName={workspaceName} email={auth.email}>
+
+  <!-- STATUS LEFT -->
+  <Fragment slot="status-left">
+    <span style="font:500 11px/1 var(--mono);color:var(--ink-muted);">Claude · connected</span>
+  </Fragment>
+
+  <!-- MAIN CONTENT -->
+  <div class="cc-main">
+    <div class="cc-wrap">
+
+      <div class="cc-pre">Connections</div>
+      <h1 class="cc-h1">
+        <span class="cc-logo">C</span>
         Claude
       </h1>
-      <p
-        class="max-w-xl"
-        style="font-size: 15px; line-height: 1.65; color: var(--text-secondary);"
-      >
-        Claude reads your workspace through the Model Context Protocol. One endpoint, one
-        connector, live access to every doc and (next release) every flow.
+      <p class="cc-sub">
+        Mnema connects to Claude through the Model Context Protocol. Claude reads your docs and
+        walks your flows directly, no upload step.
       </p>
+
+      <!-- STATUS CARD -->
+      <div class="cc-section">
+        <div class="cc-status-card">
+          <div class="cc-status-lhs">
+            <div class="cc-status-row">
+              <span class="cc-status-dot"></span>
+              <span class="cc-status-label">Connection status</span>
+              <span class="cc-status-state">Active</span>
+            </div>
+            <div class="cc-status-meta">
+              <div class="cc-status-item">
+                <span class="cc-status-k">MCP protocol</span>
+                <span class="cc-status-v">v2025-11-25</span>
+              </div>
+              <div class="cc-status-item">
+                <span class="cc-status-k">Scopes granted</span>
+                <span class="cc-status-v">docs:read, flows:read</span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <button class="cc-btn-sec">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Reconnect
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MCP ENDPOINT -->
+      <div class="cc-section">
+        <div class="cc-sec-label">Your MCP endpoint</div>
+        <h2 class="cc-sec-h">Workspace endpoint URL</h2>
+        <div class="cc-endpoint-block">
+          <span class="cc-url" id="cc-mcp-url">{mcpEndpoint}</span>
+          <button class="cc-copy" id="cc-copy-btn">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span id="cc-copy-label">Copy</span>
+          </button>
+        </div>
+        <p class="cc-endpoint-help">Paste this into Claude's connector settings to authorize live read access to this workspace.</p>
+      </div>
+
+      <!-- SETUP STEPS -->
+      <div class="cc-section">
+        <div class="cc-sec-label">Connect in 30 seconds</div>
+        <div class="cc-steps">
+          <div class="cc-step done">
+            <span class="cc-step-num">
+              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <div class="cc-step-body">Workspace MCP key generated and bound to this workspace.</div>
+          </div>
+          <div class="cc-step">
+            <span class="cc-step-num">2</span>
+            <div class="cc-step-body">Open <b>Claude Desktop → Settings → Connectors → Add MCP server</b>. Paste the URL above and click Save.</div>
+          </div>
+          <div class="cc-step">
+            <span class="cc-step-num">3</span>
+            <div class="cc-step-body">Authorise the connection. Claude will request <code>docs:read</code> and <code>flows:read</code> scopes.</div>
+          </div>
+          <div class="cc-step">
+            <span class="cc-step-num">4</span>
+            <div class="cc-step-body">Ask Claude something about your docs. It'll cite them in the answer — no upload, no re-indexing.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCOPES -->
+      <div class="cc-section">
+        <div class="cc-sec-label">What Claude can access</div>
+        <div class="cc-scopes">
+          <div class="cc-scope-row">
+            <span class="cc-scope-check">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <span class="cc-scope-name">docs:read</span>
+            <span class="cc-scope-desc">Read the contents of any doc in this workspace, including instructions and snippets.</span>
+            <span class="cc-scope-tag">GRANTED</span>
+          </div>
+          <div class="cc-scope-row">
+            <span class="cc-scope-check">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </span>
+            <span class="cc-scope-name">flows:read</span>
+            <span class="cc-scope-desc">Walk through your flows step-by-step, reading content in the order you defined.</span>
+            <span class="cc-scope-tag">GRANTED</span>
+          </div>
+          <div class="cc-scope-row locked">
+            <span class="cc-scope-check">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            </span>
+            <span class="cc-scope-name">docs:write</span>
+            <span class="cc-scope-desc">Edit docs on your behalf. Requires per-workspace approval — disabled until Mnema 6.5.</span>
+            <span class="cc-scope-tag">NOT YET</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- DANGER ZONE -->
+      <div class="cc-danger">
+        <div class="cc-danger-pre">Danger zone</div>
+        <div class="cc-danger-row">
+          <div class="cc-danger-info">
+            <h3>Revoke connection</h3>
+            <p>Revoking will sign Claude out of this workspace. Existing chats won't be deleted, but Claude won't be able to read this workspace until you reconnect.</p>
+          </div>
+          <button class="cc-danger-btn">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Revoke connection
+          </button>
+        </div>
+      </div>
+
     </div>
-
-    <!-- Endpoint card -->
-    <section
-      class="relative overflow-hidden mb-8"
-      style="background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;"
-    >
-      <div class="flex items-center gap-2 mb-4">
-        <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--status-success); display: inline-block;"></span>
-        <MonoLabel>Workspace endpoint</MonoLabel>
-      </div>
-      <div class="flex items-center gap-2">
-        <code
-          class="flex-1 font-mono truncate"
-          style="font-size: 13px; padding: 8px 12px; background: var(--surface-sunken); color: var(--text-primary); border-radius: var(--radius-sm);"
-          id="mcp-endpoint"
-        >
-          {mcpEndpoint}
-        </code>
-        <button
-          type="button"
-          id="copy-endpoint"
-          class="inline-flex items-center justify-center h-9 px-3 font-medium select-none"
-          style="font-size: 13px; background: var(--interactive-secondary); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md);"
-          onmouseover="this.style.background='var(--interactive-secondary-hover)'"
-          onmouseout="this.style.background='var(--interactive-secondary)'"
-        >
-          Copy
-        </button>
-      </div>
-      <p style="font-size: 12px; color: var(--text-tertiary); margin-top: 12px;">
-        Paste this URL into Claude's connector settings to authorize live read access to this
-        workspace.
-      </p>
-    </section>
-
-    <!-- How to connect -->
-    <section class="mb-12">
-      <div class="mb-4">
-        <MonoLabel>How to connect</MonoLabel>
-      </div>
-      <ol class="space-y-6 list-none">
-        {[
-          {
-            heading: 'Open Claude’s connector settings',
-            body: 'In Claude Desktop or Claude.ai, open Settings → Connectors. You need Claude Pro or higher for MCP connectors.',
-          },
-          {
-            heading: 'Add a new connector',
-            body: 'Click “Add connector” and paste the endpoint above. Give it a name like “Mnema”.',
-          },
-          {
-            heading: 'Authorize the connection',
-            body: 'Claude opens a browser tab to confirm. You’ll see your Mnema workspace name and the requested scope (docs:read). Approve to finish.',
-          },
-          {
-            heading: 'Ask Claude to read a doc',
-            body: 'Once connected, try “What docs are in my Mnema workspace?” or reference any doc by title.',
-          },
-        ].map((step, i) => (
-          <li class="flex gap-4">
-            <div
-              class="flex-shrink-0 flex items-center justify-center font-mono font-medium"
-              style="width: 28px; height: 28px; border-radius: 50%; background: var(--surface-elevated); border: 1px solid var(--border-default); font-size: 13px; color: var(--text-primary);"
-            >
-              {i + 1}
-            </div>
-            <div class="pt-0.5">
-              <h3 style="font-size: 15px; font-weight: 500; color: var(--text-primary); line-height: 1.5; margin-bottom: 4px;">
-                {step.heading}
-              </h3>
-              <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
-                {step.body}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </section>
-
-    <!-- What Claude can access -->
-    <section
-      style="background: var(--surface-overlay); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 24px;"
-    >
-      <h3 style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-        What Claude can access
-      </h3>
-      <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
-        Authorizing grants <code class="font-mono" style="font-size: 12px; padding: 2px 6px; background: var(--surface-sunken); color: var(--text-primary); border-radius: var(--radius-sm);">docs:read</code> — search and read access to every doc in this workspace. It also lets Claude discover and walk your flows (sequenced content for structured context delivery). Write access (<code class="font-mono" style="font-size: 12px; padding: 2px 6px; background: var(--surface-sunken); color: var(--text-primary); border-radius: var(--radius-sm);">docs:write</code>) is a separate scope for letting Claude draft and update docs directly.
-      </p>
-    </section>
   </div>
 
   <script>
-    document.getElementById('copy-endpoint')?.addEventListener('click', () => {
-      const el = document.getElementById('mcp-endpoint');
-      if (!el) return;
-      navigator.clipboard.writeText(el.textContent?.trim() ?? '').then(() => {
-        const btn = document.getElementById('copy-endpoint') as HTMLButtonElement | null;
-        if (!btn) return;
-        const original = btn.textContent;
-        btn.textContent = 'Copied';
-        setTimeout(() => {
-          btn.textContent = original;
-        }, 1500);
-      });
+    document.getElementById('cc-copy-btn')?.addEventListener('click', () => {
+      const url = document.getElementById('cc-mcp-url')?.textContent?.trim() ?? '';
+      navigator.clipboard.writeText(url).catch(() => {});
+      const btn = document.getElementById('cc-copy-btn');
+      const label = document.getElementById('cc-copy-label');
+      if (!btn || !label) return;
+      btn.classList.add('copied');
+      label.textContent = 'Copied!';
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        label.textContent = 'Copy';
+      }, 1500);
     });
   </script>
+
 </AppLayout>

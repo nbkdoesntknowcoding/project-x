@@ -1,6 +1,5 @@
 ---
 import AppLayout from '../../../layouts/AppLayout.astro';
-import { MonoLabel } from '../../../components/ui/typography';
 
 const auth = Astro.locals.auth;
 if (!auth) {
@@ -9,7 +8,6 @@ if (!auth) {
 
 const apiUrl = (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
 
-// Read optional ?type= so the sidebar filter chips work without a separate route.
 const typeParam = Astro.url.searchParams.get('type');
 const VALID_TYPES = new Set(['doc', 'engineering', 'instruction', 'snippet']);
 const activeType = typeParam && VALID_TYPES.has(typeParam) ? typeParam : null;
@@ -34,12 +32,10 @@ try {
       headers: { Cookie: `boppl_jwt=${auth.jwt}` },
     }),
   ]);
-
   if (docsRes.ok) {
     const body = (await docsRes.json()) as { docs: DocSummary[] };
     docs = body.docs;
   }
-
   if (unreadRes.ok) {
     const body = (await unreadRes.json()) as {
       unread: Array<{ doc_id: string; unread_comment_count: number }>;
@@ -49,20 +45,15 @@ try {
     }
   }
 } catch {
-  // API offline — render empty state
+  /* API offline */
 }
 
-// Heading copy reflects the active filter so the page never feels like
-// "I'm in the wrong place" — Engineering tab says Engineering.
 const TITLE_BY_TYPE: Record<string, string> = {
   engineering: 'Engineering docs',
   instruction: 'Instructions',
   snippet: 'Snippets',
 };
-const heading = activeType ? TITLE_BY_TYPE[activeType] : 'All docs';
-const kicker = activeType
-  ? `Filter · type=${activeType}`
-  : 'Workspace content';
+const heading = activeType ? (TITLE_BY_TYPE[activeType] ?? 'All docs') : 'All docs';
 
 function relativeTime(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -75,133 +66,203 @@ function relativeTime(dateStr: string): string {
   if (days < 30) return `${days}d ago`;
   return new Date(dateStr).toLocaleDateString();
 }
+
+// Derive workspace name from email domain for display
+const domainPart = auth.email.split('@')[1]?.split('.')[0] ?? '';
+const workspaceName = domainPart
+  ? domainPart.charAt(0).toUpperCase() + domainPart.slice(1)
+  : 'Workspace';
 ---
 
-<AppLayout title="Content — Mnema" workspaceName="Workspace" email={auth.email}>
-  <div class="px-8 pt-10 pb-16">
-    <div class="max-w-[800px] mx-auto">
-      <div class="mb-2">
-        <MonoLabel>{kicker}</MonoLabel>
-      </div>
+<style>
+  .co-main { padding: 14px 24px 80px; }
 
-      <div class="flex items-center justify-between mb-2">
-        <h1 style="font-size: 28px; line-height: 1.3; letter-spacing: -0.01em; font-weight: 500; color: var(--text-primary);">
-          {heading}
-        </h1>
-        <form id="new-doc-form">
-          <select
-            id="new-doc-type"
-            class="mr-2 px-2 h-8 font-medium select-none"
-            style="font-size: 13px; background: var(--surface-overlay); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md);"
-          >
-            <option value="doc">Doc</option>
-            <option value="engineering">Engineering</option>
-            <option value="instruction">Instruction</option>
-            <option value="snippet">Snippet</option>
-          </select>
-          <button
-            type="submit"
-            class="inline-flex items-center justify-center h-8 px-3 font-medium transition-[background,border-color] rounded select-none"
-            style="font-size: 13px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border: 1px solid var(--interactive-primary); border-radius: var(--radius-md);"
-            onmouseover="this.style.background='var(--interactive-primary-hover)'"
-            onmouseout="this.style.background='var(--interactive-primary)'"
-          >
-            New
+  .co-section-title {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin: 10px 4px 12px;
+  }
+  .co-section-title h3 {
+    margin: 0; font: 500 11px/1 var(--mono);
+    letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-muted);
+  }
+  .co-section-title .co-count { font: 500 11px/1 var(--mono); color: var(--ink-muted); }
+
+  /* LIST VIEW */
+  .co-list { display: flex; flex-direction: column; }
+  .co-lr {
+    display: grid;
+    grid-template-columns: 24px minmax(0,1fr) 100px 80px 28px;
+    align-items: center; padding: 7px 10px; border-radius: 6px;
+    font: 400 12.5px/1 var(--sans); gap: 12px; text-decoration: none; color: var(--ink);
+  }
+  .co-lr.head {
+    font: 500 10.5px/1 var(--mono); color: var(--ink-muted);
+    letter-spacing: 0.04em; text-transform: uppercase;
+    padding: 8px 10px; border-bottom: 1px solid var(--line); border-radius: 0;
+  }
+  .co-lr:not(.head):hover { background: var(--surface-2); }
+  .co-lr .co-nm { color: var(--ink); display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .co-lr .co-nm .co-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .co-lr .co-type {
+    font: 500 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-muted); padding: 2px 6px;
+    background: var(--surface-2); border-radius: 4px;
+  }
+  .co-lr .co-dt { color: var(--ink-muted); font-size: 12px; }
+  .co-lr .co-unread {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0;
+  }
+
+  /* FILE ICON (small, inline) */
+  .co-file-ico {
+    width: 18px; height: 22px; position: relative; flex-shrink: 0;
+  }
+  .co-file-ico .sheet {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, #FBFBFA, #DBDBD7);
+    border-radius: 3px; overflow: hidden;
+  }
+  .co-file-ico .sheet::before {
+    content: ""; position: absolute; top: 0; right: 0;
+    width: 7px; height: 7px;
+    background: linear-gradient(225deg, rgba(0,0,0,0.18) 50%, transparent 50%);
+  }
+  .co-file-ico .ext {
+    position: absolute; bottom: 0; left: -2px; right: -2px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 2px 0; border-radius: 2px;
+    font: 700 6px/1 var(--sans); color: white; letter-spacing: 0.04em;
+  }
+  .co-file-ico.md .ext { background: linear-gradient(180deg, #1E1F23, #0E0F12); color: var(--accent); }
+  .co-file-ico.doc .ext { background: linear-gradient(180deg, #2B7CD3, #1B4E91); }
+  .co-file-ico.inst .ext { background: linear-gradient(180deg, #FFB370, #FF7A8A); color: var(--on-ink); }
+  .co-file-ico.snip .ext { background: linear-gradient(180deg, #6BE39B, #2B9B9B); color: var(--on-ink); }
+  .co-file-ico.eng .ext { background: linear-gradient(180deg, #7C9CFF, #C8A2FF); }
+
+  /* EMPTY STATE */
+  .co-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: calc(100% - 80px); padding: 60px 24px; text-align: center;
+    gap: 12px;
+  }
+  .co-empty-kicker {
+    font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted);
+  }
+  .co-empty h2 { margin: 0; font: 500 28px/1.1 var(--sans); letter-spacing: -0.02em; color: var(--ink); }
+  .co-empty p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--ink-muted); max-width: 400px; }
+  .co-empty-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 16px; border-radius: 7px;
+    background: var(--ink); color: var(--on-ink);
+    font: 500 13px/1 var(--sans); cursor: pointer; border: 0; margin-top: 8px;
+  }
+  .co-empty-btn:hover { opacity: 0.88; }
+</style>
+
+<AppLayout title="Content — Mnema" workspaceName={workspaceName} email={auth.email} hasToolbar={true}>
+
+  <!-- TOOLBAR -->
+  <Fragment slot="toolbar">
+    <div style="display:flex;align-items:center;flex:1;min-width:0;">
+      <div style="display:flex;align-items:center;gap:1px;margin-right:10px;">
+        <button disabled style="width:26px;height:26px;border:0;background:transparent;border-radius:5px;color:var(--ink-muted);opacity:0.4;cursor:default;display:inline-flex;align-items:center;justify-content:center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        </button>
+        <button disabled style="width:26px;height:26px;border:0;background:transparent;border-radius:5px;color:var(--ink-muted);opacity:0.4;cursor:default;display:inline-flex;align-items:center;justify-content:center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        </button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;font:500 13.5px/1 var(--sans);color:var(--ink-muted);">
+        <span>{workspaceName}</span>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--ink-faint);"><path d="m9 6 6 6-6 6"/></svg>
+        <span style="color:var(--ink);font-weight:600;">{heading}</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div id="co-view-seg" style="display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:2px;">
+        <button data-view="list" style="width:28px;height:22px;border:0;background:var(--canvas);border-radius:4px;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;" title="List view">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        </button>
+        <button data-view="icons" style="width:28px;height:22px;border:0;background:transparent;border-radius:4px;color:var(--ink-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;" title="Icon view">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        </button>
+      </div>
+      <form id="new-doc-form" style="display:flex;align-items:center;gap:6px;">
+        <select id="new-doc-type" style="height:28px;padding:0 8px;border-radius:6px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);font:500 12px/1 var(--sans);outline:none;cursor:pointer;">
+          <option value="doc">Doc</option>
+          <option value="engineering">Engineering</option>
+          <option value="instruction">Instruction</option>
+          <option value="snippet">Snippet</option>
+        </select>
+        <button type="submit" style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px 5px 8px;border-radius:6px;background:var(--ink);border:1px solid var(--ink);font:500 12px/1 var(--sans);color:var(--on-ink);cursor:pointer;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New
+        </button>
+      </form>
+    </div>
+  </Fragment>
+
+  <!-- STATUS LEFT -->
+  <Fragment slot="status-left">
+    <span style="font:500 11px/1 var(--mono);color:var(--ink-muted);">
+      {docs.length} {docs.length === 1 ? 'item' : 'items'}{activeType ? ` · ${activeType}` : ''}
+    </span>
+  </Fragment>
+
+  <!-- MAIN CONTENT -->
+  <div class="co-main">
+    {docs.length === 0 ? (
+      <div class="co-empty">
+        <span class="co-empty-kicker">Empty workspace</span>
+        <h2>Add your first content unit.</h2>
+        <p>
+          Docs become the building blocks of flows — sequenced context Claude reads in order.
+          Start with one doc, add more, then compose them.
+        </p>
+        <form id="new-doc-form-empty">
+          <button type="submit" class="co-empty-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Create document
           </button>
         </form>
       </div>
-
-      <p style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 32px;">
-        {docs.length} {docs.length === 1 ? 'item' : 'items'}{activeType ? ` of type ${activeType}` : ' in your workspace'}
-      </p>
-
-      {docs.length === 0 ? (
-        <div
-          class="relative flex items-center justify-center px-6"
-          style="height: 50vh; background: var(--surface-base);"
-        >
-          <div
-            aria-hidden="true"
-            style="position: absolute; inset: 0; pointer-events: none; z-index: 0; background-image: radial-gradient(circle at 50% 50%, var(--glow-color-soft), transparent 40%); opacity: 0.6;"
-          />
-          <div class="relative text-center max-w-md mx-auto" style="z-index: 2;">
-            <span
-              class="font-mono uppercase block mb-4"
-              style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
-            >
-              Empty workspace
-            </span>
-            <h2
-              class="font-sans font-medium"
-              style="font-size: 32px; line-height: 1.1; letter-spacing: -0.02em; color: var(--text-primary); margin-bottom: 16px;"
-            >
-              Add your first content unit.
-            </h2>
-            <p
-              class="mb-8"
-              style="font-size: 14px; line-height: 1.6; color: var(--text-secondary);"
-            >
-              Docs become the building blocks of flows — sequenced context Claude reads in order.
-              Start with one doc, add more, then compose them.
-            </p>
-            <form id="new-doc-form-empty">
-              <button
-                type="submit"
-                class="inline-flex items-center justify-center h-10 px-5 font-medium transition-[background] rounded select-none"
-                style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border-radius: var(--radius-md);"
-              >
-                Create document
-              </button>
-            </form>
-          </div>
+    ) : (
+      <>
+        <div class="co-section-title">
+          <h3>Docs</h3>
+          <span class="co-count">{docs.length} {docs.length === 1 ? 'item' : 'items'}</span>
         </div>
-      ) : (
-        <ul style="border-top: 1px solid var(--border-subtle);">
+        <div class="co-list">
+          <div class="co-lr head">
+            <span></span>
+            <span>NAME</span>
+            <span>TYPE</span>
+            <span>UPDATED</span>
+            <span></span>
+          </div>
           {docs.map((d) => {
             const unread = unreadByDoc.get(d.id) ?? 0;
+            const ext = d.type === 'engineering' ? 'eng' : d.type === 'instruction' ? 'inst' : d.type === 'snippet' ? 'snip' : 'md';
             return (
-              <li style="border-bottom: 1px solid var(--border-subtle);">
-                <a
-                  href={`/app/content/${d.id}`}
-                  class="flex items-center h-14 px-3 transition-[background]"
-                  style="color: var(--text-primary);"
-                  onmouseover="this.style.background='var(--surface-overlay)'"
-                  onmouseout="this.style.background='transparent'"
-                >
-                  <div class="flex items-center gap-2 flex-shrink-0">
-                    {unread > 0 && (
-                      <span
-                        title={`${unread} unread comment${unread === 1 ? '' : 's'}`}
-                        style="width: 6px; height: 6px; border-radius: 50%; background: var(--status-info); flex-shrink: 0;"
-                      />
-                    )}
-                    <span style="font-size: 14px; font-weight: 500;">{d.title || 'Untitled'}</span>
+              <a href={`/app/content/${d.id}`} class="co-lr">
+                <div class={`co-file-ico ${ext}`}>
+                  <div class="sheet">
+                    <div class="sheet::before"></div>
                   </div>
-                  <span
-                    class="ml-3 font-mono uppercase"
-                    style="font-size: 10px; letter-spacing: 0.08em; color: var(--text-tertiary); padding: 2px 6px; background: var(--surface-overlay); border-radius: var(--radius-sm);"
-                  >
-                    {d.type ?? 'doc'}
-                  </span>
-                  <span
-                    class="flex-1 mx-4 truncate"
-                    style="font-size: 13px; color: var(--text-tertiary);"
-                  >
-                    —
-                  </span>
-                  <span
-                    class="flex-shrink-0"
-                    style="font-size: 12px; color: var(--text-tertiary);"
-                  >
-                    {relativeTime(d.updated_at)}
-                  </span>
-                </a>
-              </li>
+                  <div class="ext">{ext.toUpperCase().slice(0, 3)}</div>
+                </div>
+                <span class="co-nm">
+                  {unread > 0 && <span class="co-unread" title={`${unread} unread`}></span>}
+                  <span class="co-name">{d.title || 'Untitled'}</span>
+                </span>
+                <span class="co-type">{d.type ?? 'doc'}</span>
+                <span class="co-dt">{relativeTime(d.updated_at)}</span>
+                <span></span>
+              </a>
             );
           })}
-        </ul>
-      )}
-    </div>
+        </div>
+      </>
+    )}
   </div>
 
   <script>
@@ -216,21 +277,15 @@ function relativeTime(dateStr: string): string {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: 'Untitled', type }),
       });
-      if (!res.ok) {
-        alert('Failed to create doc');
-        return;
-      }
+      if (!res.ok) { alert('Failed to create doc'); return; }
       const { doc } = (await res.json()) as { doc: { id: string } };
       window.location.href = `/app/content/${doc.id}`;
     }
-
     document.getElementById('new-doc-form')?.addEventListener('submit', (e) => {
-      e.preventDefault();
-      void createDoc();
+      e.preventDefault(); void createDoc();
     });
     document.getElementById('new-doc-form-empty')?.addEventListener('submit', (e) => {
-      e.preventDefault();
-      void createDoc();
+      e.preventDefault(); void createDoc();
     });
   </script>
 </AppLayout>

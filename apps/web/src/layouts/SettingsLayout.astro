@@ -1,48 +1,245 @@
 ---
 import BaseLayout from './BaseLayout.astro';
-import { SettingsNav } from '../components/settings/SettingsNav';
 
 interface Props {
   title: string;
+  workspaceName?: string;
 }
 
-const { title } = Astro.props;
+const { title, workspaceName: wsProp } = Astro.props;
 
 const auth = Astro.locals.auth;
 if (!auth) {
   return Astro.redirect('/auth/login');
 }
+
+const domainPart = auth.email.split('@')[1]?.split('.')[0] ?? '';
+const workspaceName = wsProp ?? (domainPart
+  ? domainPart.charAt(0).toUpperCase() + domainPart.slice(1)
+  : 'Workspace');
+const userInitial = (auth.email[0] ?? 'U').toUpperCase();
+
+const currentPath = Astro.url.pathname;
+
+const NAV_SECTIONS = [
+  {
+    label: 'Workspace',
+    items: [
+      { href: '/app/settings/workspace', label: 'Workspace' },
+      { href: '/app/settings/members', label: 'Members' },
+    ],
+  },
+  {
+    label: 'Account',
+    items: [
+      { href: '/app/settings/account', label: 'Account' },
+      { href: '/app/settings/billing', label: 'Billing' },
+    ],
+  },
+];
 ---
 
 <BaseLayout title={`${title} · Settings · Mnema`}>
-  <div class="flex min-h-screen" style="background: var(--surface-base);">
-    <aside
-      class="w-52 py-6 px-3 flex flex-col flex-shrink-0"
-      style="border-right: 1px solid var(--border-subtle); background: var(--surface-base);"
-    >
-      <a
-        href="/app"
-        class="block px-2 py-1.5 mb-4 transition-colors"
-        style="font-size: 12px; color: var(--text-tertiary);"
-        onmouseover="this.style.color='var(--text-primary)'"
-        onmouseout="this.style.color='var(--text-tertiary)'"
-      >
-        ← Back to docs
-      </a>
-      <SettingsNav client:load currentPath={Astro.url.pathname} />
-      <div
-        class="mt-auto px-2 pt-4"
-        style="font-size: 11px; color: var(--text-quaternary); border-top: 1px solid var(--border-subtle);"
-      >
-        Signed in as<br />
-        <span style="color: var(--text-tertiary);">{auth.email}</span>
+  <style is:global>
+    :root {
+      --topbar-h: 44px;
+      --status-h: 26px;
+      --sidebar-w: 220px;
+    }
+
+    .st-shell {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      grid-template-rows: var(--topbar-h) 1fr var(--status-h);
+      grid-template-areas:
+        "st-topbar st-topbar"
+        "st-sidebar st-main"
+        "st-status st-status";
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* TOPBAR */
+    .st-topbar {
+      grid-area: st-topbar;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+    }
+    .st-tb-left { display: flex; align-items: center; gap: 10px; }
+    .st-brand {
+      display: inline-flex; align-items: center; gap: 8px;
+      font: 600 13px/1 var(--sans); color: var(--ink); text-decoration: none;
+    }
+    .st-glyph {
+      width: 22px; height: 22px; border-radius: 6px;
+      background: var(--ink); color: var(--on-ink);
+      display: inline-flex; align-items: center; justify-content: center;
+      font: 500 14px/1 var(--sans); padding-bottom: 1px; position: relative;
+    }
+    .st-glyph::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit;
+      background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%);
+    }
+    .st-tb-div { width: 1px; height: 16px; background: var(--line-strong); flex-shrink: 0; }
+    .st-crumbs {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      gap: 6px; font: 500 12px/1 var(--sans); color: var(--ink-muted);
+    }
+    .st-crumbs .st-here { color: var(--ink); font-weight: 600; }
+    .st-crumbs .st-sep { color: var(--ink-faint); font-size: 9px; }
+    .st-tb-right { display: flex; align-items: center; gap: 3px; }
+    .st-icon-btn {
+      width: 26px; height: 26px; border-radius: 5px;
+      background: transparent; border: 0; color: var(--ink-muted); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
+    }
+    .st-icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+    .st-user-chip {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),0.95), rgba(255,122,138,0.95));
+      color: var(--on-ink); font: 700 10.5px/1 var(--sans);
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; margin-left: 4px; text-decoration: none;
+    }
+
+    /* SIDEBAR */
+    .st-sidebar {
+      grid-area: st-sidebar;
+      background: var(--surface);
+      border-right: 1px solid var(--line);
+      overflow-y: auto;
+      padding: 14px 10px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .st-sb-back {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 8px; border-radius: 5px;
+      font: 500 11.5px/1 var(--sans); color: var(--ink-muted);
+      text-decoration: none; margin-bottom: 4px;
+    }
+    .st-sb-back:hover { background: var(--surface-2); color: var(--ink); }
+    .st-sb-section h6 {
+      margin: 0 0 4px; padding: 0 8px;
+      font: 500 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted);
+    }
+    .st-sb-list { display: flex; flex-direction: column; gap: 1px; }
+    .st-sb-item {
+      display: flex; align-items: center; padding: 6px 8px; border-radius: 5px;
+      cursor: pointer; color: var(--ink-soft); font: 500 12px/1 var(--sans);
+      text-decoration: none; position: relative;
+    }
+    .st-sb-item:hover { background: var(--surface-2); color: var(--ink); }
+    .st-sb-item.active { background: var(--surface-2); color: var(--ink); }
+    .st-sb-item.active::before {
+      content: ""; position: absolute; left: 0; top: 6px; bottom: 6px;
+      width: 2px; background: var(--accent); border-radius: 2px;
+    }
+
+    /* MAIN */
+    .st-main {
+      grid-area: st-main;
+      overflow-y: auto;
+      background: var(--canvas);
+    }
+    .st-main-wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 40px 80px;
+    }
+
+    /* STATUS BAR */
+    .st-statusbar {
+      grid-area: st-status;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 14px;
+      background: var(--surface);
+      border-top: 1px solid var(--line);
+      font: 500 11px/1 var(--mono);
+      letter-spacing: 0.02em; color: var(--ink-muted);
+    }
+    .st-sb-left, .st-sb-right { display: flex; align-items: center; gap: 14px; }
+    .st-sb-sig {
+      width: 6px; height: 6px; border-radius: 50%; background: #6BE39B;
+      box-shadow: 0 0 5px rgba(107,227,155,0.5);
+      animation: st-pulse 2s ease-in-out infinite;
+    }
+    @keyframes st-pulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(107,227,155,0.55); }
+      50% { box-shadow: 0 0 0 4px rgba(107,227,155,0); }
+    }
+    .st-sb-sep { width: 1px; height: 12px; background: var(--line); }
+  </style>
+
+  <div class="st-shell">
+
+    <!-- TOPBAR -->
+    <header class="st-topbar">
+      <div class="st-tb-left">
+        <a href="/app/content" class="st-brand">
+          <span class="st-glyph">μ</span>
+          <span>Mnema</span>
+        </a>
+        <span class="st-tb-div"></span>
+        <button class="st-icon-btn" type="button" style="width:auto;padding:3px 7px;gap:6px;font:500 12px/1 var(--sans);color:var(--ink);">
+          <span style="width:14px;height:14px;border-radius:3px;background:linear-gradient(135deg,#7C9CFF,#C8A2FF);color:white;font:700 8.5px/1 var(--sans);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">{workspaceName[0]?.toUpperCase() ?? 'W'}</span>
+          {workspaceName}
+        </button>
       </div>
+      <div class="st-crumbs">
+        <span>Settings</span>
+        <svg class="st-sep" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>
+        <span class="st-here">{title}</span>
+      </div>
+      <div class="st-tb-right">
+        <a href="/app/content" class="st-icon-btn" title="Back to app">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
+        </a>
+        <a href="/auth/logout" class="st-user-chip" title="Account">{userInitial}</a>
+      </div>
+    </header>
+
+    <!-- SIDEBAR -->
+    <aside class="st-sidebar">
+      {NAV_SECTIONS.map((section) => (
+        <div class="st-sb-section">
+          <h6>{section.label}</h6>
+          <div class="st-sb-list">
+            {section.items.map((item) => {
+              const isActive = currentPath === item.href || currentPath.startsWith(`${item.href}/`);
+              return (
+                <a href={item.href} class={`st-sb-item${isActive ? ' active' : ''}`}>
+                  {item.label}
+                </a>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </aside>
 
-    <main class="flex-1 py-8 px-12">
-      <div style="max-width: 640px;">
+    <!-- MAIN CONTENT -->
+    <main class="st-main">
+      <div class="st-main-wrap">
         <slot />
       </div>
     </main>
+
+    <!-- STATUS BAR -->
+    <footer class="st-statusbar">
+      <div class="st-sb-left">
+        <span style="display:flex;align-items:center;gap:6px;">
+          <span class="st-sb-sig"></span>
+          MCP live
+        </span>
+        <span class="st-sb-sep"></span>
+        <span style="color:var(--ink-soft);">{auth.email}</span>
+      </div>
+      <div class="st-sb-right">
+        <span>Settings</span>
+      </div>
+    </footer>
+
   </div>
 </BaseLayout>

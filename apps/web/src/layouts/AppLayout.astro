@@ -1,40 +1,19 @@
 ---
 import BaseLayout from './BaseLayout.astro';
 import { Sidebar } from '../components/app/Sidebar';
-import { ThemeToggle } from '../components/theme/ThemeToggle';
-import { WorkspaceSwitcher } from '../components/nav/WorkspaceSwitcher';
-
-/**
- * Phase 5 app shell.
- *
- * Wraps in-app pages (content list, flows, connections, future surfaces)
- * in a topbar + new three-section sidebar (Content / Flows / Connections)
- * + main content slot.
- *
- * The editor page (/app/content/[id]) intentionally does NOT use this
- * layout — it has its own custom chrome that fills the viewport edge-to-
- * edge for collaboration. This layout is for the "dashboard" pages.
- *
- * Auth: pages that use AppLayout must already have asserted Astro.locals.auth
- * in their frontmatter. We don't re-check here so the layout stays
- * synchronous and presentational.
- */
 
 interface Props {
   title: string;
-  /** Workspace name displayed in the top of the sidebar. */
   workspaceName?: string;
-  /** Email shown in the topbar — pass through from Astro.locals.auth. */
   email?: string;
+  hasToolbar?: boolean;
 }
 
-const { title, workspaceName = 'Workspace', email } = Astro.props;
+const { title, workspaceName = 'Workspace', email, hasToolbar = false } = Astro.props;
 const pathname = Astro.url.pathname + Astro.url.search;
 const auth = Astro.locals.auth;
+const userInitial = (email?.[0] ?? auth?.email?.[0] ?? 'U').toUpperCase();
 
-// Fetch type counts at SSR so the sidebar can hide filter chips for
-// types the workspace doesn't have. Best-effort: a fetch failure just
-// hides all filter chips, which is a reasonable degraded state.
 const apiUrl =
   (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
 let typeCounts: Record<string, number> = {};
@@ -48,49 +27,248 @@ if (auth) {
       typeCounts = body.counts ?? {};
     }
   } catch {
-    // API offline — render sidebar without filter chips.
+    /* API offline */
   }
 }
 ---
 
 <BaseLayout title={title}>
-  <!-- Topbar -->
-  <header
-    class="h-12 flex items-center px-4 flex-shrink-0"
-    style="border-bottom: 1px solid var(--border-subtle); background: var(--surface-base);"
-  >
-    <span style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-right: 16px;">
-      Mnema
-    </span>
-    {auth && (
-      <WorkspaceSwitcher client:load currentWorkspaceId={auth.tenant_id} />
-    )}
-    <div class="flex items-center gap-3 ml-auto">
-      <ThemeToggle client:load />
-      {email && (
-        <span style="font-size: 12px; color: var(--text-tertiary);">{email}</span>
-      )}
-      <a
-        href="/auth/logout"
-        style="font-size: 12px; color: var(--text-tertiary);"
-        class="transition-colors"
-        onmouseover="this.style.color='var(--text-primary)'"
-        onmouseout="this.style.color='var(--text-tertiary)'"
-      >
-        Sign out
-      </a>
-    </div>
-  </header>
+  <style is:global>
+    :root {
+      --topbar-h: 44px;
+      --toolbar-h: 44px;
+      --status-h: 26px;
+      --sidebar-w: 220px;
+    }
 
-  <div class="flex" style="height: calc(100vh - 48px);">
-    <Sidebar
-      workspaceName={workspaceName}
-      currentPath={pathname}
-      typeCounts={typeCounts}
-      client:load
-    />
-    <main class="flex-1 overflow-y-auto" style="background: var(--surface-base);">
+    .app-shell {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      grid-template-rows: var(--topbar-h) 1fr var(--status-h);
+      grid-template-areas:
+        "ap-topbar ap-topbar"
+        "ap-sidebar ap-main"
+        "ap-status ap-status";
+      height: 100vh;
+      overflow: hidden;
+    }
+    .app-shell.has-toolbar {
+      grid-template-rows: var(--topbar-h) var(--toolbar-h) 1fr var(--status-h);
+      grid-template-areas:
+        "ap-topbar ap-topbar"
+        "ap-sidebar ap-toolbar"
+        "ap-sidebar ap-main"
+        "ap-status ap-status";
+    }
+
+    /* TOPBAR */
+    .ap-topbar {
+      grid-area: ap-topbar;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 12px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+    }
+    .ap-tb-left { display: flex; align-items: center; gap: 10px; }
+    .ap-brand {
+      display: inline-flex; align-items: center; gap: 8px;
+      font: 600 13px/1 var(--sans); color: var(--ink); text-decoration: none;
+    }
+    .ap-glyph {
+      width: 22px; height: 22px; border-radius: 6px;
+      background: var(--ink); color: var(--on-ink);
+      display: inline-flex; align-items: center; justify-content: center;
+      font: 500 14px/1 var(--sans); padding-bottom: 1px; position: relative;
+    }
+    .ap-glyph::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit;
+      background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%);
+    }
+    .ap-tb-div { width: 1px; height: 16px; background: var(--line-strong); flex-shrink: 0; }
+    .ap-ws-btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 4px 6px 4px 5px; border-radius: 6px;
+      background: transparent; border: 1px solid transparent;
+      cursor: pointer; color: var(--ink); font: 500 12.5px/1 var(--sans);
+    }
+    .ap-ws-btn:hover { background: var(--surface-2); border-color: var(--line); }
+    .ap-ws-av {
+      width: 16px; height: 16px; border-radius: 4px;
+      background: linear-gradient(135deg, #7C9CFF, #C8A2FF);
+      color: white; font: 700 9.5px/1 var(--sans);
+      display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .ap-ws-chev { color: var(--ink-muted); }
+    .ap-search {
+      flex: 0 1 420px; min-width: 180px; position: relative;
+    }
+    .ap-search svg {
+      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+      width: 12px; height: 12px; color: var(--ink-muted); pointer-events: none;
+    }
+    .ap-search input {
+      width: 100%; padding: 6px 52px 6px 30px; border-radius: 6px;
+      background: var(--surface-2); color: var(--ink);
+      border: 1px solid transparent; outline: none;
+      font: 400 12.5px/1 var(--sans);
+    }
+    .ap-search input:focus { border-color: var(--accent-line); background: var(--surface); }
+    .ap-search input::placeholder { color: var(--ink-muted); }
+    .ap-kbd {
+      position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+      display: inline-flex; gap: 2px;
+    }
+    .ap-kbd kbd {
+      font: 500 10px/1 var(--sans); padding: 2px 5px; border-radius: 3px;
+      background: var(--surface); border: 1px solid var(--line); color: var(--ink-muted);
+    }
+    .ap-tb-right { display: flex; align-items: center; gap: 3px; }
+    .ap-icon-btn {
+      width: 26px; height: 26px; border-radius: 5px;
+      background: transparent; border: 0; color: var(--ink-muted); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      text-decoration: none; position: relative;
+    }
+    .ap-icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+    .ap-user-chip {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),0.95), rgba(255,122,138,0.95));
+      color: var(--on-ink); font: 700 10.5px/1 var(--sans);
+      display: inline-flex; align-items: center; justify-content: center;
+      cursor: pointer; margin-left: 4px; text-decoration: none;
+    }
+
+    /* SIDEBAR */
+    .ap-sidebar {
+      grid-area: ap-sidebar;
+      background: var(--surface);
+      border-right: 1px solid var(--line);
+      overflow-y: auto;
+      display: flex; flex-direction: column;
+    }
+
+    /* TOOLBAR */
+    .ap-toolbar {
+      grid-area: ap-toolbar;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+    }
+
+    /* MAIN */
+    .ap-main {
+      grid-area: ap-main;
+      overflow-y: auto;
+      background: var(--canvas);
+    }
+
+    /* STATUS BAR */
+    .ap-statusbar {
+      grid-area: ap-status;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 14px;
+      background: var(--surface);
+      border-top: 1px solid var(--line);
+      font: 500 11px/1 var(--mono);
+      letter-spacing: 0.02em; color: var(--ink-muted);
+    }
+    .ap-sb-left, .ap-sb-right { display: flex; align-items: center; gap: 14px; }
+    .ap-sb-item { display: flex; align-items: center; gap: 6px; }
+    .ap-sb-sep { width: 1px; height: 12px; background: var(--line); }
+    .ap-sb-sig {
+      width: 6px; height: 6px; border-radius: 50%; background: #6BE39B;
+      box-shadow: 0 0 5px rgba(107,227,155,0.5);
+      animation: ap-pulse 2s ease-in-out infinite;
+    }
+    @keyframes ap-pulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(107,227,155,0.55); }
+      50% { box-shadow: 0 0 0 4px rgba(107,227,155,0); }
+    }
+    .ap-sb-v { color: var(--ink); }
+
+    /* Sidebar React component reset — override its own layout assumptions */
+    .ap-sidebar > aside { width: 100% !important; height: 100% !important; }
+  </style>
+
+  <div class={`app-shell${hasToolbar ? ' has-toolbar' : ''}`}>
+
+    <!-- TOPBAR -->
+    <header class="ap-topbar">
+      <div class="ap-tb-left">
+        <a href="/app/content" class="ap-brand">
+          <span class="ap-glyph">μ</span>
+          <span>Mnema</span>
+        </a>
+        <span class="ap-tb-div"></span>
+        <button class="ap-ws-btn" type="button">
+          <span class="ap-ws-av">{workspaceName[0]?.toUpperCase() ?? 'W'}</span>
+          <span>{workspaceName}</span>
+          <svg class="ap-ws-chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      </div>
+
+      <div class="ap-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>
+        </svg>
+        <input placeholder="Search docs, flows, connections…" />
+        <span class="ap-kbd"><kbd>⌘</kbd><kbd>K</kbd></span>
+      </div>
+
+      <div class="ap-tb-right">
+        <button class="ap-icon-btn" title="Invite members">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+        </button>
+        <a href="/app/settings" class="ap-icon-btn" title="Settings">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </a>
+        <a href="/auth/logout" class="ap-user-chip" title="Account">{userInitial}</a>
+      </div>
+    </header>
+
+    <!-- SIDEBAR -->
+    <aside class="ap-sidebar">
+      <Sidebar
+        workspaceName={workspaceName}
+        currentPath={pathname}
+        typeCounts={typeCounts}
+        client:load
+      />
+    </aside>
+
+    <!-- TOOLBAR (shown only when hasToolbar=true) -->
+    {hasToolbar && (
+      <div class="ap-toolbar">
+        <slot name="toolbar" />
+      </div>
+    )}
+
+    <!-- MAIN CONTENT -->
+    <main class="ap-main">
       <slot />
     </main>
+
+    <!-- STATUS BAR -->
+    <footer class="ap-statusbar">
+      <div class="ap-sb-left">
+        <span class="ap-sb-item">
+          <span class="ap-sb-sig"></span>
+          MCP live
+        </span>
+        <span class="ap-sb-sep"></span>
+        <slot name="status-left" />
+      </div>
+      <div class="ap-sb-right">
+        <slot name="status-right" />
+        {email && (
+          <>
+            <span class="ap-sb-sep"></span>
+            <span class="ap-sb-item" style="color:var(--ink-soft);">{email}</span>
+          </>
+        )}
+      </div>
+    </footer>
+
   </div>
 </BaseLayout>
