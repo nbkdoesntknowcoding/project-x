@@ -67,16 +67,29 @@ function relativeTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString();
 }
 
-// Derive workspace name from email domain for display
 const domainPart = auth.email.split('@')[1]?.split('.')[0] ?? '';
 const workspaceName = domainPart
   ? domainPart.charAt(0).toUpperCase() + domainPart.slice(1)
   : 'Workspace';
+
+function extClass(type: string): string {
+  return type === 'engineering' ? 'eng'
+    : type === 'instruction' ? 'inst'
+    : type === 'snippet' ? 'snip'
+    : 'md';
+}
+function extLabel(type: string): string {
+  return type === 'engineering' ? 'ENG'
+    : type === 'instruction' ? 'INST'
+    : type === 'snippet' ? 'SNIP'
+    : 'MD';
+}
 ---
 
 <style>
   .co-main { padding: 14px 24px 80px; }
 
+  /* SECTION TITLE */
   .co-section-title {
     display: flex; align-items: baseline; justify-content: space-between;
     margin: 10px 4px 12px;
@@ -87,11 +100,106 @@ const workspaceName = domainPart
   }
   .co-section-title .co-count { font: 500 11px/1 var(--mono); color: var(--ink-muted); }
 
+  /* VIEW TOGGLE */
+  .co-wrap.view-icons .co-list { display: none; }
+  .co-wrap.view-list .co-icon-grid { display: none; }
+
+  /* ICON GRID */
+  .co-icon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+    margin-bottom: 24px;
+  }
+  .co-tile {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 6px;
+    padding: 12px 6px 10px;
+    border-radius: 9px;
+    cursor: default;
+    user-select: none;
+    position: relative;
+    text-decoration: none;
+  }
+  .co-tile:hover { background: var(--surface-2); }
+  .co-tile .ico-wrap {
+    height: 78px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .co-tile .t-name {
+    font: 500 12.5px/1.25 var(--sans);
+    color: var(--ink);
+    text-align: center;
+    max-width: 100%;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    word-break: break-word;
+    padding: 0 4px;
+  }
+  .co-tile .t-meta {
+    font: 500 10.5px/1 var(--sans);
+    color: var(--ink-muted);
+    letter-spacing: 0.02em;
+  }
+
+  /* LARGE FILE ICON */
+  .co-fi {
+    width: 56px; height: 68px;
+    position: relative;
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.4));
+  }
+  .co-fi .sheet {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, #FBFBFA, #DBDBD7);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .co-fi .sheet::before {
+    content: ""; position: absolute; top: 0; right: 0;
+    width: 16px; height: 16px;
+    background: linear-gradient(225deg, rgba(0,0,0,0.18) 50%, transparent 50%);
+    border-bottom-left-radius: 4px;
+  }
+  .co-fi .sheet::after {
+    content: ""; position: absolute; top: 0; right: 0;
+    width: 16px; height: 16px;
+    background: linear-gradient(135deg, transparent 50%, #C7C7C2 50%);
+    border-bottom-left-radius: 4px;
+  }
+  .co-fi .lines {
+    position: absolute; left: 7px; right: 7px; top: 24px;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .co-fi .lines i {
+    height: 2px; background: rgba(10,11,13,0.18); border-radius: 1px;
+    display: block;
+  }
+  .co-fi .lines i:nth-child(2) { width: 72%; }
+  .co-fi .lines i:nth-child(3) { width: 90%; }
+  .co-fi .lines i:nth-child(4) { width: 60%; }
+  .co-fi .lines i:nth-child(5) { width: 82%; }
+  .co-fi .ext-tag {
+    position: absolute; bottom: 6px; left: -3px; right: -3px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 3px 0;
+    border-radius: 3px;
+    font: 700 9px/1 var(--sans);
+    color: white;
+    letter-spacing: 0.08em;
+  }
+  .co-fi.md .ext-tag  { background: linear-gradient(180deg, #1E1F23, #0E0F12); color: var(--accent); }
+  .co-fi.eng .ext-tag { background: linear-gradient(180deg, #7C9CFF, #4A67D9); }
+  .co-fi.inst .ext-tag { background: linear-gradient(180deg, #FFB370, #FF7A8A); color: var(--on-ink); }
+  .co-fi.snip .ext-tag { background: linear-gradient(180deg, #6BE39B, #2B9B9B); color: var(--on-ink); }
+
   /* LIST VIEW */
   .co-list { display: flex; flex-direction: column; }
   .co-lr {
     display: grid;
-    grid-template-columns: 24px minmax(0,1fr) 100px 80px 28px;
+    grid-template-columns: 28px minmax(0,1fr) 90px 80px 28px;
     align-items: center; padding: 7px 10px; border-radius: 6px;
     font: 400 12.5px/1 var(--sans); gap: 12px; text-decoration: none; color: var(--ink);
   }
@@ -101,19 +209,23 @@ const workspaceName = domainPart
     padding: 8px 10px; border-bottom: 1px solid var(--line); border-radius: 0;
   }
   .co-lr:not(.head):hover { background: var(--surface-2); }
+  .co-lr .co-ic {
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+  }
   .co-lr .co-nm { color: var(--ink); display: flex; align-items: center; gap: 6px; min-width: 0; }
   .co-lr .co-nm .co-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .co-lr .co-type {
     font: 500 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
     color: var(--ink-muted); padding: 2px 6px;
-    background: var(--surface-2); border-radius: 4px;
+    background: var(--surface-2); border-radius: 4px; white-space: nowrap;
   }
   .co-lr .co-dt { color: var(--ink-muted); font-size: 12px; }
   .co-lr .co-unread {
     width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0;
   }
 
-  /* FILE ICON (small, inline) */
+  /* SMALL FILE ICON (list view) */
   .co-file-ico {
     width: 18px; height: 22px; position: relative; flex-shrink: 0;
   }
@@ -133,11 +245,10 @@ const workspaceName = domainPart
     padding: 2px 0; border-radius: 2px;
     font: 700 6px/1 var(--sans); color: white; letter-spacing: 0.04em;
   }
-  .co-file-ico.md .ext { background: linear-gradient(180deg, #1E1F23, #0E0F12); color: var(--accent); }
-  .co-file-ico.doc .ext { background: linear-gradient(180deg, #2B7CD3, #1B4E91); }
+  .co-file-ico.md .ext   { background: linear-gradient(180deg, #1E1F23, #0E0F12); color: var(--accent); }
+  .co-file-ico.eng .ext  { background: linear-gradient(180deg, #7C9CFF, #4A67D9); }
   .co-file-ico.inst .ext { background: linear-gradient(180deg, #FFB370, #FF7A8A); color: var(--on-ink); }
   .co-file-ico.snip .ext { background: linear-gradient(180deg, #6BE39B, #2B9B9B); color: var(--on-ink); }
-  .co-file-ico.eng .ext { background: linear-gradient(180deg, #7C9CFF, #C8A2FF); }
 
   /* EMPTY STATE */
   .co-empty {
@@ -180,11 +291,11 @@ const workspaceName = domainPart
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
       <div id="co-view-seg" style="display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:2px;">
-        <button data-view="list" style="width:28px;height:22px;border:0;background:var(--canvas);border-radius:4px;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;" title="List view">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-        </button>
-        <button data-view="icons" style="width:28px;height:22px;border:0;background:transparent;border-radius:4px;color:var(--ink-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;" title="Icon view">
+        <button data-view="icons" style="width:28px;height:22px;border:0;background:var(--canvas);border-radius:4px;color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;" title="Icon view">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        </button>
+        <button data-view="list" style="width:28px;height:22px;border:0;background:transparent;border-radius:4px;color:var(--ink-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;" title="List view">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
         </button>
       </div>
       <form id="new-doc-form" style="display:flex;align-items:center;gap:6px;">
@@ -226,11 +337,37 @@ const workspaceName = domainPart
         </form>
       </div>
     ) : (
-      <>
+      <div class="co-wrap view-icons" id="co-wrap">
         <div class="co-section-title">
           <h3>Docs</h3>
           <span class="co-count">{docs.length} {docs.length === 1 ? 'item' : 'items'}</span>
         </div>
+
+        <!-- ICON GRID -->
+        <div class="co-icon-grid">
+          {docs.map((d) => {
+            const ext = extClass(d.type);
+            const label = extLabel(d.type);
+            return (
+              <a href={`/app/content/${d.id}`} class="co-tile">
+                <div class="ico-wrap">
+                  <div class={`co-fi ${ext}`}>
+                    <div class="sheet">
+                      <div class="lines">
+                        <i></i><i></i><i></i><i></i><i></i>
+                      </div>
+                    </div>
+                    <div class="ext-tag">{label}</div>
+                  </div>
+                </div>
+                <div class="t-name">{d.title || 'Untitled'}</div>
+                <div class="t-meta">{relativeTime(d.updated_at)}</div>
+              </a>
+            );
+          })}
+        </div>
+
+        <!-- LIST VIEW -->
         <div class="co-list">
           <div class="co-lr head">
             <span></span>
@@ -241,14 +378,15 @@ const workspaceName = domainPart
           </div>
           {docs.map((d) => {
             const unread = unreadByDoc.get(d.id) ?? 0;
-            const ext = d.type === 'engineering' ? 'eng' : d.type === 'instruction' ? 'inst' : d.type === 'snippet' ? 'snip' : 'md';
+            const ext = extClass(d.type);
+            const label = extLabel(d.type);
             return (
               <a href={`/app/content/${d.id}`} class="co-lr">
-                <div class={`co-file-ico ${ext}`}>
-                  <div class="sheet">
-                    <div class="sheet::before"></div>
+                <div class="co-ic">
+                  <div class={`co-file-ico ${ext}`}>
+                    <div class="sheet"></div>
+                    <div class="ext">{label}</div>
                   </div>
-                  <div class="ext">{ext.toUpperCase().slice(0, 3)}</div>
                 </div>
                 <span class="co-nm">
                   {unread > 0 && <span class="co-unread" title={`${unread} unread`}></span>}
@@ -261,7 +399,7 @@ const workspaceName = domainPart
             );
           })}
         </div>
-      </>
+      </div>
     )}
   </div>
 
@@ -286,6 +424,22 @@ const workspaceName = domainPart
     });
     document.getElementById('new-doc-form-empty')?.addEventListener('submit', (e) => {
       e.preventDefault(); void createDoc();
+    });
+
+    // View toggle
+    const coViewSeg = document.getElementById('co-view-seg');
+    const coWrap = document.getElementById('co-wrap');
+    coViewSeg?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('button[data-view]') as HTMLButtonElement | null;
+      if (!btn || !coWrap) return;
+      const v = btn.dataset.view!;
+      coWrap.classList.remove('view-icons', 'view-list');
+      coWrap.classList.add('view-' + v);
+      coViewSeg.querySelectorAll('button').forEach((b) => {
+        const isActive = (b as HTMLButtonElement).dataset.view === v;
+        (b as HTMLElement).style.background = isActive ? 'var(--canvas)' : 'transparent';
+        (b as HTMLElement).style.color = isActive ? 'var(--ink)' : 'var(--ink-muted)';
+      });
     });
   </script>
 </AppLayout>
