@@ -1,8 +1,8 @@
 @import 'tailwindcss';
+@import './tokens.css';
 
 /* =========================================================================
-   Mnema design tokens — monochrome dark-first
-   Phase 4.5 design overhaul. Full replacement of previous token system.
+   FONT FACES — self-hosted
    ========================================================================= */
 
 @font-face {
@@ -35,9 +35,6 @@
   font-weight: 500;
   font-display: swap;
 }
-
-/* Instrument Serif — display only. Hero headlines + stat-tile numerics.
-   NEVER use in app UI. Self-hosted from Google Fonts. */
 @font-face {
   font-family: 'Instrument Serif';
   src: url('/fonts/instrument-serif/InstrumentSerif-Regular.woff2') format('woff2');
@@ -53,215 +50,13 @@
   font-display: swap;
 }
 
-:root {
-  /* -----------------------------------------------------------------------
-     SURFACE — pure black void, depth from barely-perceptible steps.
-     Phase 4.5.1: #000 base so radial glows read as actual light sources.
-     ----------------------------------------------------------------------- */
-  --surface-base:         #000000;
-  --surface-overlay:      #0a0a0a;   /* one step — cards, sidebars */
-  --surface-elevated:     #141414;   /* two steps — modals, popovers */
-  --surface-sunken:       #000000;   /* equal to base; inset shadow does the work */
-
-  /* Borders — slightly more present to read on pure black */
-  --border-subtle:        #1a1a1a;
-  --border-default:       #2a2a2a;
-  --border-strong:        #3a3a3a;
-  --border-focus:         #5a5a5a;
-
-  /* -----------------------------------------------------------------------
-     TEXT — five steps, +brightness for pure-black background.
-     ----------------------------------------------------------------------- */
-  --text-primary:         #fafafa;   /* brighter than f4f4f5 — needed on #000 */
-  --text-secondary:       #a1a1aa;
-  --text-tertiary:        #71717a;
-  --text-quaternary:      #52525b;
-  --text-inverse:         #000000;
-
-  /* -----------------------------------------------------------------------
-     AMBIENT LIGHT — tokens for RadialGlow component.
-     Phase 4.5.1: new; used ONLY in RadialGlow, never for decoration.
-     ----------------------------------------------------------------------- */
-  --glow-color-warm:      rgba(255, 245, 235, 0.04);
-  --glow-color-neutral:   rgba(255, 255, 255, 0.05);
-  --glow-color-soft:      rgba(255, 255, 255, 0.025);
-
-  /* -----------------------------------------------------------------------
-     STATUS — reserved for status meaning only. Never decoration.
-     ----------------------------------------------------------------------- */
-  --status-success:       #4ade80;
-  --status-success-bg:    rgba(74, 222, 128, 0.08);
-  --status-warning:       #fbbf24;
-  --status-warning-bg:    rgba(251, 191, 36, 0.08);
-  --status-error:         #f87171;
-  --status-error-bg:      rgba(248, 113, 113, 0.08);
-  --status-info:          #60a5fa;
-  --status-info-bg:       rgba(96, 165, 250, 0.08);
-
-  /* -----------------------------------------------------------------------
-     INTERACTIVE — white-on-black for primary. No accent hue.
-     ----------------------------------------------------------------------- */
-  --interactive-primary:         #fafafa;
-  --interactive-primary-fg:      #000000;
-  --interactive-primary-hover:   #ffffff;
-  --interactive-secondary:       #2a2a2a;
-  --interactive-secondary-hover: #3a3a3a;
-  --interactive-ghost-hover:     #1c1c1c;
-
-  --selection-bg: rgba(244, 244, 245, 0.15);
-
-  /* -----------------------------------------------------------------------
-     TYPOGRAPHY
-     ----------------------------------------------------------------------- */
-  --font-display: 'Instrument Serif', 'Iowan Old Style', 'Apple Garamond', Georgia, serif;
-  --font-sans:    'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono:    'Geist Mono', 'JetBrains Mono', 'SF Mono', Menlo, monospace;
-
-  /* Display sizes — for Instrument Serif headlines */
-  --display-sm:  40px;
-  --display-md:  56px;
-  --display-lg:  72px;
-  --display-xl:  96px;
-
-  --text-12:  12px;
-  --text-13:  13px;
-  --text-14:  14px;
-  --text-15:  15px;
-  --text-16:  16px;
-  --text-18:  18px;
-  --text-22:  22px;
-  --text-28:  28px;
-  --text-36:  36px;
-  --text-56:  56px;
-
-  --weight-regular:  400;
-  --weight-medium:   500;
-  --weight-semibold: 600;
-
-  --leading-tight:   1.15;
-  --leading-snug:    1.3;
-  --leading-normal:  1.5;
-  --leading-relaxed: 1.65;
-
-  --tracking-tight:  -0.02em;
-  --tracking-normal: 0;
-  --tracking-wide:   0.04em;
-  --tracking-mono:   -0.01em;
-
-  /* -----------------------------------------------------------------------
-     SPACING — 4px base
-     ----------------------------------------------------------------------- */
-  --space-1:  4px;
-  --space-2:  8px;
-  --space-3:  12px;
-  --space-4:  16px;
-  --space-5:  20px;
-  --space-6:  24px;
-  --space-8:  32px;
-  --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
-  --space-20: 80px;
-  --space-24: 96px;
-  --space-32: 128px;
-
-  /* -----------------------------------------------------------------------
-     RADII — small. No pill buttons, no rounded-2xl cards.
-     ----------------------------------------------------------------------- */
-  --radius-sm:   4px;
-  --radius-md:   6px;
-  --radius-lg:   8px;
-  --radius-xl:   12px;
-  --radius-full: 9999px;
-
-  /* -----------------------------------------------------------------------
-     SHADOW — dark-first, used sparingly
-     ----------------------------------------------------------------------- */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
-
-  /* -----------------------------------------------------------------------
-     MOTION
-     ----------------------------------------------------------------------- */
-  --duration-fast: 120ms;
-  --duration-base: 180ms;
-  --duration-slow: 260ms;
-  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in-out:   cubic-bezier(0.65, 0, 0.35, 1);
-
-  --focus-ring: 0 0 0 2px var(--surface-base), 0 0 0 4px var(--border-focus);
-
-  /* -----------------------------------------------------------------------
-     CHART — restrained warm palette for data viz ONLY.
-     Never use these for buttons, links, or decoration.
-     ----------------------------------------------------------------------- */
-  --chart-primary:   #e8e4d8;
-  --chart-secondary: #6b6862;
-  --chart-tertiary:  #3a3833;
-  --chart-axis:      #2a2a2a;
-  --chart-label:     #71717a;
-}
-
-/* =========================================================================
-   LIGHT MODE
-   ========================================================================= */
-:root[data-theme="light"] {
-  --surface-base:         #fafafa;
-  --surface-overlay:      #f4f4f5;
-  --surface-elevated:     #ffffff;
-  --surface-sunken:       #e4e4e7;
-
-  --border-subtle:        #e4e4e7;
-  --border-default:       #d4d4d8;
-  --border-strong:        #a1a1aa;
-  --border-focus:         #71717a;
-
-  --text-primary:         #09090b;
-  --text-secondary:       #52525b;
-  --text-tertiary:        #71717a;
-  --text-quaternary:      #a1a1aa;
-  --text-inverse:         #fafafa;
-
-  /* In light mode, ambient glow becomes a barely-visible soft shadow vibe */
-  --glow-color-warm:      rgba(0, 0, 0, 0.03);
-  --glow-color-neutral:   rgba(0, 0, 0, 0.02);
-  --glow-color-soft:      rgba(0, 0, 0, 0.01);
-
-  --status-success:       #16a34a;
-  --status-success-bg:    rgba(22, 163, 74, 0.08);
-  --status-warning:       #d97706;
-  --status-warning-bg:    rgba(217, 119, 6, 0.08);
-  --status-error:         #dc2626;
-  --status-error-bg:      rgba(220, 38, 38, 0.08);
-  --status-info:          #2563eb;
-  --status-info-bg:       rgba(37, 99, 235, 0.08);
-
-  --interactive-primary:         #09090b;
-  --interactive-primary-fg:      #fafafa;
-  --interactive-primary-hover:   #18181b;
-  --interactive-secondary:       #e4e4e7;
-  --interactive-secondary-hover: #d4d4d8;
-  --interactive-ghost-hover:     #f4f4f5;
-
-  --selection-bg: rgba(9, 9, 11, 0.1);
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.12);
-
-  --chart-primary:   #18181b;
-  --chart-secondary: #71717a;
-  --chart-tertiary:  #d4d4d8;
-  --chart-axis:      #d4d4d8;
-  --chart-label:     #71717a;
-}
-
 /* =========================================================================
    BASE
    ========================================================================= */
+* { box-sizing: border-box; }
+
 html {
-  background: var(--surface-base);
+  background: var(--canvas);
   color-scheme: dark;
 }
 
@@ -270,15 +65,17 @@ html[data-theme="light"] {
 }
 
 body {
-  font-family: var(--font-sans);
-  font-size: var(--text-14);
-  font-weight: var(--weight-regular);
-  line-height: var(--leading-normal);
-  color: var(--text-primary);
-  background: var(--surface-base);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--canvas);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  font-feature-settings: 'ss01' 1, 'cv11' 1;
+  transition: background-color 240ms ease, color 240ms ease;
 }
 
 ::selection {
@@ -286,7 +83,18 @@ body {
 }
 
 code, pre, kbd, samp, .font-mono {
-  font-family: var(--font-mono);
+  font-family: var(--mono);
   font-feature-settings: 'ss01' 1, 'cv11' 1;
   letter-spacing: var(--tracking-mono);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 0;
 }
