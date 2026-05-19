@@ -1,6 +1,6 @@
 ---
 import type { DocFull } from '@boppl/shared';
-import BaseLayout from '../../../layouts/BaseLayout.astro';
+import DocLayout from '../../../layouts/DocLayout.astro';
 import { DocPage } from '../../../components/editor/DocPage';
 
 const auth = Astro.locals.auth;
@@ -29,18 +29,11 @@ if (!response.ok) {
 const { doc } = (await response.json()) as { doc: DocFull };
 ---
 
-<BaseLayout title={doc.title || 'Untitled'}>
-  <a
-    href="/app/content"
-    class="fixed top-4 left-6 text-base z-10 hover:underline"
-    style="color: var(--text-tertiary);"
-  >
-    ← Docs
-  </a>
+<DocLayout title={doc.title || 'Untitled'} docType={doc.type} email={auth.email}>
   <DocPage
     initialDoc={doc}
     jwt={auth.jwt}
     user={{ id: auth.user_id, email: auth.email }}
     client:only="react"
   />
-</BaseLayout>
+</DocLayout>

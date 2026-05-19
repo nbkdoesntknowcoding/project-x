@@ -1,28 +1,8 @@
-import {
-  ChevronDown,
-  Code,
-  CreditCard,
-  FileText,
-  HardDrive,
-  Hash,
-  MessageSquare,
-  Plug,
-  Settings,
-  Users,
-  Workflow,
-} from 'lucide-react';
-import { MonoLabel } from '../ui/typography';
-import { SidebarItem } from './SidebarItem';
+import './sidebar.css';
 
 interface Props {
   workspaceName: string;
-  /** The current URL pathname — drives the active highlight server-side. */
   currentPath: string;
-  /**
-   * Per-type doc counts. Filter chips (Engineering / Instructions / Snippets)
-   * only render for types that have at least one doc — keeps the sidebar
-   * honest about what's in the workspace right now.
-   */
   typeCounts?: {
     doc?: number;
     engineering?: number;
@@ -31,156 +11,160 @@ interface Props {
   };
 }
 
-/**
- * Phase 5 in-app sidebar.
- *
- * Three labeled regions (not collapsible accordions — they're sections),
- * each preceded by a MonoLabel header:
- *
- *   CONTENT     all docs, plus optional type filters
- *   FLOWS       all flows (empty placeholder until Phase 6 ships)
- *   CONNECTIONS Claude (live), Google Drive (Phase 10 placeholder)
- *
- * Plus a footer group with Settings / Members / Billing.
- *
- * The IA is the load-bearing change for Phase 5 — Content lives next to
- * Flows lives next to Connections, signaling that Mnema is a context
- * engine, not a doc editor with an MCP plugin.
- */
-export function Sidebar({ workspaceName, currentPath, typeCounts = {} }: Props) {
-  // Active resolver. The doc editor lives under /app/content/<id> so we
-  // highlight "All docs" for any /app/content/* path that isn't a typed view.
+export function Sidebar({ currentPath, typeCounts = {} }: Props) {
+  const typeParam = currentPath.includes('?')
+    ? new URLSearchParams(currentPath.split('?')[1]).get('type')
+    : null;
+
   const isOnContent =
     currentPath === '/app/content' || currentPath.startsWith('/app/content');
-  const typeParam = new URLSearchParams(
-    currentPath.includes('?') ? currentPath.split('?')[1] : '',
-  ).get('type');
+  const isOnFlows = currentPath.startsWith('/app/flows');
+  const isOnClaude = currentPath === '/app/connections/claude';
+  const isOnDrive = currentPath === '/app/connections/drive';
 
   const showEng = (typeCounts.engineering ?? 0) > 0;
   const showInst = (typeCounts.instruction ?? 0) > 0;
   const showSnip = (typeCounts.snippet ?? 0) > 0;
 
+  const totalDocs =
+    (typeCounts.doc ?? 0) +
+    (typeCounts.engineering ?? 0) +
+    (typeCounts.instruction ?? 0) +
+    (typeCounts.snippet ?? 0);
+
   return (
-    <aside
-      className="w-60 h-screen flex flex-col flex-shrink-0"
-      style={{
-        background: 'var(--surface-base)',
-        borderRight: '1px solid var(--border-subtle)',
-      }}
-    >
-      {/* Workspace switcher row */}
-      <div
-        className="px-3 h-12 flex items-center"
-        style={{ borderBottom: '1px solid var(--border-subtle)' }}
-      >
-        <button
-          type="button"
-          className="flex items-center gap-2 text-[14px] font-medium"
-          style={{ color: 'var(--text-primary)' }}
+    <aside className="sb-aside">
+
+      {/* ── CONTENT ──────────────────────────────── */}
+      <div className="sb-section">
+        <div className="sb-section-head"><span>Content</span></div>
+
+        <a
+          href="/app/content"
+          className={`sb-row${isOnContent && !typeParam ? ' active' : ''}`}
         >
-          <span className="truncate max-w-[160px]">{workspaceName}</span>
-          <ChevronDown size={14} style={{ color: 'var(--text-tertiary)' }} />
-        </button>
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </span>
+            <span className="sb-label">All docs</span>
+          </span>
+          {totalDocs > 0 && <span className="sb-count">{totalDocs}</span>}
+        </a>
+
+        {showEng && (
+          <a
+            href="/app/content?type=engineering"
+            className={`sb-row indent-1${typeParam === 'engineering' ? ' active' : ''}`}
+          >
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+                </svg>
+              </span>
+              <span className="sb-label">Engineering</span>
+            </span>
+            <span className="sb-count">{typeCounts.engineering}</span>
+          </a>
+        )}
+
+        {showInst && (
+          <a
+            href="/app/content?type=instruction"
+            className={`sb-row indent-1${typeParam === 'instruction' ? ' active' : ''}`}
+          >
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+              </span>
+              <span className="sb-label">Instructions</span>
+            </span>
+            <span className="sb-count">{typeCounts.instruction}</span>
+          </a>
+        )}
+
+        {showSnip && (
+          <a
+            href="/app/content?type=snippet"
+            className={`sb-row indent-1${typeParam === 'snippet' ? ' active' : ''}`}
+          >
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="10" x2="14" y2="10"/><line x1="4" y1="14" x2="18" y2="14"/><line x1="4" y1="18" x2="12" y2="18"/>
+                </svg>
+              </span>
+              <span className="sb-label">Snippets</span>
+            </span>
+            <span className="sb-count">{typeCounts.snippet}</span>
+          </a>
+        )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-6">
-        {/* === CONTENT === */}
-        <section>
-          <div className="px-2 mb-2">
-            <MonoLabel>Content</MonoLabel>
-          </div>
-          <SidebarItem
-            icon={<FileText size={14} />}
-            label="All docs"
-            href="/app/content"
-            active={isOnContent && !typeParam}
-          />
-          {showEng && (
-            <SidebarItem
-              icon={<Code size={14} />}
-              label="Engineering"
-              href="/app/content?type=engineering"
-              indent
-              active={typeParam === 'engineering'}
-            />
-          )}
-          {showInst && (
-            <SidebarItem
-              icon={<MessageSquare size={14} />}
-              label="Instructions"
-              href="/app/content?type=instruction"
-              indent
-              active={typeParam === 'instruction'}
-            />
-          )}
-          {showSnip && (
-            <SidebarItem
-              icon={<Hash size={14} />}
-              label="Snippets"
-              href="/app/content?type=snippet"
-              indent
-              active={typeParam === 'snippet'}
-            />
-          )}
-        </section>
+      {/* ── FLOWS ────────────────────────────────── */}
+      <div className="sb-section">
+        <div className="sb-section-head"><span>Flows</span></div>
 
-        {/* === FLOWS === */}
-        <section>
-          <div className="px-2 mb-2">
-            <MonoLabel>Flows</MonoLabel>
-          </div>
-          <SidebarItem
-            icon={<Workflow size={14} />}
-            label="All flows"
-            href="/app/flows"
-            active={currentPath.startsWith('/app/flows')}
-          />
-        </section>
-
-        {/* === CONNECTIONS === */}
-        <section>
-          <div className="px-2 mb-2">
-            <MonoLabel>Connections</MonoLabel>
-          </div>
-          <SidebarItem
-            icon={<Plug size={14} />}
-            label="Claude"
-            href="/app/connections/claude"
-            active={currentPath === '/app/connections/claude'}
-          />
-          <SidebarItem
-            icon={<HardDrive size={14} />}
-            label="Google Drive"
-            href="/app/connections/drive"
-            active={currentPath === '/app/connections/drive'}
-          />
-        </section>
-      </nav>
-
-      {/* Footer — admin items */}
-      <div
-        className="py-2 px-2"
-        style={{ borderTop: '1px solid var(--border-subtle)' }}
-      >
-        <SidebarItem
-          icon={<Settings size={14} />}
-          label="Settings"
-          href="/app/settings"
-          active={currentPath === '/app/settings'}
-        />
-        <SidebarItem
-          icon={<Users size={14} />}
-          label="Members"
-          href="/app/settings/members"
-          active={currentPath === '/app/settings/members'}
-        />
-        <SidebarItem
-          icon={<CreditCard size={14} />}
-          label="Billing"
-          href="/app/settings/billing"
-          active={currentPath === '/app/settings/billing'}
-        />
+        <a
+          href="/app/flows"
+          className={`sb-row${isOnFlows ? ' active' : ''}`}
+        >
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="15" y="15" width="6" height="6" rx="1"/>
+                <path d="M6 9v3a3 3 0 0 0 3 3h3M15 6h-3"/><path d="M18 15v-3"/>
+              </svg>
+            </span>
+            <span className="sb-label">All flows</span>
+          </span>
+        </a>
       </div>
+
+      {/* ── CONNECTIONS ──────────────────────────── */}
+      <div className="sb-section">
+        <div className="sb-section-head"><span>Connections</span></div>
+
+        <a
+          href="/app/connections/claude"
+          className={`sb-row${isOnClaude ? ' active' : ''}`}
+        >
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/>
+              </svg>
+            </span>
+            <span className="sb-label">Claude</span>
+          </span>
+        </a>
+
+        <a
+          href="/app/connections/drive"
+          className={`sb-row${isOnDrive ? ' active' : ''}`}
+        >
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+              </svg>
+            </span>
+            <span className="sb-label">Google Drive</span>
+          </span>
+        </a>
+      </div>
+
+      {/* ── FOOTER ───────────────────────────────── */}
+      <div className="sb-foot">
+        <span>MCP usage</span>
+        <span><span className="sb-v">—</span></span>
+      </div>
+
     </aside>
   );
 }

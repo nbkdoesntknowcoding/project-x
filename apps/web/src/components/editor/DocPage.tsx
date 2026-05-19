@@ -198,7 +198,7 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
       <div
         className="fixed flex items-center gap-1"
         style={{
-          bottom: 24,
+          bottom: 50,
           right: 24,
           zIndex: 50,
           background: 'var(--surface-elevated)',
