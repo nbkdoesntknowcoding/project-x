@@ -4,8 +4,8 @@
     {
       "name": "boppl-web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@boppl/web", "dev"],
-      "port": 5173
+      "runtimeArgs": ["--filter", "@boppl/web", "dev", "--", "--port", "5175"],
+      "port": 5175
     }
   ]
 }
