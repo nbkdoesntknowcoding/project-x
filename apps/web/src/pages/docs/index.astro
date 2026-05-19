@@ -76,6 +76,34 @@ import PublicLayout from '../../layouts/PublicLayout.astro';
           <path d="M5 12h14M12 5l7 7-7 7"/>
         </svg>
       </a>
+
+      <a
+        href="/docs/flows"
+        class="group flex items-start justify-between p-6 rounded-lg transition-[background] block"
+        style="background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);"
+        onmouseover="this.style.background='var(--surface-elevated)'"
+        onmouseout="this.style.background='var(--surface-overlay)'"
+      >
+        <div>
+          <h3 style="font-size: 16px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">
+            Flows
+          </h3>
+          <p style="font-size: 14px; color: var(--text-secondary);">
+            What a flow is, how Claude calls one, when to use one. (Editor ships next release.)
+          </p>
+        </div>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--text-tertiary)"
+          stroke-width="1.5"
+          style="flex-shrink: 0; margin-top: 4px; margin-left: 16px;"
+        >
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </a>
     </nav>
   </section>
 </PublicLayout>

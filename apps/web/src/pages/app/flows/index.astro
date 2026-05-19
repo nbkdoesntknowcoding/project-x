@@ -1,0 +1,198 @@
+---
+import AppLayout from '../../../layouts/AppLayout.astro';
+import { MonoLabel } from '../../../components/ui/typography';
+import { StatusPill } from '../../../components/ui/StatusPill';
+import { Workflow } from 'lucide-react';
+
+const auth = Astro.locals.auth;
+if (!auth) {
+  return Astro.redirect('/auth/login');
+}
+
+const apiUrl = (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+
+// Phase 6.1: flows are real now. Load the list at SSR time and either show
+// the populated list view or fall through to the original empty state.
+interface FlowSummary {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  is_published: boolean;
+  has_unpublished_changes: boolean;
+  step_count: number;
+}
+
+let flows: FlowSummary[] = [];
+let loadError = false;
+try {
+  const res = await fetch(`${apiUrl}/api/flows`, {
+    headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+  });
+  if (res.ok) {
+    const body = (await res.json()) as { flows: FlowSummary[] };
+    flows = body.flows;
+  } else {
+    loadError = true;
+  }
+} catch {
+  loadError = true;
+}
+---
+
+<AppLayout title="Flows — Mnema" workspaceName="Workspace" email={auth.email}>
+  <div class="max-w-3xl mx-auto px-8 py-12">
+    <div class="mb-12">
+      <div class="mb-3">
+        <MonoLabel>Flows</MonoLabel>
+      </div>
+      <h1
+        class="font-sans font-medium"
+        style="font-size: 28px; line-height: 1.2; letter-spacing: -0.01em; color: var(--text-primary); margin-bottom: 12px;"
+      >
+        Compose context for your AI agents.
+      </h1>
+      <p
+        class="max-w-xl"
+        style="font-size: 15px; line-height: 1.65; color: var(--text-secondary);"
+      >
+        A flow is a sequence of content units — docs, instructions, snippets — that an AI agent
+        reads in order. Each step has an instruction. Claude pulls them one at a time, reasoning
+        through your context in the order you specified, not all at once.
+      </p>
+    </div>
+
+    {flows.length === 0 ? (
+      <!-- Empty state — Phase 5 layout, retained for workspaces without any flows -->
+      <div
+        class="relative overflow-hidden"
+        style="background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 48px; text-align: center;"
+      >
+        <div
+          aria-hidden="true"
+          style="position: absolute; inset: 0; pointer-events: none; z-index: 0; background-image: radial-gradient(circle at 50% 0%, var(--glow-color-soft), transparent 50%); opacity: 0.7;"
+        />
+        <div class="relative" style="z-index: 2;">
+          <div
+            class="inline-flex items-center justify-center mb-6"
+            style="width: 48px; height: 48px; border-radius: var(--radius-md); background: var(--surface-elevated); border: 1px solid var(--border-subtle);"
+          >
+            <Workflow size={20} style={{ color: 'var(--text-tertiary)' }} client:load />
+          </div>
+          <h2 style="font-size: 16px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+            No flows yet
+          </h2>
+          <p
+            class="max-w-md mx-auto mb-6"
+            style="font-size: 13px; line-height: 1.65; color: var(--text-secondary);"
+          >
+            Flows let you control exactly how Claude reads your workspace. Build one by sequencing
+            docs and adding instructions for each step.
+          </p>
+          <div
+            class="inline-flex items-center gap-2 px-3 py-1.5"
+            style="background: var(--surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);"
+          >
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--status-info); display: inline-block;"></span>
+            <span
+              class="font-mono uppercase"
+              style="font-size: 11px; letter-spacing: 0.06em; color: var(--text-secondary);"
+            >
+              Flow editor — coming in next release
+            </span>
+          </div>
+        </div>
+      </div>
+    ) : (
+      <!-- Populated list. Cards link to /app/flows/:slug — the canvas page lands in 6.2. -->
+      <ul class="space-y-2 list-none">
+        {flows.map((flow) => (
+          <li>
+            <a
+              href={`/app/flows/${flow.slug}`}
+              class="flex items-start justify-between p-4 transition-colors"
+              style="background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); color: var(--text-primary);"
+              onmouseover="this.style.borderColor='var(--border-default)'"
+              onmouseout="this.style.borderColor='var(--border-subtle)'"
+            >
+              <div class="min-w-0">
+                <div style="font-size: 14px; font-weight: 500; color: var(--text-primary);">
+                  {flow.name}
+                </div>
+                {flow.description && (
+                  <div class="mt-0.5" style="font-size: 13px; color: var(--text-tertiary);">
+                    {flow.description}
+                  </div>
+                )}
+              </div>
+              <div class="flex items-center gap-3 flex-shrink-0 ml-4">
+                <span
+                  class="font-mono uppercase"
+                  style="font-size: 11px; letter-spacing: 0.06em; color: var(--text-tertiary);"
+                >
+                  {flow.step_count} {flow.step_count === 1 ? 'step' : 'steps'}
+                </span>
+                {flow.has_unpublished_changes && (
+                  <StatusPill tone="warning">Draft changes</StatusPill>
+                )}
+                {flow.is_published && !flow.has_unpublished_changes && (
+                  <StatusPill tone="success">Published</StatusPill>
+                )}
+                {!flow.is_published && !flow.has_unpublished_changes && (
+                  <StatusPill tone="neutral">Draft</StatusPill>
+                )}
+              </div>
+            </a>
+          </li>
+        ))}
+      </ul>
+    )}
+
+    {loadError && (
+      <div
+        class="mt-6 p-3"
+        style="background: var(--status-error-bg); border: 1px solid var(--status-error); border-radius: var(--radius-md);"
+      >
+        <p style="font-size: 13px; color: var(--status-error);">
+          Couldn't load flows from the API. The list above may be empty even if you have flows.
+        </p>
+      </div>
+    )}
+
+    <!-- How flows will work — retained from Phase 5 -->
+    <section class="mt-16">
+      <div class="mb-4">
+        <MonoLabel>How flows will work</MonoLabel>
+      </div>
+      <div class="grid md:grid-cols-3 gap-6">
+        <div>
+          <h3 style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+            Sequence content
+          </h3>
+          <p style="font-size: 13px; line-height: 1.55; color: var(--text-secondary);">
+            Drag docs from your workspace into a sequence. Reorder steps. Each step is one
+            chunk of context.
+          </p>
+        </div>
+        <div>
+          <h3 style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+            Annotate each step
+          </h3>
+          <p style="font-size: 13px; line-height: 1.55; color: var(--text-secondary);">
+            Add an instruction before each doc. Tell Claude how to read it, what to look for,
+            what to do next.
+          </p>
+        </div>
+        <div>
+          <h3 style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+            Claude reads in order
+          </h3>
+          <p style="font-size: 13px; line-height: 1.55; color: var(--text-secondary);">
+            Each flow exposes its steps as MCP tools. Claude calls them one at a time,
+            reasoning between each.
+          </p>
+        </div>
+      </div>
+    </section>
+  </div>
+</AppLayout>

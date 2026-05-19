@@ -54,7 +54,7 @@ import PublicLayout from '../../layouts/PublicLayout.astro';
               Click "Add custom connector" and paste your Mnema workspace URL. You can find it in{' '}
               <span style="color: var(--text-primary);">Mnema → Settings → Workspace</span>. It looks like{' '}
               <code
-                style="font-family: var(--font-mono); font-size: 13px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 2px 6px; color: var(--text-primary);"
+                style="font-family: var(--font-mono); font-size: 12px; background: var(--surface-sunken); border-radius: var(--radius-sm); padding: 2px 6px; color: var(--text-primary);"
               >
                 https://api.mnema.app/mcp
               </code>.
@@ -109,9 +109,11 @@ import PublicLayout from '../../layouts/PublicLayout.astro';
       </h3>
       <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
         When you authorize, you grant Claude <span style="color: var(--text-primary);">docs:read</span> permission
-        — which lets it search and read docs in your workspace, but not edit them. Write access
-        (<span style="color: var(--text-primary);">docs:write</span>) is a separate scope you can grant later
-        if you want Claude to draft and update docs directly.
+        — which lets it search and read docs in your workspace. It also lets Claude discover and walk
+        your <a href="/docs/flows" style="color: var(--text-primary);" class="underline">flows</a>
+        (sequenced content for structured context delivery). Write access
+        (<span style="color: var(--text-primary);">docs:write</span>) is a separate scope for letting
+        Claude draft and update docs directly.
       </p>
     </div>
   </article>

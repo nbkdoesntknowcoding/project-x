@@ -1,0 +1,135 @@
+---
+import { MonoLabel } from '../ui/typography';
+import { StatusPill } from '../ui/StatusPill';
+
+/**
+ * ProductMockup — static, illustrative HTML/CSS frame that shows the three
+ * surfaces a Mnema user actually touches: the doc list, the editor canvas,
+ * and the Claude conversation panel.
+ *
+ * This is intentionally NOT a live preview of /app — it's a deliberately
+ * stylized screenshot-as-component sitting in the landing hero so the
+ * marketing page actually shows the product instead of just describing it.
+ *
+ * Phase 4.5.2.
+ */
+---
+
+<div class="relative max-w-6xl mx-auto px-6">
+  <div
+    class="grid overflow-hidden"
+    style="
+      aspect-ratio: 16 / 10;
+      background: var(--surface-overlay);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-xl);
+      box-shadow: 0 24px 60px -20px rgba(0,0,0,0.6), 0 0 0 1px var(--border-subtle);
+      grid-template-columns: 200px 1fr 320px;
+    "
+  >
+    {/* ===== LEFT RAIL — doc list ===== */}
+    <aside
+      class="p-3 flex flex-col gap-1"
+      style="background: var(--surface-base); border-right: 1px solid var(--border-subtle);"
+    >
+      <div class="px-2 py-1.5 mb-2">
+        <MonoLabel>Workspace</MonoLabel>
+      </div>
+      <div
+        class="px-2 py-1.5"
+        style="background: var(--surface-overlay); color: var(--text-primary); font-size: 13px; border-radius: var(--radius-sm);"
+      >
+        Architecture
+      </div>
+      <div class="px-2 py-1.5" style="color: var(--text-tertiary); font-size: 13px;">
+        Pricing strategy
+      </div>
+      <div class="px-2 py-1.5" style="color: var(--text-tertiary); font-size: 13px;">
+        Onboarding flow
+      </div>
+      <div class="px-2 py-1.5" style="color: var(--text-tertiary); font-size: 13px;">
+        Q3 planning
+      </div>
+    </aside>
+
+    {/* ===== CENTER — editor ===== */}
+    <main class="p-8 overflow-hidden">
+      <div class="flex items-center justify-between mb-6">
+        <div style="font-size: 13px; color: var(--text-tertiary);">Architecture</div>
+        <StatusPill tone="success">Synced</StatusPill>
+      </div>
+      <h1
+        class="mb-6"
+        style="font-size: 24px; font-weight: 500; color: var(--text-primary); letter-spacing: -0.01em;"
+      >
+        How Mnema syncs
+      </h1>
+      <p
+        class="mb-4"
+        style="font-size: 14px; line-height: 1.65; color: var(--text-primary);"
+      >
+        Every edit is captured by Yjs and broadcast through Hocuspocus to all
+        connected clients within 50ms. Persistence flushes to Postgres on a
+        3-second debounce, batching rapid edits without losing intermediate
+        state.
+      </p>
+      <h2
+        class="mt-8 mb-3"
+        style="font-size: 16px; font-weight: 500; color: var(--text-primary);"
+      >
+        MCP read path
+      </h2>
+      <p style="font-size: 14px; line-height: 1.65; color: var(--text-secondary);">
+        Claude calls
+        <code
+          class="font-mono"
+          style="font-size: 12px; padding: 1px 6px; background: var(--surface-sunken); color: var(--text-primary); border-radius: var(--radius-sm);"
+        >
+          get_doc
+        </code>
+        on the MCP server, which returns the markdown of the doc as it exists
+        right now.
+      </p>
+    </main>
+
+    {/* ===== RIGHT RAIL — Claude conversation ===== */}
+    <aside
+      class="p-4 flex flex-col gap-4"
+      style="background: var(--surface-base); border-left: 1px solid var(--border-subtle);"
+    >
+      <div class="flex items-center gap-2">
+        <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--status-success);"></div>
+        <MonoLabel>Claude · connected</MonoLabel>
+      </div>
+      <div
+        class="p-3"
+        style="font-size: 13px; color: var(--text-primary); background: var(--surface-overlay); border-radius: var(--radius-md);"
+      >
+        How long does a doc edit take to reach Claude?
+      </div>
+      <div style="font-size: 13px; line-height: 1.65; color: var(--text-secondary);">
+        Edits propagate in under 50ms through your MCP connector. From
+        <span
+          style="color: var(--text-primary); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 2px;"
+        >
+          Architecture · How Mnema syncs
+        </span>:
+        Yjs broadcasts to all clients, then persistence flushes to Postgres on a
+        3-second debounce.
+      </div>
+      <div
+        class="mt-auto font-mono"
+        style="font-size: 11px; color: var(--text-tertiary);"
+      >
+        Reading from your workspace · 1 doc
+      </div>
+    </aside>
+  </div>
+
+  {/* Mono caption below the mockup */}
+  <div class="text-center mt-6">
+    <MonoLabel className="text-[var(--text-quaternary)]">
+      Editor · Sync · Claude — same source, all live
+    </MonoLabel>
+  </div>
+</div>

@@ -1,0 +1,84 @@
+---
+import { MonoLabel } from '../ui/typography';
+
+/**
+ * FlowMockup — static, illustrative HTML/CSS frame of the flow editor.
+ *
+ * Three vertically stacked step cards connected by thin lines, each with a
+ * step number, title, and an italic instruction line. Same role as
+ * ProductMockup: a screenshot-as-component that lets the marketing page
+ * show the product idea before the editor actually exists.
+ *
+ * Phase 5 — Phase 6 replaces this with a recording of the real flow
+ * editor. The shape stays the same.
+ */
+---
+
+<div class="relative">
+  <div class="mb-4">
+    <MonoLabel>Flow · Engineering onboarding</MonoLabel>
+  </div>
+
+  <ol class="space-y-3 list-none">
+    {[
+      {
+        n: '01',
+        title: 'Architecture overview',
+        instruction: 'Read this first to understand the system shape.',
+      },
+      {
+        n: '02',
+        title: 'Code conventions',
+        instruction: 'Reference these conventions for any code change.',
+      },
+      {
+        n: '03',
+        title: 'Active tickets',
+        instruction: 'Address these issues before suggesting new work.',
+      },
+    ].map((step, i, arr) => (
+      <li class="relative">
+        <div
+          class="relative flex items-start gap-4 overflow-hidden"
+          style="background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 14px 16px;"
+        >
+          <div
+            class="flex-shrink-0 flex items-center justify-center font-mono font-medium"
+            style="width: 32px; height: 32px; border-radius: var(--radius-sm); background: var(--surface-elevated); border: 1px solid var(--border-default); font-size: 12px; color: var(--text-primary);"
+          >
+            {step.n}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div style="font-size: 14px; font-weight: 500; color: var(--text-primary);">
+              {step.title}
+            </div>
+            <div
+              style="font-size: 12px; line-height: 1.55; color: var(--text-tertiary); font-style: italic; margin-top: 4px;"
+            >
+              {step.instruction}
+            </div>
+          </div>
+          <div
+            class="font-mono uppercase flex-shrink-0"
+            style="font-size: 10px; letter-spacing: 0.06em; color: var(--text-tertiary); padding: 3px 8px; background: var(--surface-elevated); border-radius: var(--radius-sm); align-self: center;"
+          >
+            doc
+          </div>
+        </div>
+        {i < arr.length - 1 && (
+          <div class="relative h-3 flex items-center justify-start" style="padding-left: 30px;">
+            <div
+              aria-hidden="true"
+              style="width: 1px; height: 100%; background: var(--border-default);"
+            />
+          </div>
+        )}
+      </li>
+    ))}
+  </ol>
+
+  <div class="mt-6 flex items-center gap-2 font-mono" style="font-size: 11px; color: var(--text-tertiary);">
+    <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--status-success); display: inline-block;"></span>
+    <span style="letter-spacing: 0.06em;">Exposed to Claude · 3 steps</span>
+  </div>
+</div>

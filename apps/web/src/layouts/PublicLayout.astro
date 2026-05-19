@@ -41,11 +41,15 @@ const { title, description, pathname, ogImage } = Astro.props;
       (function () {
         try {
           var stored = localStorage.getItem('mnema-theme');
-          var resolved = stored === 'light' || stored === 'dark' ? stored : null;
-          if (!resolved) {
-            resolved = window.matchMedia('(prefers-color-scheme: light)').matches
-              ? 'light'
-              : 'dark';
+          var resolved;
+          if (stored === 'light') {
+            resolved = 'light';
+          } else if (stored === 'dark') {
+            resolved = 'dark';
+          } else if (stored === 'system') {
+            resolved = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          } else {
+            resolved = 'dark';
           }
           document.documentElement.setAttribute('data-theme', resolved);
         } catch (e) {

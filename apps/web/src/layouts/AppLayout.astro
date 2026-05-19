@@ -1,0 +1,96 @@
+---
+import BaseLayout from './BaseLayout.astro';
+import { Sidebar } from '../components/app/Sidebar';
+import { ThemeToggle } from '../components/theme/ThemeToggle';
+import { WorkspaceSwitcher } from '../components/nav/WorkspaceSwitcher';
+
+/**
+ * Phase 5 app shell.
+ *
+ * Wraps in-app pages (content list, flows, connections, future surfaces)
+ * in a topbar + new three-section sidebar (Content / Flows / Connections)
+ * + main content slot.
+ *
+ * The editor page (/app/content/[id]) intentionally does NOT use this
+ * layout — it has its own custom chrome that fills the viewport edge-to-
+ * edge for collaboration. This layout is for the "dashboard" pages.
+ *
+ * Auth: pages that use AppLayout must already have asserted Astro.locals.auth
+ * in their frontmatter. We don't re-check here so the layout stays
+ * synchronous and presentational.
+ */
+
+interface Props {
+  title: string;
+  /** Workspace name displayed in the top of the sidebar. */
+  workspaceName?: string;
+  /** Email shown in the topbar — pass through from Astro.locals.auth. */
+  email?: string;
+}
+
+const { title, workspaceName = 'Workspace', email } = Astro.props;
+const pathname = Astro.url.pathname + Astro.url.search;
+const auth = Astro.locals.auth;
+
+// Fetch type counts at SSR so the sidebar can hide filter chips for
+// types the workspace doesn't have. Best-effort: a fetch failure just
+// hides all filter chips, which is a reasonable degraded state.
+const apiUrl =
+  (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+let typeCounts: Record<string, number> = {};
+if (auth) {
+  try {
+    const res = await fetch(`${apiUrl}/api/content/type-counts`, {
+      headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+    });
+    if (res.ok) {
+      const body = (await res.json()) as { counts: Record<string, number> };
+      typeCounts = body.counts ?? {};
+    }
+  } catch {
+    // API offline — render sidebar without filter chips.
+  }
+}
+---
+
+<BaseLayout title={title}>
+  <!-- Topbar -->
+  <header
+    class="h-12 flex items-center px-4 flex-shrink-0"
+    style="border-bottom: 1px solid var(--border-subtle); background: var(--surface-base);"
+  >
+    <span style="font-size: 14px; font-weight: 500; color: var(--text-primary); margin-right: 16px;">
+      Mnema
+    </span>
+    {auth && (
+      <WorkspaceSwitcher client:load currentWorkspaceId={auth.tenant_id} />
+    )}
+    <div class="flex items-center gap-3 ml-auto">
+      <ThemeToggle client:load />
+      {email && (
+        <span style="font-size: 12px; color: var(--text-tertiary);">{email}</span>
+      )}
+      <a
+        href="/auth/logout"
+        style="font-size: 12px; color: var(--text-tertiary);"
+        class="transition-colors"
+        onmouseover="this.style.color='var(--text-primary)'"
+        onmouseout="this.style.color='var(--text-tertiary)'"
+      >
+        Sign out
+      </a>
+    </div>
+  </header>
+
+  <div class="flex" style="height: calc(100vh - 48px);">
+    <Sidebar
+      workspaceName={workspaceName}
+      currentPath={pathname}
+      typeCounts={typeCounts}
+      client:load
+    />
+    <main class="flex-1 overflow-y-auto" style="background: var(--surface-base);">
+      <slot />
+    </main>
+  </div>
+</BaseLayout>

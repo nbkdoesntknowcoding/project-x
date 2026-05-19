@@ -1,0 +1,73 @@
+---
+import AppLayout from '../../../layouts/AppLayout.astro';
+import { MonoLabel } from '../../../components/ui/typography';
+import { HardDrive } from 'lucide-react';
+
+const auth = Astro.locals.auth;
+if (!auth) {
+  return Astro.redirect('/auth/login');
+}
+---
+
+<AppLayout title="Google Drive — Mnema" workspaceName="Workspace" email={auth.email}>
+  <div class="max-w-3xl mx-auto px-8 py-12">
+    <div class="mb-12">
+      <div class="mb-3">
+        <MonoLabel>Connections</MonoLabel>
+      </div>
+      <h1
+        class="font-sans font-medium"
+        style="font-size: 28px; line-height: 1.2; letter-spacing: -0.01em; color: var(--text-primary); margin-bottom: 12px;"
+      >
+        Google Drive
+      </h1>
+      <p
+        class="max-w-xl"
+        style="font-size: 15px; line-height: 1.65; color: var(--text-secondary);"
+      >
+        Sync content from Google Drive directly into your workspace, so Drive-hosted docs
+        become first-class content units in your flows.
+      </p>
+    </div>
+
+    <div
+      class="relative overflow-hidden"
+      style="background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 48px; text-align: center;"
+    >
+      <div
+        aria-hidden="true"
+        style="position: absolute; inset: 0; pointer-events: none; z-index: 0; background-image: radial-gradient(circle at 50% 0%, var(--glow-color-soft), transparent 50%); opacity: 0.7;"
+      />
+      <div class="relative" style="z-index: 2;">
+        <div
+          class="inline-flex items-center justify-center mb-6"
+          style="width: 48px; height: 48px; border-radius: var(--radius-md); background: var(--surface-elevated); border: 1px solid var(--border-subtle);"
+        >
+          <HardDrive size={20} style={{ color: 'var(--text-tertiary)' }} client:load />
+        </div>
+        <h2 style="font-size: 16px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+          Drive sync — coming in a future release
+        </h2>
+        <p
+          class="max-w-md mx-auto mb-6"
+          style="font-size: 13px; line-height: 1.65; color: var(--text-secondary);"
+        >
+          Until then, paste Drive content into a new doc as markdown — Claude can read it
+          through the existing Claude connection.
+        </p>
+        <div
+          class="inline-flex items-center gap-2 px-3 py-1.5"
+          style="background: var(--surface-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);"
+        >
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--text-tertiary); display: inline-block;"></span>
+          <span
+            class="font-mono uppercase"
+            style="font-size: 11px; letter-spacing: 0.06em; color: var(--text-secondary);"
+          >
+            Planned — follows the flow editor
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</AppLayout>

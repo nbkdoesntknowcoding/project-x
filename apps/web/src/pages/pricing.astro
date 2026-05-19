@@ -2,6 +2,7 @@
 import PublicLayout from '../layouts/PublicLayout.astro';
 import { RadialGlow } from '../components/ui/RadialGlow';
 import { NoiseOverlay } from '../components/ui/NoiseOverlay';
+import { StatusPill } from '../components/ui/StatusPill';
 ---
 
 <PublicLayout
@@ -24,8 +25,8 @@ import { NoiseOverlay } from '../components/ui/NoiseOverlay';
       >
         Pricing
       </span>
-      <h1 style="font-family: var(--font-display); font-size: var(--display-sm); line-height: 1.05; letter-spacing: -0.02em; font-weight: 400; color: var(--text-primary); margin-bottom: 16px;">
-        Simple plans. <em style="font-style: italic;">Honest pricing.</em>
+      <h1 class="font-sans font-medium" style="font-size: var(--display-sm); line-height: 1.05; letter-spacing: -0.02em; color: var(--text-primary); margin-bottom: 16px;">
+        Simple plans. Honest pricing.
       </h1>
       <p
         class="max-w-lg mx-auto"
@@ -48,7 +49,7 @@ import { NoiseOverlay } from '../components/ui/NoiseOverlay';
         <p style="font-size: 13px; color: var(--text-tertiary); margin-bottom: 24px;">For trying it out.</p>
 
         <div class="flex items-baseline gap-2 mb-1">
-          <span style="font-family: var(--font-display); font-size: 44px; line-height: 1; color: var(--text-primary);">$0</span>
+          <span class="font-sans font-medium" style="font-size: 44px; line-height: 1; color: var(--text-primary); letter-spacing: -0.02em;">$0</span>
           <span style="font-size: 13px; color: var(--text-tertiary);">forever</span>
         </div>
 
@@ -63,7 +64,7 @@ import { NoiseOverlay } from '../components/ui/NoiseOverlay';
             'Hybrid search',
           ].map(feat => (
             <li class="flex items-center gap-2" style="font-size: 13px; color: var(--text-primary);">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" stroke-width="1.75" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M20 6L9 17l-5-5"/>
               </svg>
               {feat}
@@ -82,26 +83,25 @@ import { NoiseOverlay } from '../components/ui/NoiseOverlay';
         </a>
       </article>
 
-      <!-- Pro — recommended -->
+      <!-- Pro — recommended: elevated surface + soft glow + primary CTA -->
       <article
-        style="position: relative; background: var(--surface-overlay); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); padding: 32px;"
+        class="overflow-hidden"
+        style="position: relative; background: var(--surface-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); padding: 32px;"
       >
-        <!-- RECOMMENDED pill — inside the card, top-right -->
-        <div style="position: absolute; top: 16px; right: 16px;">
-          <span
-            class="inline-flex items-center gap-1.5 px-2 h-5 font-medium"
-            style="font-size: 11px; background: var(--surface-elevated); color: var(--text-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-full);"
-          >
-            <span style="width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block;"></span>
-            RECOMMENDED
-          </span>
+        <!-- Soft RadialGlow scoped to this card -->
+        <RadialGlow cx={50} cy={20} radius={70} tone="soft" intensity={0.6} />
+
+        <!-- RECOMMENDED StatusPill — inside the card, top-right -->
+        <div style="position: absolute; top: 16px; right: 16px; z-index: 2;">
+          <StatusPill tone="neutral">RECOMMENDED</StatusPill>
         </div>
 
+        <div style="position: relative; z-index: 2;">
         <h3 style="font-size: 16px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Pro</h3>
         <p style="font-size: 13px; color: var(--text-tertiary); margin-bottom: 24px;">For small teams.</p>
 
         <div class="flex items-baseline gap-2 mb-1">
-          <span style="font-family: var(--font-display); font-size: 44px; line-height: 1; color: var(--text-primary);">$15</span>
+          <span class="font-sans font-medium" style="font-size: 44px; line-height: 1; color: var(--text-primary); letter-spacing: -0.02em;">$15</span>
           <span style="font-size: 13px; color: var(--text-tertiary);">per seat / month</span>
         </div>
 
@@ -117,7 +117,7 @@ import { NoiseOverlay } from '../components/ui/NoiseOverlay';
             'Email support',
           ].map(feat => (
             <li class="flex items-center gap-2" style="font-size: 13px; color: var(--text-primary);">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" stroke-width="1.75" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M20 6L9 17l-5-5"/>
               </svg>
               {feat}
@@ -134,6 +134,7 @@ import { NoiseOverlay } from '../components/ui/NoiseOverlay';
         >
           Start Pro
         </a>
+        </div>
       </article>
 
       <!-- Team -->
@@ -144,7 +145,7 @@ import { NoiseOverlay } from '../components/ui/NoiseOverlay';
         <p style="font-size: 13px; color: var(--text-tertiary); margin-bottom: 24px;">For growing companies.</p>
 
         <div class="flex items-baseline gap-2 mb-1">
-          <span style="font-family: var(--font-display); font-size: 44px; line-height: 1; color: var(--text-primary);">$25</span>
+          <span class="font-sans font-medium" style="font-size: 44px; line-height: 1; color: var(--text-primary); letter-spacing: -0.02em;">$25</span>
           <span style="font-size: 13px; color: var(--text-tertiary);">per seat / month</span>
         </div>
 
@@ -160,7 +161,7 @@ import { NoiseOverlay } from '../components/ui/NoiseOverlay';
             'SSO (coming soon)',
           ].map(feat => (
             <li class="flex items-center gap-2" style="font-size: 13px; color: var(--text-primary);">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" stroke-width="1.75" aria-hidden="true">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M20 6L9 17l-5-5"/>
               </svg>
               {feat}
@@ -191,7 +192,11 @@ import { NoiseOverlay } from '../components/ui/NoiseOverlay';
     {[
       {
         q: "What's an MCP call?",
-        a: "Every time Claude searches or reads a doc through Mnema, it counts as one call. A normal hour of conversation typically uses 10–30 calls.",
+        a: "Every time Claude searches, reads a doc, or pulls a flow step through Mnema, it counts as one call. A normal hour of conversation typically uses 10–30 calls. Flow-heavy workflows use more — each step in a flow is one call.",
+      },
+      {
+        q: "What are flows?",
+        a: "A flow is a sequence of content steps Claude reads in order, with your instructions between them. Flows let you control how Claude consumes your workspace — instead of dumping everything at once, you sequence the context step by step. The flow editor is in our next release; all plans will include flows.",
       },
       {
         q: "Do I need a paid Claude account?",

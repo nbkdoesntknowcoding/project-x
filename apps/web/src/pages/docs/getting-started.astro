@@ -45,7 +45,7 @@ import PublicLayout from '../../layouts/PublicLayout.astro';
               From <a href="/app" style="color: var(--text-primary);" class="underline">your workspace</a>, click{' '}
               <span style="color: var(--text-primary);">New doc</span>. Give it a title. Start typing — Mnema
               is a live markdown editor. Press{' '}
-              <code style="font-family: var(--font-mono); font-size: 13px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 2px 6px; color: var(--text-primary);">/</code>
+              <code style="font-family: var(--font-mono); font-size: 12px; background: var(--surface-sunken); border-radius: var(--radius-sm); padding: 2px 6px; color: var(--text-primary);">/</code>
               {' '}to insert blocks: headings, code, math, mermaid diagrams.
             </span>
           ),
@@ -78,18 +78,19 @@ import PublicLayout from '../../layouts/PublicLayout.astro';
           body: (
             <span>
               As you type, Mnema suggests how a sentence could continue based on the surrounding doc. Press{' '}
-              <code style="font-family: var(--font-mono); font-size: 13px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 2px 6px; color: var(--text-primary);">Tab</code>
+              <code style="font-family: var(--font-mono); font-size: 12px; background: var(--surface-sunken); border-radius: var(--radius-sm); padding: 2px 6px; color: var(--text-primary);">Tab</code>
               {' '}to accept the suggestion, or just keep typing to dismiss it. Autocomplete is included on Pro and Team plans.
             </span>
           ),
         },
         {
-          heading: 'Connect Claude',
+          heading: 'Connect Claude and (next) build a flow',
           body: (
             <span>
               Open <a href="/docs/connect" style="color: var(--text-primary);" class="underline">Connect to Claude</a> and follow the 30-second setup.
-              Once authorized, Claude can search and read your docs as live context — no copy-paste, no uploads.
-              Edit a doc and Claude sees the change immediately.
+              Once your Claude connector is active, Claude can read every doc in your workspace through MCP.
+              The <a href="/docs/flows" style="color: var(--text-primary);" class="underline">next release adds flows</a> — sequenced content with step-by-step instructions —
+              for when "read everything" isn't precise enough.
             </span>
           ),
         },

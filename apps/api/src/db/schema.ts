@@ -9,6 +9,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  real,
   text,
   timestamp,
   unique,
@@ -149,6 +150,10 @@ export const docs = pgTable(
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     path: text('path').notNull(),
     title: text('title').notNull(),
+    // Phase 5: content type. 'doc' is freeform markdown (existing
+    // contract). The other three are reserved for Phase 8 templated
+    // content. CHECK constraint lives in migration 0005.
+    type: text('type').notNull().default('doc'),
     markdown: text('markdown').notNull().default(''),
     yjsState: bytea('yjs_state').notNull(),
     yjsStateVector: bytea('yjs_state_vector'),
@@ -368,5 +373,112 @@ export const toolAudit = pgTable(
       table.createdAt.desc(),
     ),
     toolIdx: index('tool_audit_tool_idx').on(table.toolName, table.createdAt.desc()),
+  }),
+);
+
+// ============================================================================
+// Phase 6.1 — Flows
+// ============================================================================
+// A flow is a workspace-scoped DAG of content nodes. flow_versions captures
+// each save (draft vs published). flow_nodes + flow_edges hold the graph
+// shape. CHECK constraints and RLS live in migration 0006.
+
+export const flows = pgTable(
+  'flows',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    slug: text('slug').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    // FK to flow_versions(id) added via ALTER in migration 0006 because of
+    // the circular reference (flow_versions.flow_id → flows.id).
+    publishedVersionId: uuid('published_version_id'),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (table) => ({
+    workspaceSlugUnique: unique('flows_workspace_id_slug_key').on(table.workspaceId, table.slug),
+    workspaceIdx: index('flows_workspace_idx').on(table.workspaceId),
+  }),
+);
+
+export const flowVersions = pgTable(
+  'flow_versions',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    flowId: uuid('flow_id')
+      .notNull()
+      .references(() => flows.id, { onDelete: 'cascade' }),
+    versionNumber: integer('version_number').notNull(),
+    isPublished: boolean('is_published').notNull().default(false),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    publishMessage: text('publish_message'),
+  },
+  (table) => ({
+    flowVersionUnique: unique('flow_versions_flow_id_version_number_key').on(
+      table.flowId,
+      table.versionNumber,
+    ),
+    flowIdx: index('flow_versions_flow_idx').on(table.flowId),
+  }),
+);
+
+export const flowNodes = pgTable(
+  'flow_nodes',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    flowVersionId: uuid('flow_version_id')
+      .notNull()
+      .references(() => flowVersions.id, { onDelete: 'cascade' }),
+    // Stable client-issued id (kebab-case). Edges reference this, not `id`.
+    clientNodeId: text('client_node_id').notNull(),
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    positionX: real('position_x').notNull().default(0),
+    positionY: real('position_y').notNull().default(0),
+    data: jsonb('data').notNull().default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    versionClientUnique: unique('flow_nodes_flow_version_id_client_node_id_key').on(
+      table.flowVersionId,
+      table.clientNodeId,
+    ),
+    versionIdx: index('flow_nodes_version_idx').on(table.flowVersionId),
+  }),
+);
+
+export const flowEdges = pgTable(
+  'flow_edges',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    flowVersionId: uuid('flow_version_id')
+      .notNull()
+      .references(() => flowVersions.id, { onDelete: 'cascade' }),
+    fromNodeId: text('from_node_id').notNull(),
+    toNodeId: text('to_node_id').notNull(),
+    fromSocket: text('from_socket').notNull().default('default'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    edgeUnique: unique('flow_edges_unique').on(
+      table.flowVersionId,
+      table.fromNodeId,
+      table.toNodeId,
+      table.fromSocket,
+    ),
+    versionIdx: index('flow_edges_version_idx').on(table.flowVersionId),
+    fromIdx: index('flow_edges_from_idx').on(table.flowVersionId, table.fromNodeId),
+    toIdx: index('flow_edges_to_idx').on(table.flowVersionId, table.toNodeId),
   }),
 );

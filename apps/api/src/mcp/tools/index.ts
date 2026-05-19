@@ -1,7 +1,9 @@
 import type { McpAuthContext } from '../auth.js';
 import { GET_DOC_SECTION_TOOL, getDocSection } from './get-doc-section.js';
 import { GET_DOC_TOOL, getDoc } from './get-doc.js';
+import { GET_FLOW_STEP_TOOL, getFlowStep } from './get-flow-step.js';
 import { LIST_DOCS_TOOL, listDocs } from './list-docs.js';
+import { LIST_FLOWS_TOOL, listFlows } from './list-flows.js';
 import { SEARCH_DOCS_TOOL, searchDocs } from './search-docs.js';
 
 /**
@@ -35,6 +37,12 @@ export const PRODUCTION_TOOLS: readonly ToolDescriptor[] = [
   { spec: LIST_DOCS_TOOL, handler: listDocs },
   { spec: GET_DOC_TOOL, handler: getDoc },
   { spec: GET_DOC_SECTION_TOOL, handler: getDocSection },
+  // Phase 6.1: real flow tools. list_flows returns published flows in the
+  // workspace; get_flow_step walks one step of a published flow per call.
+  // Drafts are deliberately invisible to MCP — only published versions are
+  // walkable.
+  { spec: LIST_FLOWS_TOOL, handler: listFlows },
+  { spec: GET_FLOW_STEP_TOOL, handler: getFlowStep },
 ];
 
 export function listToolSpecs(): McpToolSpec[] {

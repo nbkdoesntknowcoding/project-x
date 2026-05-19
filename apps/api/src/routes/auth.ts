@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { docs, workspaceMembers, workspaces } from '../db/schema.js';
 import { withSystemPrivilege } from '../db/with-system-privilege.js';
+import { seedExampleFlow } from '../services/flow-seed.js';
 import { withTenant } from '../db/with-tenant.js';
 import { signJwt } from '../lib/jwt.js';
 
@@ -207,18 +208,34 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     // Stage 2: seed the welcome doc under the new tenant's GUC. content_hash
     // stays empty; the embeddings worker backfills on the next save.
-    await withTenant(setupResult.workspace.id, async (tx) => {
+    // Capture the returned doc id so the example-flow seed can reference it.
+    const welcomeDocId = await withTenant(setupResult.workspace.id, async (tx) => {
       const yjsState = await markdownToYjsState(WELCOME_TEMPLATE);
-      await tx.insert(docs).values({
-        workspaceId: setupResult.workspace.id,
-        path: 'welcome.md',
-        title: 'Welcome to Mnema',
-        markdown: WELCOME_TEMPLATE,
-        yjsState: Buffer.from(yjsState),
-        contentHash: '',
-        createdBy: req.auth!.sub,
-      });
+      const [inserted] = await tx
+        .insert(docs)
+        .values({
+          workspaceId: setupResult.workspace.id,
+          path: 'welcome.md',
+          title: 'Welcome to Mnema',
+          markdown: WELCOME_TEMPLATE,
+          yjsState: Buffer.from(yjsState),
+          contentHash: '',
+          createdBy: req.auth!.sub,
+        })
+        .returning({ id: docs.id });
+      if (!inserted) throw new Error('welcome_doc_insert_failed');
+      return inserted.id;
     });
+
+    // Stage 2b (Phase 6.1): seed the example flow so every new workspace has
+    // something MCP clients can `list_flows` against from day one. Failure
+    // here is logged but doesn't fail the signup — workspace creation is
+    // the primary contract; the seeded flow is convenience.
+    try {
+      await seedExampleFlow(setupResult.workspace.id, req.auth!.sub, welcomeDocId);
+    } catch (err) {
+      req.log.warn({ err, workspace_id: setupResult.workspace.id }, 'example_flow_seed_failed');
+    }
 
     // Stage 3: re-mint JWT scoped to the new workspace + set cookie.
     const jwt = await signJwt({

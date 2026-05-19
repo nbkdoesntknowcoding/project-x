@@ -2,86 +2,52 @@
 import PublicLayout from '../layouts/PublicLayout.astro';
 import { RadialGlow } from '../components/ui/RadialGlow';
 import { NoiseOverlay } from '../components/ui/NoiseOverlay';
-import { ConstellationMark } from '../components/ui/ConstellationMark';
+import ProductMockup from '../components/landing/ProductMockup.astro';
+import FlowMockup from '../components/landing/FlowMockup.astro';
 
 const auth = Astro.locals.auth;
 ---
 
 <PublicLayout
-  title="Mnema — the live context engine"
-  description="AI-native docs that connect directly to Claude. Your docs stay current, your AI stays informed."
+  title="Mnema — the context engine for AI agents"
+  description="Compose docs, instructions, and snippets into structured flows that Claude reads in order — through MCP, live, no uploads."
   pathname="/"
 >
 
   <!-- ===== HERO ===== -->
-  <section class="relative overflow-hidden" style="height: 720px; background: var(--surface-base);">
-    <RadialGlow cx={50} cy={42} radius={55} tone="warm" intensity={1.2} />
+  <section class="relative overflow-hidden pt-32 pb-16" style="background: var(--surface-base);">
+    <RadialGlow cx={50} cy={35} radius={50} tone="warm" intensity={1} />
     <NoiseOverlay opacity={0.04} />
 
-    <!-- Constellation marks — placed asymmetrically, never symmetric -->
-    <ConstellationMark
-      label="Hybrid Search"
-      hint="0.07s"
-      position={{ top: '22%', left: '6%' }}
-      marker="triangle"
-      side="right"
-    />
-    <ConstellationMark
-      label="MCP Bridge"
-      position={{ top: '16%', right: '8%' }}
-      marker="circle"
-      side="left"
-    />
-    <ConstellationMark
-      label="Live Sync"
-      hint="N-S2"
-      position={{ bottom: '32%', left: '10%' }}
-      marker="plus"
-      side="right"
-    />
-    <ConstellationMark
-      label="Comments"
-      hint="v.04"
-      position={{ bottom: '24%', right: '9%' }}
-      marker="square"
-      side="left"
-    />
-    <ConstellationMark
-      label="Versions"
-      position={{ top: '54%', left: '4%' }}
-      marker="circle"
-      side="right"
-    />
-
-    <!-- Hero content — z-index 2 sits above glow + noise -->
     <div
-      class="relative h-full flex flex-col items-center justify-center max-w-3xl mx-auto px-6 text-center"
+      class="relative max-w-3xl mx-auto px-6 text-center mb-20"
       style="z-index: 2;"
     >
       <span
         class="font-mono uppercase block mb-5"
         style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
       >
-        The live context engine
+        The context engine for AI agents
       </span>
 
-      <!-- MixedHeading: Geist Sans base, Instrument Serif italic emphasis -->
+      <!-- MixedHeading: Geist Sans base, ONE Instrument Serif italic emphasis -->
       <h1
         class="font-sans font-medium tracking-[-0.02em]"
         style="font-size: 64px; line-height: 1.05; color: var(--text-primary);"
       >
-        AI-native docs that connect
+        Compose the context your AI
         <em
           style="font-family: var(--font-display); font-style: italic; font-weight: 400;"
-        >directly to Claude</em>.
+        >reads from</em>.
       </h1>
 
       <p
         class="mt-6 max-w-xl mx-auto"
         style="font-size: 16px; line-height: 1.65; color: var(--text-secondary);"
       >
-        Write your docs once. Edit them live. Claude reads them straight from the source.
-        No uploads, no version churn, no stale exports.
+        Mnema turns your docs, instructions, and snippets into structured flows. Claude pulls
+        each step in order, with your instructions between them — so your AI reasons through
+        your context the way you'd brief a teammate.
       </p>
 
       <div class="mt-10 flex items-center justify-center gap-3">
@@ -107,13 +73,13 @@ const auth = Astro.locals.auth;
               Start free
             </a>
             <a
-              href="/pricing"
+              href="/docs/flows"
               class="inline-flex items-center justify-center h-10 px-5 font-medium transition-[background] rounded select-none"
               style="font-size: 14px; background: var(--interactive-secondary); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md);"
               onmouseover="this.style.background='var(--interactive-secondary-hover)'"
               onmouseout="this.style.background='var(--interactive-secondary)'"
             >
-              View pricing
+              See how flows work
             </a>
           </>
         )}
@@ -126,89 +92,82 @@ const auth = Astro.locals.auth;
         Free forever for personal use · No credit card
       </p>
     </div>
-  </section>
 
-  <!-- ===== PRODUCT SCREENSHOT PLACEHOLDER ===== -->
-  <section class="relative py-24" style="background: var(--surface-base);">
-    <div class="max-w-6xl mx-auto px-6">
-      <div
-        class="relative overflow-hidden"
-        style="aspect-ratio: 16 / 10; background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-xl);"
-      >
-        <RadialGlow cx={50} cy={20} radius={60} tone="soft" />
-        <div
-          class="absolute inset-0 flex items-center justify-center"
-          style="z-index: 2;"
-        >
-          <span
-            class="font-mono uppercase"
-            style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
-          >
-            Editor preview
-          </span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== STAT TILES ===== -->
-  <section class="relative py-24" style="background: var(--surface-base);">
-    <div class="max-w-6xl mx-auto px-6">
+    <!-- ProductMockup — anchored to "how it looks today" -->
+    <div class="relative max-w-6xl mx-auto px-6 mb-4 text-center" style="z-index: 2;">
       <span
-        class="font-mono uppercase block text-center mb-3"
+        class="font-mono uppercase"
         style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
       >
-        Built for trust
+        How it looks today
       </span>
-      <h2
-        class="text-center max-w-2xl mx-auto mb-16"
-        style="font-family: var(--font-display); font-size: var(--display-sm); line-height: 1.1; letter-spacing: -0.02em; font-weight: 400; color: var(--text-primary);"
-      >
-        Three things make Mnema feel different.
-      </h2>
+    </div>
+    <div class="relative" style="z-index: 2;">
+      <ProductMockup />
+    </div>
+  </section>
 
-      <div class="grid md:grid-cols-3 gap-6">
-        <!-- Stat tile 1: Search latency -->
-        <div style="background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;">
-          <div class="flex items-baseline gap-2">
-            <span style="font-family: var(--font-display); font-size: var(--display-sm); line-height: 1; color: var(--text-primary);">~50ms</span>
-            <span class="font-mono text-[11px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]">p50</span>
-          </div>
-          <span class="font-mono uppercase block mt-3" style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);">Search Latency</span>
+  <!-- ===== HOW FLOWS WORK ===== -->
+  <section class="py-24" style="background: var(--surface-base);">
+    <div class="max-w-6xl mx-auto px-6">
+      <div class="text-center mb-12">
+        <span
+          class="font-mono uppercase block mb-3"
+          style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+        >
+          How it works next
+        </span>
+        <h2
+          class="font-sans font-medium max-w-2xl mx-auto"
+          style="font-size: 28px; line-height: 1.2; letter-spacing: -0.02em; color: var(--text-primary);"
+        >
+          Flows turn docs into sequences.
+        </h2>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-12 items-start">
+        <!-- LEFT: visual mockup of a flow -->
+        <div>
+          <FlowMockup />
         </div>
-        <!-- Stat tile 2: Sync reliability with DialRing -->
-        <div style="background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;">
-          <div class="flex items-center justify-between gap-4">
-            <div>
-              <div class="flex items-baseline gap-2">
-                <span style="font-family: var(--font-display); font-size: var(--display-sm); line-height: 1; color: var(--text-primary);">Live</span>
-              </div>
-              <span class="font-mono uppercase block mt-3" style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);">Sync Reliability</span>
-            </div>
-            <!-- Inline DialRing: pure SVG, no React needed -->
-            <svg width="56" height="56" viewBox="0 0 56 56" class="block shrink-0" aria-hidden="true">
-              <circle cx="28" cy="28" r="25.25" stroke="var(--border-subtle)" stroke-width="1.5" fill="none"/>
-              <circle cx="28" cy="28" r="25.25" stroke="var(--text-primary)" stroke-width="1.5" fill="none"
-                stroke-linecap="round" stroke-dasharray="158.7" stroke-dashoffset="0.32"
-                transform="rotate(-90 28 28)"/>
-            </svg>
+
+        <!-- RIGHT: three short paragraphs -->
+        <div class="space-y-6">
+          <div>
+            <h3 style="font-size: 16px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">
+              Sequence content.
+            </h3>
+            <p style="font-size: 14px; line-height: 1.65; color: var(--text-secondary);">
+              Drag docs from your workspace into a step list. Every step is one chunk of
+              context the agent reads.
+            </p>
           </div>
-        </div>
-        <!-- Stat tile 3: MCP native -->
-        <div style="background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;">
-          <div class="flex items-baseline gap-2">
-            <span style="font-family: var(--font-display); font-size: var(--display-sm); line-height: 1; color: var(--text-primary);">MCP</span>
-            <span class="font-mono text-[11px] uppercase tracking-[0.06em] text-[var(--text-tertiary)]">Spec 2025-11-25</span>
+          <div>
+            <h3 style="font-size: 16px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">
+              Annotate each step.
+            </h3>
+            <p style="font-size: 14px; line-height: 1.65; color: var(--text-secondary);">
+              Add an instruction in your own words. Claude reads the instruction before
+              reading the doc.
+            </p>
           </div>
-          <span class="font-mono uppercase block mt-3" style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);">Native Connection</span>
+          <div>
+            <h3 style="font-size: 16px; font-weight: 500; color: var(--text-primary); margin-bottom: 6px;">
+              Claude pulls each step in order.
+            </h3>
+            <p style="font-size: 14px; line-height: 1.65; color: var(--text-secondary);">
+              No giant context dump. Each step is a separate MCP call, so the agent reasons
+              between them.
+            </p>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ===== FEATURE BLOCKS ===== -->
+  <!-- ===== FEATURE BLOCKS — flows-lead, live-bonus ===== -->
   <section class="py-24" style="background: var(--surface-base);">
-    <div class="max-w-6xl mx-auto px-6 grid gap-12 md:grid-cols-3">
+    <div class="max-w-6xl mx-auto px-6 grid gap-12 md:grid-cols-2 lg:grid-cols-4">
       <div>
         <span
           class="block mb-3 font-mono uppercase"
@@ -217,11 +176,11 @@ const auth = Astro.locals.auth;
           01
         </span>
         <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-          Live, not static.
+          Compose, don't dump.
         </h3>
         <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
-          Every edit syncs instantly. The doc Claude reads at 3:14 is the doc your
-          teammate updated at 3:13. No re-upload.
+          A flow is a sequence of content steps with your instructions. Claude reads each step
+          in order — context delivered the way a teammate would brief one.
         </p>
       </div>
       <div>
@@ -232,11 +191,11 @@ const auth = Astro.locals.auth;
           02
         </span>
         <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-          Search that understands.
+          Every doc, addressable.
         </h3>
         <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
-          Search "rate limiting" — find docs about throttling. Search "pricing" — find
-          docs about cost, tiers, plans. Hybrid keyword and semantic.
+          Your workspace is a content library. Docs, snippets, instructions — each becomes a
+          step in any flow. One source, many compositions.
         </p>
       </div>
       <div>
@@ -247,11 +206,26 @@ const auth = Astro.locals.auth;
           03
         </span>
         <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-          Built for Claude.
+          Native to MCP.
         </h3>
         <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
-          Mnema is an MCP server. One-click connect from your Claude account. Your docs
-          become first-class context.
+          Flows expose as MCP tools. Claude (or any MCP-capable agent) calls them directly.
+          No uploads, no copy-paste, no stale context.
+        </p>
+      </div>
+      <div>
+        <span
+          class="block mb-3 font-mono uppercase"
+          style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+        >
+          04
+        </span>
+        <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
+          Live editing, live context.
+        </h3>
+        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
+          Edit a doc and every flow that references it updates instantly. The context Claude
+          reads at 3:14 is the doc your teammate updated at 3:13.
         </p>
       </div>
     </div>
@@ -265,7 +239,8 @@ const auth = Astro.locals.auth;
       style="z-index: 2;"
     >
       <h2
-        style="font-family: var(--font-display); font-size: var(--display-sm); line-height: 1.1; letter-spacing: -0.02em; font-weight: 400; color: var(--text-primary); margin-bottom: 16px;"
+        class="font-sans font-medium"
+        style="font-size: var(--display-sm); line-height: 1.1; letter-spacing: -0.02em; color: var(--text-primary); margin-bottom: 16px;"
       >
         Ready to try it?
       </h2>

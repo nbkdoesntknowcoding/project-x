@@ -15,12 +15,12 @@ interface Props {
 }
 
 /**
- * Large stat tile — Instrument Serif numeral + MonoLabel below.
+ * Large stat tile — Geist Sans Medium numeral + MonoLabel below.
  *
- * Reference: "98.2%", "Step 01", "~50ms" large stats in the 4.5.1 reference.
+ * Reference: "98.2%", "Step 01", "~50ms" large stats.
  * Use for honest product properties, never vanity social-proof numbers.
  *
- * Phase 4.5.1.
+ * Phase 4.5.1 (display face simplified in 4.5.2 to Geist Sans).
  */
 export function StatTile({
   value,
@@ -47,10 +47,11 @@ export function StatTile({
       <div className="flex flex-col">
         <div className="flex items-baseline gap-2">
           <span
+            className="font-sans font-medium"
             style={{
-              fontFamily: 'var(--font-display)',
               fontSize: 'var(--display-sm)',
               lineHeight: 1,
+              letterSpacing: '-0.02em',
               color: 'var(--text-primary)',
             }}
           >

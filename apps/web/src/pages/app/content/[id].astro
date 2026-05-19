@@ -8,9 +8,9 @@ if (!auth) {
   return Astro.redirect('/auth/login');
 }
 
-const { doc_id } = Astro.params;
+const { id: doc_id } = Astro.params;
 if (!doc_id) {
-  return Astro.redirect('/app');
+  return Astro.redirect('/app/content');
 }
 
 const apiUrl =
@@ -31,7 +31,7 @@ const { doc } = (await response.json()) as { doc: DocFull };
 
 <BaseLayout title={doc.title || 'Untitled'}>
   <a
-    href="/app"
+    href="/app/content"
     class="fixed top-4 left-6 text-base z-10 hover:underline"
     style="color: var(--text-tertiary);"
   >

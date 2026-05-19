@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
@@ -7,9 +7,14 @@ import { docs } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { contentHash, emptyYjsState } from '../lib/yjs.js';
 
+const DOC_TYPE = z.enum(['doc', 'engineering', 'instruction', 'snippet']);
+
 const createSchema = z.object({
   title: z.string().min(1).max(200).default('Untitled'),
   markdown: z.string().default(''),
+  // Phase 5: content type. Defaults to 'doc' (freeform markdown) so
+  // existing clients that don't send the field stay valid.
+  type: DOC_TYPE.default('doc'),
 });
 
 // 1.2: title and markdown are both optional but at least one must be present.
@@ -63,22 +68,55 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/api/docs', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
 
+    // Phase 5: optional ?type= filter for the sidebar's typed views.
+    const typeFilter = DOC_TYPE.safeParse(
+      (req.query as Record<string, unknown> | null)?.type,
+    );
+
     const rows = await withTenant(req.auth.tenant_id, async (tx) => {
+      const conditions = [isNull(docs.deletedAt)];
+      if (typeFilter.success) conditions.push(eq(docs.type, typeFilter.data));
       return await tx
         .select({
           id: docs.id,
           path: docs.path,
           title: docs.title,
+          type: docs.type,
           created_at: docs.createdAt,
           updated_at: docs.updatedAt,
         })
         .from(docs)
-        .where(isNull(docs.deletedAt))
+        .where(and(...conditions))
         .orderBy(desc(docs.updatedAt))
         .limit(100);
     });
 
     return { docs: rows };
+  });
+
+  // Phase 5: counts per content type. Lets the sidebar hide filter chips
+  // for types the workspace doesn't have yet. One small query per shell
+  // mount, cached client-side.
+  app.get('/api/content/type-counts', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+
+    const rows = await withTenant(req.auth.tenant_id, async (tx) => {
+      return await tx.execute(
+        sql`SELECT type, COUNT(*)::int AS count
+            FROM docs
+            WHERE deleted_at IS NULL
+            GROUP BY type`,
+      );
+    });
+
+    // postgres-js returns the execute() result as the array of rows directly
+    // (it's not wrapped in `{ rows: [] }` the way `pg` does it).
+    const counts: Record<string, number> = { doc: 0, engineering: 0, instruction: 0, snippet: 0 };
+    const rowList = rows as unknown as Array<{ type: string; count: number }>;
+    for (const row of rowList) {
+      counts[row.type] = Number(row.count) || 0;
+    }
+    return { counts };
   });
 
   app.post('/api/docs', async (req, reply) => {
@@ -97,6 +135,7 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
           workspaceId: auth.tenant_id,
           path,
           title: parsed.data.title,
+          type: parsed.data.type,
           markdown: parsed.data.markdown,
           yjsState: emptyYjsState(),
           contentHash: contentHash(parsed.data.markdown),

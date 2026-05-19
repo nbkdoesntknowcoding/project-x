@@ -1,23 +1,34 @@
 # Welcome to Mnema
 
-You're looking at a live, AI-native doc system. Three things are different here:
+You're looking at your first doc. Mnema is a context engine — a place to
+compose docs, instructions, and snippets into structured flows that AI
+agents read in order.
 
-## Your docs stay current — automatically
+Right now this workspace has one thing in it: this welcome doc. Here's what
+to do next.
 
-Edit anything you want. The moment you stop typing, your changes are saved. Open the same doc in another window or share it with a teammate, and you'll see their cursor live.
+## Connect Claude
 
-## Claude reads your docs directly
+Open Connections → Claude in the sidebar to copy your workspace's MCP
+endpoint. Paste it into Claude's connector settings to give Claude live
+read access to this workspace.
 
-You don't upload anything. Once you connect Mnema as an MCP connector in your Claude account, Claude can search, read, and reference any doc here the moment you ask. No version churn, no stale uploads.
+[Setup guide](https://context.theboringpeople.in/docs/connect)
 
-## Search that understands what you mean
+## Add some content
 
-Try searching for "rate limiting" — Mnema finds docs about throttling. Search for "pricing" — it finds docs about cost, tiers, and plans, not just docs with the literal word.
+Docs, instructions, snippets — anything Claude might need to know. Press
+"New" in the sidebar to create more. You can mark each doc with a type
+(doc, engineering, instruction, snippet) so they're filterable in the
+sidebar.
 
-## What to do next
+## Compose a flow
 
-1. Press `/` anywhere in this doc to see the block menu — try a code block, a heading, a callout.
-2. Visit **Settings → Members** in the sidebar to invite teammates.
-3. Once you're ready to connect Claude, check our [setup guide](https://context.theboringpeople.in/docs/connect).
+(Coming next release.) Once you have a few docs, you'll compose them into
+a flow — a named sequence Claude pulls step by step, with your instructions
+between each step. For now, every doc is individually addressable via
+search and direct read.
 
-Welcome aboard.
+—
+
+Mnema, by BOPPL
