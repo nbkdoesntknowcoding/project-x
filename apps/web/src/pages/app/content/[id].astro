@@ -15,6 +15,8 @@ if (!doc_id) {
 
 const apiUrl =
   (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+const collabUrl =
+  (import.meta.env.PUBLIC_COLLAB_URL as string | undefined) ?? 'ws://localhost:1234';
 const response = await fetch(`${apiUrl}/api/docs/${doc_id}`, {
   headers: { Cookie: `boppl_jwt=${auth.jwt}` },
 });
@@ -38,6 +40,7 @@ const backUrl = rawBack.startsWith('/app/') ? rawBack : '/app/content';
     initialDoc={doc}
     jwt={auth.jwt}
     user={{ id: auth.user_id, email: auth.email }}
+    collabUrl={collabUrl}
     client:only="react"
   />
 </DocLayout>

@@ -14,6 +14,7 @@ interface DocPageProps {
   initialDoc: DocFull;
   jwt: string;
   user: { id: string; email: string };
+  collabUrl?: string;
 }
 
 type Role = 'owner' | 'editor' | 'viewer' | null;
@@ -33,7 +34,7 @@ type Role = 'owner' | 'editor' | 'viewer' | null;
  * The toolbar lives fixed in the bottom-right corner of the viewport so it
  * doesn't compete with the doc title for visual attention.
  */
-export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
+export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX.Element {
   const [title, setTitle] = useState(initialDoc.title);
   const [savedTitle, setSavedTitle] = useState(initialDoc.title);
 
@@ -178,6 +179,7 @@ export function DocPage({ initialDoc, jwt, user }: DocPageProps): JSX.Element {
           initialMarkdown={initialDoc.markdown}
           jwt={jwt}
           user={user}
+          collabUrl={collabUrl}
           onViewReady={setView}
           onSelectionChange={handleSelectionChange}
           onProviderReady={setProvider}
