@@ -18,7 +18,9 @@ import { config } from '../config/env.js';
  *   - mcpBaseUrl                 — externally-visible base of the api process.
  */
 const mcpBaseUrl = config.MCP_BASE_URL.replace(/\/+$/, '');
-const authorizationServer = config.MCP_AUTHORIZATION_SERVER.replace(/\/+$/, '');
+// Phase A: the OAuth AS is now the Mnema API itself (OAUTH_ISSUER).
+// Falls back to MCP_AUTHORIZATION_SERVER for backwards compat in non-OAuth envs.
+const authorizationServer = config.OAUTH_ISSUER.replace(/\/+$/, '') || config.MCP_AUTHORIZATION_SERVER.replace(/\/+$/, '');
 const resourceUrl = `${mcpBaseUrl}/mcp`;
 
 export interface McpConfig {

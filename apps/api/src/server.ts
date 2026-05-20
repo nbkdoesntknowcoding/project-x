@@ -3,6 +3,7 @@ import helmet from '@fastify/helmet';
 import sensible from '@fastify/sensible';
 import Fastify from 'fastify';
 import { config } from './config/env.js';
+import { oauthPlugin } from './oauth/plugin.js';
 import { mcpPlugin } from './mcp/plugin.js';
 import { authPlugin } from './plugins/auth.js';
 import { loggerOptions } from './plugins/logger.js';
@@ -53,6 +54,7 @@ await app.register(completeRoutes);
 await app.register(razorpayRoutes);
 await app.register(billingRoutes);
 await app.register(mcpTokenRoutes);
+await app.register(oauthPlugin);
 await app.register(mcpPlugin);
 
 const port = config.API_PORT;

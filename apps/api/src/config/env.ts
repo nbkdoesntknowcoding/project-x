@@ -128,6 +128,18 @@ const envSchema = z.object({
   RATE_LIMIT_USER_PER_MIN: z.coerce.number().int().positive().default(60),
   RATE_LIMIT_USER_PER_DAY: z.coerce.number().int().positive().default(1000),
   RATE_LIMIT_TENANT_DAILY_UNITS: z.coerce.number().int().positive().default(50000),
+
+  // OAuth 2.1 Authorization Server (Phase A)
+  // Externally-visible issuer URL — equals MCP_BASE_URL in practice.
+  // The `iss` claim in every OAuth-issued JWT and the base for all AS URLs.
+  OAUTH_ISSUER: z.string().url(),
+  // Paths to the RSA keypair (relative to CWD or absolute). Never committed.
+  OAUTH_PRIVATE_KEY_PATH: z.string().min(1),
+  OAUTH_PUBLIC_KEY_PATH: z.string().min(1),
+  OAUTH_KEY_ID: z.string().min(1).default('mnema-oauth-key-1'),
+  // WorkOS redirect URI for the OAuth authorize flow (api-server callback).
+  // Must be registered in WorkOS dashboard as an allowed redirect URI.
+  WORKOS_REDIRECT_URI_OAUTH: z.string().url(),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -33,13 +33,17 @@ export function createMcpServer(ctx: McpAuthContext): Server {
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const tools: Array<{ name: string; description: string; inputSchema: object }> = [
-      ...listToolSpecs(),
-    ];
+    const tools = listToolSpecs().map((t) => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+      ...(t.annotations ? { annotations: t.annotations } : {}),
+    }));
+    const allTools = [...tools];
     if (process.env.NODE_ENV === 'test') {
-      tools.push(...registerTestProbe());
+      allTools.push(...registerTestProbe());
     }
-    return { tools };
+    return { tools: allTools };
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {

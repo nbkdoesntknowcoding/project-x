@@ -75,6 +75,7 @@ export const SEARCH_DOCS_TOOL = {
     required: ['query'],
     additionalProperties: false,
   },
+  annotations: { readOnlyHint: true, title: 'Search documents by keyword or semantic similarity' },
 };
 
 const argsSchema = z.object({

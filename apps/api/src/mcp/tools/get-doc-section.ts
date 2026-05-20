@@ -50,6 +50,7 @@ export const GET_DOC_SECTION_TOOL = {
     required: ['id', 'heading'],
     additionalProperties: false,
   },
+  annotations: { readOnlyHint: true, title: 'Fetch a specific section of a document by heading' },
 };
 
 const argsSchema = z.object({

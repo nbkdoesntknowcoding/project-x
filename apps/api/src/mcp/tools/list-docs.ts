@@ -47,6 +47,7 @@ export const LIST_DOCS_TOOL = {
     },
     additionalProperties: false,
   },
+  annotations: { readOnlyHint: true, title: 'List documents in your workspace' },
 };
 
 const argsSchema = z.object({

@@ -37,6 +37,7 @@ export const LIST_FLOWS_TOOL = {
     properties: {},
     additionalProperties: false,
   },
+  annotations: { readOnlyHint: true, title: 'List published flows in your workspace' },
 };
 
 const argsSchema = z.object({}).strict();

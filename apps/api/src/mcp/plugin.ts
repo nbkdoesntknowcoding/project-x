@@ -1,11 +1,7 @@
 import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
-import {
-  extractBearerToken,
-  McpUnauthorizedError,
-  verifyMcpToken,
-} from './auth.js';
+import { requireOAuthBearer } from '../oauth/middleware/require-bearer.js';
 import { mcpConfig } from './config.js';
 import { protectedResourceRoutes } from './protected-resource.js';
 import { McpForbiddenError } from './scope.js';
@@ -70,33 +66,32 @@ export const mcpPlugin: FastifyPluginAsync = fp(async (app) => {
         });
       }
 
-      // 2. Bearer presence + JWT verification.
-      const rawToken = extractBearerToken(req.headers.authorization);
-      if (!rawToken) {
-        return send401(reply);
-      }
+      // 2. Bearer validation — supports both OAuth RS256 (Phase A) and
+      //    legacy HS256 app JWTs (Claude Desktop via mcp-remote).
+      await requireOAuthBearer(req, reply);
+      if (reply.sent) return; // 401 already sent by requireOAuthBearer
 
-      let authCtx;
-      try {
-        authCtx = await verifyMcpToken(rawToken);
-      } catch (err) {
-        if (err instanceof McpUnauthorizedError) {
-          req.log.info({ reason: err.reason }, 'mcp: token verification failed');
-          return send401(reply);
-        }
-        throw err;
-      }
+      const oauthCtx = req.oauth!;
 
-      // 3. Record that this token was used (fire-and-forget — never block the request).
-      if (authCtx.jwt_id) {
+      // 3. Record last-used for legacy mcp_tokens (fire-and-forget).
+      if (oauthCtx.tokenType === 'legacy' && oauthCtx.jti) {
         db.update(mcpTokens)
           .set({ lastUsedAt: new Date() })
-          .where(eq(mcpTokens.jti, authCtx.jwt_id))
+          .where(eq(mcpTokens.jti, oauthCtx.jti))
           .execute()
           .catch(() => { /* non-critical */ });
       }
 
-      // 4. Build per-request server with the verified context captured in
+      // 4. Build per-request auth context for tool handlers.
+      const authCtx = {
+        user_id: oauthCtx.userId,
+        tenant_id: oauthCtx.workspaceId,
+        email: '',  // not available on OAuth tokens; tools don't use it
+        scopes: oauthCtx.scope,
+        jwt_id: oauthCtx.jti,
+      };
+
+      // 5. Build per-request server with the verified context captured in
       //    its handler closures. This is the only safe place to bind ctx.
       const server = createMcpServer(authCtx);
 

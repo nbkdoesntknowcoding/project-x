@@ -58,6 +58,7 @@ export const GET_FLOW_STEP_TOOL = {
     required: ['flow_id', 'step_index'],
     additionalProperties: false,
   },
+  annotations: { readOnlyHint: true, title: 'Fetch one step of a published flow' },
 };
 
 const argsSchema = z

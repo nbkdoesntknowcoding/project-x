@@ -530,3 +530,107 @@ export const flowEdges = pgTable(
     toIdx: index('flow_edges_to_idx').on(table.flowVersionId, table.toNodeId),
   }),
 );
+
+// ============================================================================
+// Phase A — OAuth 2.1 Authorization Server
+// ============================================================================
+
+export const oauthClients = pgTable(
+  'oauth_clients',
+  {
+    id: text('id').primaryKey(),
+    clientSecretHash: text('client_secret_hash'),
+    clientName: text('client_name').notNull(),
+    redirectUris: text('redirect_uris').array().notNull(),
+    grantTypes: text('grant_types').array().notNull().default(sql`ARRAY['authorization_code','refresh_token']::text[]`),
+    responseTypes: text('response_types').array().notNull().default(sql`ARRAY['code']::text[]`),
+    scope: text('scope').notNull().default('workspace:read'),
+    tokenEndpointAuthMethod: text('token_endpoint_auth_method').notNull().default('none'),
+    applicationType: text('application_type').notNull().default('web'),
+    registeredVia: text('registered_via').notNull().default('dynamic'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    metadata: jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
+  },
+  (table) => ({
+    lastUsedIdx: index('oauth_clients_last_used_idx').on(table.lastUsedAt),
+  }),
+);
+
+export const oauthPendingAuthRequests = pgTable(
+  'oauth_pending_auth_requests',
+  {
+    id: text('id').primaryKey(),
+    clientId: text('client_id').notNull().references(() => oauthClients.id, { onDelete: 'cascade' }),
+    redirectUri: text('redirect_uri').notNull(),
+    scope: text('scope').notNull(),
+    state: text('state').notNull(),
+    codeChallenge: text('code_challenge').notNull(),
+    codeChallengeMethod: text('code_challenge_method').notNull().default('S256'),
+    resource: text('resource'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    expiresIdx: index('oauth_pending_auth_requests_expires_idx').on(table.expiresAt),
+  }),
+);
+
+export const oauthAuthorizationCodes = pgTable(
+  'oauth_authorization_codes',
+  {
+    code: text('code').primaryKey(),
+    clientId: text('client_id').notNull().references(() => oauthClients.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    redirectUri: text('redirect_uri').notNull(),
+    scope: text('scope').notNull(),
+    resource: text('resource'),
+    codeChallenge: text('code_challenge').notNull(),
+    codeChallengeMethod: text('code_challenge_method').notNull().default('S256'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    expiresIdx: index('oauth_authorization_codes_expires_idx').on(table.expiresAt),
+  }),
+);
+
+export const oauthRefreshTokens = pgTable(
+  'oauth_refresh_tokens',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    tokenHash: text('token_hash').notNull().unique(),
+    clientId: text('client_id').notNull().references(() => oauthClients.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    scope: text('scope').notNull(),
+    resource: text('resource'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    rotatedToId: uuid('rotated_to_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    userIdx: index('oauth_refresh_tokens_user_idx').on(table.userId, table.workspaceId),
+    activeIdx: index('oauth_refresh_tokens_active_idx').on(table.expiresAt),
+  }),
+);
+
+export const oauthConsents = pgTable(
+  'oauth_consents',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    clientId: text('client_id').notNull().references(() => oauthClients.id, { onDelete: 'cascade' }),
+    scope: text('scope').notNull(),
+    grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => ({
+    activeIdx: index('oauth_consents_active_idx').on(table.userId, table.workspaceId, table.clientId),
+    uniqueGrant: unique('oauth_consents_unique').on(table.userId, table.workspaceId, table.clientId, table.scope),
+  }),
+);

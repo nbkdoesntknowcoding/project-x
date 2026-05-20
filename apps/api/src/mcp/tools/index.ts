@@ -25,6 +25,12 @@ export interface McpToolSpec {
   name: string;
   description: string;
   inputSchema: object;
+  /** MCP tool annotations for directory submission compliance. */
+  annotations?: {
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    title?: string;
+  };
 }
 
 interface ToolDescriptor {

@@ -45,6 +45,7 @@ export const GET_DOC_TOOL = {
     },
     additionalProperties: false,
   },
+  annotations: { readOnlyHint: true, title: 'Fetch the full content of a document' },
 };
 
 const argsSchema = z
