@@ -28,15 +28,15 @@ export function NodeInspector({ node, onClose, onUpdateTitle, onUpdateData, onDe
   };
 
   return (
-    <aside className="w-[360px] h-full border-l border-[var(--border-subtle)] bg-[var(--surface-overlay)] flex flex-col">
-      <div className="flex items-center justify-between px-5 h-14 border-b border-[var(--border-subtle)]">
+    <aside className="w-[360px] h-full border-l border-[var(--line)] bg-[var(--surface)] flex flex-col" style={{ boxShadow: '-16px 0 40px -16px rgba(0,0,0,0.5)' }}>
+      <div className="flex items-center justify-between px-5 h-14 border-b border-[var(--line)]">
         <div className="flex items-center gap-2">
           <KindIcon kind={node.kind} />
           <MonoLabel>{node.kind}</MonoLabel>
         </div>
         <button
           onClick={onClose}
-          className="text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+          className="text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors"
           aria-label="Close inspector"
         >
           <X size={16} strokeWidth={1.75} />
@@ -51,14 +51,14 @@ export function NodeInspector({ node, onClose, onUpdateTitle, onUpdateData, onDe
             type="text"
             value={node.title}
             onChange={(e) => onUpdateTitle(node.client_node_id, e.target.value)}
-            className="w-full text-[15px] font-medium text-[var(--text-primary)] bg-transparent border border-transparent rounded-[var(--radius-sm)] px-1 py-0.5 -mx-1 focus:bg-[var(--surface-sunken)] focus:border-[var(--border-strong)] outline-none transition-colors leading-[1.3]"
+            className="w-full text-[15px] font-medium text-[var(--ink)] bg-transparent border border-transparent rounded-[var(--radius-sm)] px-1 py-0.5 -mx-1 focus:bg-[var(--canvas)] focus:border-[var(--line-bright)] outline-none transition-colors leading-[1.3]"
             placeholder="Node title"
           />
         </div>
 
         <div>
           <MonoLabel className="block mb-1.5">Node ID</MonoLabel>
-          <code className="text-[12px] font-mono text-[var(--text-secondary)] bg-[var(--surface-sunken)] px-2 py-1 rounded-[var(--radius-sm)]">
+          <code className="text-[12px] font-mono text-[var(--ink-soft)] bg-[var(--canvas)] px-2 py-1 rounded-[var(--radius-sm)]">
             {node.client_node_id}
           </code>
         </div>
@@ -90,13 +90,13 @@ export function NodeInspector({ node, onClose, onUpdateTitle, onUpdateData, onDe
 
         <div>
           <MonoLabel className="block mb-1.5">Canvas position</MonoLabel>
-          <code className="text-[11px] font-mono text-[var(--text-quaternary)]">
+          <code className="text-[11px] font-mono text-[var(--ink-faint)]">
             x: {Math.round(node.position_x)}, y: {Math.round(node.position_y)}
           </code>
         </div>
       </div>
 
-      <div className="border-t border-[var(--border-subtle)] px-5 py-3">
+      <div className="border-t border-[var(--line)] px-5 py-3">
         <Button
           variant="danger"
           size="sm"
@@ -112,7 +112,7 @@ export function NodeInspector({ node, onClose, onUpdateTitle, onUpdateData, onDe
 }
 
 function KindIcon({ kind }: { kind: string }) {
-  const cls = 'text-[var(--text-secondary)]';
+  const cls = 'text-[var(--ink-soft)]';
   switch (kind) {
     case 'doc':
       return <FileText size={14} strokeWidth={1.75} className={cls} />;
@@ -150,7 +150,7 @@ function DocInspectorBody({
             href={`/app/d/${docId}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="block mt-1.5 text-[11px] text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] underline underline-offset-2"
+            className="block mt-1.5 text-[11px] text-[var(--ink-muted)] hover:text-[var(--ink-soft)] underline underline-offset-2"
           >
             Open doc →
           </a>
@@ -163,7 +163,7 @@ function DocInspectorBody({
           onChange={(e) => onChange({ instruction: e.target.value })}
           placeholder="What should Claude do with this doc?"
           rows={4}
-          className="w-full px-2.5 py-2 text-[13px] bg-[var(--surface-sunken)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] outline-none focus:border-[var(--border-strong)] resize-none transition-colors leading-[1.6]"
+          className="w-full px-2.5 py-2 text-[13px] bg-[var(--canvas)] border border-[var(--line)] rounded-[var(--radius-md)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] outline-none focus:border-[var(--line-bright)] resize-none transition-colors leading-[1.6]"
         />
       </div>
     </>
@@ -185,13 +185,13 @@ function DocsInspectorBody({
       <div>
         <MonoLabel className="block mb-1.5">
           Doc references{' '}
-          <span className="text-[var(--text-quaternary)] font-normal">({docIds.length})</span>
+          <span className="text-[var(--ink-faint)] font-normal">({docIds.length})</span>
         </MonoLabel>
         {docIds.length > 0 ? (
           <div className="space-y-1.5 mb-2">
             {docIds.map((id, i) => (
               <div key={id} className="flex items-center gap-2">
-                <span className="flex-1 text-[12px] font-mono text-[var(--text-secondary)] bg-[var(--surface-sunken)] px-2 py-1 rounded-[var(--radius-sm)] truncate">
+                <span className="flex-1 text-[12px] font-mono text-[var(--ink-soft)] bg-[var(--canvas)] px-2 py-1 rounded-[var(--radius-sm)] truncate">
                   {id.slice(0, 8)}…
                 </span>
                 <button
@@ -201,7 +201,7 @@ function DocsInspectorBody({
                     next.splice(i, 1);
                     onChange({ doc_ids: next });
                   }}
-                  className="text-[var(--text-quaternary)] hover:text-[var(--status-error)] transition-colors"
+                  className="text-[var(--ink-faint)] hover:text-[var(--status-error)] transition-colors"
                   title="Remove"
                 >
                   <X size={11} strokeWidth={2} />
@@ -210,7 +210,7 @@ function DocsInspectorBody({
             ))}
           </div>
         ) : (
-          <p className="text-[12px] text-[var(--text-quaternary)] italic mb-2">No docs linked</p>
+          <p className="text-[12px] text-[var(--ink-faint)] italic mb-2">No docs linked</p>
         )}
         <DocPicker
           value={null}
@@ -220,7 +220,7 @@ function DocsInspectorBody({
             }
           }}
         />
-        <p className="text-[11px] text-[var(--text-quaternary)] mt-1">
+        <p className="text-[11px] text-[var(--ink-faint)] mt-1">
           Use picker to add docs one at a time
         </p>
         {docIds.length > 0 && (
@@ -240,7 +240,7 @@ function DocsInspectorBody({
           onChange={(e) => onChange({ instruction: e.target.value })}
           placeholder="What should Claude do with these docs?"
           rows={4}
-          className="w-full px-2.5 py-2 text-[13px] bg-[var(--surface-sunken)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] outline-none focus:border-[var(--border-strong)] resize-none transition-colors leading-[1.6]"
+          className="w-full px-2.5 py-2 text-[13px] bg-[var(--canvas)] border border-[var(--line)] rounded-[var(--radius-md)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] outline-none focus:border-[var(--line-bright)] resize-none transition-colors leading-[1.6]"
         />
       </div>
     </>
@@ -263,7 +263,7 @@ function InstructionInspectorBody({
         onChange={(e) => onChange({ text: e.target.value })}
         placeholder="Enter the instruction text for Claude…"
         rows={8}
-        className="w-full px-2.5 py-2 text-[13px] bg-[var(--surface-sunken)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] outline-none focus:border-[var(--border-strong)] resize-none transition-colors leading-[1.65]"
+        className="w-full px-2.5 py-2 text-[13px] bg-[var(--canvas)] border border-[var(--line)] rounded-[var(--radius-md)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] outline-none focus:border-[var(--line-bright)] resize-none transition-colors leading-[1.65]"
       />
     </div>
   );
@@ -287,12 +287,12 @@ function DecisionInspectorBody({
           onChange={(e) => onChange({ condition: e.target.value })}
           placeholder="e.g. if context.urgency == 'high'"
           rows={4}
-          className="w-full px-2.5 py-2 text-[12px] font-mono bg-[var(--surface-sunken)] border border-[var(--border-subtle)] rounded-[var(--radius-md)] text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] outline-none focus:border-[var(--border-strong)] resize-none transition-colors leading-[1.6]"
+          className="w-full px-2.5 py-2 text-[12px] font-mono bg-[var(--canvas)] border border-[var(--line)] rounded-[var(--radius-md)] text-[var(--ink)] placeholder:text-[var(--ink-faint)] outline-none focus:border-[var(--line-bright)] resize-none transition-colors leading-[1.6]"
         />
       </div>
-      <div className="border-t border-[var(--border-subtle)] pt-3">
+      <div className="border-t border-[var(--line)] pt-3">
         <MonoLabel className="text-[var(--status-warning)]">Note</MonoLabel>
-        <p className="text-[12px] leading-[1.55] text-[var(--text-tertiary)] mt-1">
+        <p className="text-[12px] leading-[1.55] text-[var(--ink-muted)] mt-1">
           Decision routing ships in Phase 6.4. The condition field is editable but has no effect yet.
         </p>
       </div>

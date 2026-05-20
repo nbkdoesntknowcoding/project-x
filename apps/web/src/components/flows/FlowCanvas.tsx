@@ -434,13 +434,15 @@ function InnerCanvas({ flow }: InnerProps) {
           onPublishClick={() => setPublishOpen(true)}
         />
 
-        {/* Add node palette — floats top-right of canvas */}
-        <div className="absolute top-[70px] right-4 z-20">
-          <AddNodePalette onAdd={handleAddNode} />
-        </div>
+        {/* Canvas + floating palette */}
+        <div className="flex-1 relative overflow-hidden" style={{ background: 'var(--canvas)' }}>
+          {/* Add node palette — floats top-right of canvas */}
+          <div className="absolute top-4 right-4 z-20">
+            <AddNodePalette onAdd={handleAddNode} />
+          </div>
 
-        <div style={{ height: '100%', paddingTop: '56px' }}>
           <ReactFlow
+            style={{ width: '100%', height: '100%' }}
             nodes={nodes}
             edges={edges}
             onNodesChange={handleNodesChange}
@@ -465,14 +467,14 @@ function InnerCanvas({ flow }: InnerProps) {
             defaultEdgeOptions={{
               type: 'editable',
               animated: false,
-              style: { stroke: 'var(--border-strong)', strokeWidth: 1.5 },
+              style: { stroke: 'var(--line-bright)', strokeWidth: 1.5 },
             }}
           >
             <Background
               variant={BackgroundVariant.Dots}
               gap={16}
               size={1}
-              color="var(--border-subtle)"
+              color="var(--line-strong)"
             />
             <Controls position="bottom-left" showInteractive={false} />
             <MiniMap
@@ -481,14 +483,19 @@ function InnerCanvas({ flow }: InnerProps) {
                 switch (node.type) {
                   case 'doc':
                   case 'docs':
-                    return 'var(--text-secondary)';
+                    return '#B8BCC4';
                   case 'instruction':
-                    return 'var(--text-tertiary)';
+                    return '#3F434B';
                   case 'decision':
-                    return 'var(--status-warning)';
+                    return '#FFB370';
                   default:
-                    return 'var(--text-tertiary)';
+                    return '#3F434B';
                 }
+              }}
+              style={{
+                background: 'var(--surface)',
+                border: '1px solid var(--line)',
+                borderRadius: 7,
               }}
               maskColor="rgba(0,0,0,0.6)"
               pannable

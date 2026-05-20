@@ -74,7 +74,7 @@ export function AddNodePalette({ onAdd }: Props) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-56 bg-[var(--surface-overlay)] border border-[var(--border-strong)] rounded-[var(--radius-md)] shadow-lg overflow-hidden py-1">
+        <div className="absolute right-0 top-full mt-1 z-50 w-56 bg-[var(--surface)] border border-[var(--line-strong)] rounded-[10px] shadow-lg overflow-hidden py-1">
           {ITEMS.map((item) => (
             <button
               key={item.kind}
@@ -90,7 +90,7 @@ export function AddNodePalette({ onAdd }: Props) {
                 'w-full flex items-start gap-3 px-3 py-2 text-left transition-colors ' +
                 (item.disabled
                   ? 'opacity-40 cursor-not-allowed'
-                  : 'hover:bg-[var(--surface-hover)] cursor-pointer')
+                  : 'hover:bg-[var(--surface-2)] cursor-pointer')
               }
               title={item.disabled ? item.disabledReason : undefined}
             >

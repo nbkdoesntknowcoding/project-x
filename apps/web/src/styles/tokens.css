@@ -124,6 +124,7 @@
   --surface-overlay:  var(--surface);
   --surface-elevated: var(--surface-2);
   --surface-sunken:   var(--canvas);
+  --surface-hover:    var(--surface-2);
 
   /* Borders */
   --border-subtle: var(--line);

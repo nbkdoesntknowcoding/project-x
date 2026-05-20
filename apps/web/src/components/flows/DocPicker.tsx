@@ -20,7 +20,7 @@ export function DocPicker({ value, onChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch('/api/docs?limit=200')
+    fetch('/api/docs?limit=200', { credentials: 'include' })
       .then((r) => r.json())
       .then((data) => {
         const list: DocItem[] = Array.isArray(data.docs) ? data.docs : [];
@@ -128,8 +128,8 @@ export function DocPicker({ value, onChange }: Props) {
                 type="button"
                 onClick={() => handleSelect(doc)}
                 className={
-                  'w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--surface-hover)] transition-colors ' +
-                  (doc.id === value ? 'bg-[var(--surface-hover)]' : '')
+                  'w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--surface-2)] transition-colors ' +
+                  (doc.id === value ? 'bg-[var(--surface-2)]' : '')
                 }
               >
                 <FileText size={11} className="text-[var(--text-tertiary)] shrink-0" strokeWidth={1.75} />

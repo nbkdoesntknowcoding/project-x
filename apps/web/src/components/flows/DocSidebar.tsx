@@ -19,7 +19,7 @@ export function DocSidebar({ onDragStart }: Props) {
 
   useEffect(() => {
     setLoading(true);
-    fetch('/api/docs?limit=200')
+    fetch('/api/docs?limit=200', { credentials: 'include' })
       .then((r) => r.json())
       .then((data) => {
         const list = Array.isArray(data.docs) ? data.docs : [];
@@ -43,7 +43,7 @@ export function DocSidebar({ onDragStart }: Props) {
   );
 
   return (
-    <aside className="w-[220px] shrink-0 border-r border-[var(--border-subtle)] bg-[var(--surface-base)] flex flex-col overflow-hidden">
+    <aside className="w-[220px] shrink-0 border-r border-[var(--line)] bg-[var(--surface)] flex flex-col overflow-hidden">
       <div className="px-3 py-3 border-b border-[var(--border-subtle)]">
         <MonoLabel className="block mb-2 text-[var(--text-tertiary)]">Docs</MonoLabel>
         <div className="relative">
@@ -76,7 +76,7 @@ export function DocSidebar({ onDragStart }: Props) {
             key={doc.id}
             draggable
             onDragStart={(e) => handleDragStart(e, doc)}
-            className="group flex items-center gap-2 px-3 py-1.5 cursor-grab active:cursor-grabbing hover:bg-[var(--surface-hover)] transition-colors select-none"
+            className="group flex items-center gap-2 px-3 py-1.5 cursor-grab active:cursor-grabbing hover:bg-[var(--surface-2)] transition-colors select-none"
             title={`Drag to add "${doc.title}" as a Doc node`}
           >
             <GripVertical

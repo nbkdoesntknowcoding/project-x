@@ -16,7 +16,6 @@ export function EditableEdge({
   targetPosition,
   selected,
   markerEnd,
-  style,
 }: EdgeProps) {
   const { setEdges } = useReactFlow();
 
@@ -27,6 +26,7 @@ export function EditableEdge({
     targetX,
     targetY,
     targetPosition,
+    borderRadius: 8,
   });
 
   const handleDelete = (event: React.MouseEvent) => {
@@ -40,9 +40,9 @@ export function EditableEdge({
         path={edgePath}
         markerEnd={markerEnd}
         style={{
-          ...style,
-          stroke: selected ? 'var(--text-primary)' : 'var(--border-strong)',
+          stroke: selected ? 'var(--ink)' : 'var(--line-bright)',
           strokeWidth: selected ? 2 : 1.5,
+          fill: 'none',
         }}
       />
       {selected && (
@@ -58,7 +58,21 @@ export function EditableEdge({
           >
             <button
               onClick={handleDelete}
-              className="w-5 h-5 rounded-full bg-[var(--surface-overlay)] border border-[var(--border-strong)] flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--status-error)] hover:border-[var(--status-error)] transition-colors text-[10px] font-medium leading-none"
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                background: 'var(--surface)',
+                border: '1px solid var(--line-strong)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--ink-muted)',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 500,
+                lineHeight: 1,
+              }}
               title="Delete edge"
             >
               ×

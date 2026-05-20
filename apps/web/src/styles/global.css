@@ -106,3 +106,59 @@ hr {
   border-top: 1px solid var(--line);
   margin: 0;
 }
+
+/* =========================================================================
+   REACT FLOW OVERRIDES
+   Override @xyflow/react default styles to match the Mnema design system.
+   ========================================================================= */
+
+/* Canvas background */
+.react-flow {
+  background: var(--canvas);
+}
+
+/* Handles — override React Flow's white/dark defaults */
+.react-flow__handle {
+  width: 9px !important;
+  height: 9px !important;
+  background: var(--surface-2) !important;
+  border: 1.5px solid var(--line-bright) !important;
+  border-radius: 50% !important;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+/* Controls (zoom buttons) */
+.react-flow__controls {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  box-shadow: 0 12px 28px -12px rgba(0,0,0,0.5);
+}
+.react-flow__controls-button {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-soft);
+  width: 32px;
+  height: 32px;
+}
+.react-flow__controls-button:last-child {
+  border-bottom: 0;
+}
+.react-flow__controls-button:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+/* Attribution */
+.react-flow__attribution {
+  display: none;
+}
+
+/* Edge paths */
+.react-flow__edge-path {
+  stroke-linecap: round;
+}
