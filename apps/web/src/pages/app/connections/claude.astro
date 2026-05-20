@@ -6,15 +6,28 @@ if (!auth) {
   return Astro.redirect('/auth/login');
 }
 
-const mcpHost =
-  (import.meta.env.PUBLIC_API_URL as string | undefined) ??
-  'https://context.theboringpeople.in';
-const mcpEndpoint = `${mcpHost}/mcp`;
+const apiUrl =
+  (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+const mcpEndpoint = `${apiUrl}/mcp`;
 
-const domainPart = auth.email.split('@')[1]?.split('.')[0] ?? '';
+const domainPart = auth.email?.split('@')[1]?.split('.')[0] ?? '';
 const workspaceName = domainPart
   ? domainPart.charAt(0).toUpperCase() + domainPart.slice(1)
   : 'Workspace';
+
+// Check existing tokens server-side to set initial status
+let hasToken = false;
+let tokens: Array<{ id: string; name: string; scopes: string[]; expires_at: string | null; created_at: string }> = [];
+try {
+  const res = await fetch(`${apiUrl}/api/mcp-tokens`, {
+    headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+  });
+  if (res.ok) {
+    const body = (await res.json()) as { tokens: typeof tokens };
+    tokens = body.tokens ?? [];
+    hasToken = tokens.length > 0;
+  }
+} catch { /* API offline */ }
 ---
 
 <style>
@@ -52,8 +65,15 @@ const workspaceName = domainPart
   .cc-status-lhs { display: flex; flex-direction: column; gap: 12px; }
   .cc-status-row { display: flex; align-items: center; gap: 10px; }
   .cc-status-dot {
-    width: 8px; height: 8px; border-radius: 50%; background: var(--status-sync);
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .cc-status-dot.active {
+    background: var(--status-sync);
     animation: cc-pulse 2s ease-in-out infinite;
+  }
+  .cc-status-dot.inactive {
+    background: var(--ink-muted);
   }
   @keyframes cc-pulse {
     0%,100% { box-shadow: 0 0 0 0 rgba(107,227,155,0.55); }
@@ -86,6 +106,23 @@ const workspaceName = domainPart
   .cc-copy:hover { background: var(--surface-3); color: var(--ink); }
   .cc-copy.copied { color: var(--status-sync); }
   .cc-endpoint-help { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-muted); }
+
+  /* TOKEN DISPLAY */
+  .cc-token-box {
+    margin-top: 12px; padding: 14px 16px;
+    background: rgba(107,227,155,0.06); border: 1px solid rgba(107,227,155,0.24);
+    border-radius: 8px; display: none; flex-direction: column; gap: 10px;
+  }
+  .cc-token-box.visible { display: flex; }
+  .cc-token-label { font: 500 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--status-sync); }
+  .cc-token-value {
+    font: 400 11.5px/1.5 var(--mono); color: var(--ink); word-break: break-all;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px 12px; white-space: pre-wrap;
+    max-height: 100px; overflow-y: auto;
+  }
+  .cc-token-warn { font: 400 12px/1.5 var(--sans); color: var(--ink-muted); }
+  .cc-token-warn strong { color: var(--status-warn); font-weight: 500; }
 
   /* STEPS */
   .cc-steps { display: flex; flex-direction: column; }
@@ -124,6 +161,17 @@ const workspaceName = domainPart
   }
   .cc-scope-row.locked .cc-scope-tag { background: var(--surface-2); border-color: var(--line); color: var(--ink-muted); }
 
+  /* TOKENS LIST */
+  .cc-token-list { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .cc-token-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 14px; border-bottom: 1px solid var(--line); gap: 12px;
+  }
+  .cc-token-row:last-child { border-bottom: 0; }
+  .cc-token-row-info { display: flex; flex-direction: column; gap: 3px; }
+  .cc-token-row-name { font: 500 13px/1 var(--sans); color: var(--ink); }
+  .cc-token-row-meta { font: 400 11.5px/1 var(--mono); color: var(--ink-muted); }
+
   /* DANGER */
   .cc-danger {
     margin-top: 48px; padding: 20px 22px;
@@ -143,6 +191,16 @@ const workspaceName = domainPart
     border: 1px solid rgba(255,122,138,0.28); font: 500 12.5px/1 var(--sans); white-space: nowrap;
   }
   .cc-danger-btn:hover { background: rgba(255,122,138,0.16); }
+  .cc-danger-btn:disabled { opacity: 0.4; cursor: default; }
+
+  .cc-btn-pri {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; border-radius: 6px; cursor: pointer;
+    background: var(--accent); color: var(--on-ink);
+    border: 0; font: 500 13px/1 var(--sans); white-space: nowrap;
+  }
+  .cc-btn-pri:hover { opacity: 0.9; }
+  .cc-btn-pri:disabled { opacity: 0.5; cursor: default; }
 
   .cc-btn-sec {
     display: inline-flex; align-items: center; gap: 6px;
@@ -151,16 +209,20 @@ const workspaceName = domainPart
     border: 1px solid var(--line-strong); font: 500 12px/1 var(--sans);
   }
   .cc-btn-sec:hover { background: var(--surface-3); border-color: var(--line-bright); }
+  .cc-btn-sec:disabled { opacity: 0.4; cursor: default; }
+
+  .cc-err { margin-top: 10px; font: 400 12.5px/1.5 var(--sans); color: var(--status-warn); display: none; }
+  .cc-err.visible { display: block; }
 </style>
 
 <AppLayout title="Claude connection — Mnema" workspaceName={workspaceName} email={auth.email}>
 
-  <!-- STATUS LEFT -->
   <Fragment slot="status-left">
-    <span style="font:500 11px/1 var(--mono);color:var(--ink-muted);">Claude · connected</span>
+    <span id="sb-conn-status" style="font:500 11px/1 var(--mono);color:var(--ink-muted);">
+      Claude · {hasToken ? 'connected' : 'not connected'}
+    </span>
   </Fragment>
 
-  <!-- MAIN CONTENT -->
   <div class="cc-main">
     <div class="cc-wrap">
 
@@ -179,14 +241,14 @@ const workspaceName = domainPart
         <div class="cc-status-card">
           <div class="cc-status-lhs">
             <div class="cc-status-row">
-              <span class="cc-status-dot"></span>
+              <span class={`cc-status-dot ${hasToken ? 'active' : 'inactive'}`}></span>
               <span class="cc-status-label">Connection status</span>
-              <span class="cc-status-state">Active</span>
+              <span class="cc-status-state" id="cc-status-text">{hasToken ? 'Active' : 'Not connected'}</span>
             </div>
             <div class="cc-status-meta">
               <div class="cc-status-item">
                 <span class="cc-status-k">MCP protocol</span>
-                <span class="cc-status-v">v2025-11-25</span>
+                <span class="cc-status-v">v2025-11-05</span>
               </div>
               <div class="cc-status-item">
                 <span class="cc-status-k">Scopes granted</span>
@@ -194,13 +256,33 @@ const workspaceName = domainPart
               </div>
             </div>
           </div>
-          <div>
-            <button class="cc-btn-sec">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              Reconnect
-            </button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            {!hasToken && (
+              <button class="cc-btn-pri" id="cc-connect-btn" type="button">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                Connect
+              </button>
+            )}
+            {hasToken && (
+              <button class="cc-btn-sec" id="cc-add-btn" type="button">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                New token
+              </button>
+            )}
           </div>
         </div>
+
+        <!-- NEW TOKEN REVEAL (hidden until generated) -->
+        <div class="cc-token-box" id="cc-token-box">
+          <div class="cc-token-label">Your MCP Bearer token — copy it now</div>
+          <div class="cc-token-value" id="cc-token-value"></div>
+          <p class="cc-token-warn"><strong>⚠ Save this now.</strong> We don't store the raw token — once you leave this page it cannot be recovered. Paste it into Claude Desktop as shown in step 3 below.</p>
+          <button class="cc-copy" id="cc-copy-token-btn" style="align-self:flex-start;border:1px solid var(--line);border-radius:6px;">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span id="cc-copy-token-label">Copy token</span>
+          </button>
+        </div>
+        <div class="cc-err" id="cc-err">Failed to generate token — check that the API is running.</div>
       </div>
 
       <!-- MCP ENDPOINT -->
@@ -210,34 +292,54 @@ const workspaceName = domainPart
         <div class="cc-endpoint-block">
           <span class="cc-url" id="cc-mcp-url">{mcpEndpoint}</span>
           <button class="cc-copy" id="cc-copy-btn">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2v1"/></svg>
             <span id="cc-copy-label">Copy</span>
           </button>
         </div>
-        <p class="cc-endpoint-help">Paste this into Claude's connector settings to authorize live read access to this workspace.</p>
+        <p class="cc-endpoint-help">Paste this into Claude Desktop's MCP connector settings.</p>
       </div>
 
       <!-- SETUP STEPS -->
       <div class="cc-section">
         <div class="cc-sec-label">Connect in 30 seconds</div>
         <div class="cc-steps">
-          <div class="cc-step done">
+          <div class={`cc-step${hasToken ? ' done' : ''}`} id="cc-step1">
             <span class="cc-step-num">
-              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              {hasToken
+                ? <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                : '1'
+              }
             </span>
-            <div class="cc-step-body">Workspace MCP key generated and bound to this workspace.</div>
+            <div class="cc-step-body">Click <b>Connect</b> above to generate your MCP Bearer token. Copy it — you'll need it in step 3.</div>
           </div>
           <div class="cc-step">
             <span class="cc-step-num">2</span>
-            <div class="cc-step-body">Open <b>Claude Desktop → Settings → Connectors → Add MCP server</b>. Paste the URL above and click Save.</div>
+            <div class="cc-step-body">Open <b>Claude Desktop → Settings → Developer → Edit Config</b> (or find <code>claude_desktop_config.json</code> and add the MCP server block below).</div>
           </div>
           <div class="cc-step">
             <span class="cc-step-num">3</span>
-            <div class="cc-step-body">Authorise the connection. Claude will request <code>docs:read</code> and <code>flows:read</code> scopes.</div>
+            <div class="cc-step-body">
+              Add this to your <code>claude_desktop_config.json</code> under <code>"mcpServers"</code>:
+              <div class="cc-endpoint-block" style="margin-top:10px;">
+                <span class="cc-url" id="cc-config-snippet" style="white-space:pre;">{`"mnema": {
+  "url": "${mcpEndpoint}",
+  "headers": { "Authorization": "Bearer YOUR_TOKEN_HERE" }
+}`}</span>
+                <button class="cc-copy" id="cc-copy-config-btn">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  <span id="cc-copy-config-label">Copy</span>
+                </button>
+              </div>
+            </div>
           </div>
-          <div class="cc-step">
-            <span class="cc-step-num">4</span>
-            <div class="cc-step-body">Ask Claude something about your docs. It'll cite them in the answer — no upload, no re-indexing.</div>
+          <div class={`cc-step${hasToken ? ' done' : ''}`}>
+            <span class="cc-step-num">
+              {hasToken
+                ? <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                : '4'
+              }
+            </span>
+            <div class="cc-step-body">Restart Claude Desktop and ask it something about your docs. It'll cite them in the answer — no upload, no re-indexing.</div>
           </div>
         </div>
       </div>
@@ -273,17 +375,46 @@ const workspaceName = domainPart
         </div>
       </div>
 
+      <!-- ACTIVE TOKENS LIST -->
+      {hasToken && tokens.length > 0 && (
+        <div class="cc-section" id="cc-tokens-section">
+          <div class="cc-sec-label">Active tokens</div>
+          <div class="cc-token-list" id="cc-token-list">
+            {tokens.map(t => (
+              <div class="cc-token-row" data-token-id={t.id}>
+                <div class="cc-token-row-info">
+                  <span class="cc-token-row-name">{t.name}</span>
+                  <span class="cc-token-row-meta">
+                    Created {new Date(t.created_at).toLocaleDateString()}
+                    {t.expires_at ? ` · Expires ${new Date(t.expires_at).toLocaleDateString()}` : ' · No expiry'}
+                  </span>
+                </div>
+                <button class="cc-danger-btn cc-revoke-btn" data-token-id={t.id} type="button" style="font-size:11.5px;padding:6px 10px;">
+                  Revoke
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {!hasToken && (
+        <div id="cc-tokens-section" style="display:none;">
+          <div class="cc-sec-label">Active tokens</div>
+          <div class="cc-token-list" id="cc-token-list"></div>
+        </div>
+      )}
+
       <!-- DANGER ZONE -->
       <div class="cc-danger">
         <div class="cc-danger-pre">Danger zone</div>
         <div class="cc-danger-row">
           <div class="cc-danger-info">
-            <h3>Revoke connection</h3>
-            <p>Revoking will sign Claude out of this workspace. Existing chats won't be deleted, but Claude won't be able to read this workspace until you reconnect.</p>
+            <h3>Revoke all connections</h3>
+            <p>Revokes every active token. Claude won't be able to read this workspace until you reconnect.</p>
           </div>
-          <button class="cc-danger-btn">
+          <button class="cc-danger-btn" id="cc-revoke-all-btn" {!hasToken ? 'disabled' : ''} type="button">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            Revoke connection
+            Revoke all
           </button>
         </div>
       </div>
@@ -291,19 +422,161 @@ const workspaceName = domainPart
     </div>
   </div>
 
-  <script>
-    document.getElementById('cc-copy-btn')?.addEventListener('click', () => {
-      const url = document.getElementById('cc-mcp-url')?.textContent?.trim() ?? '';
-      navigator.clipboard.writeText(url).catch(() => {});
-      const btn = document.getElementById('cc-copy-btn');
-      const label = document.getElementById('cc-copy-label');
-      if (!btn || !label) return;
-      btn.classList.add('copied');
-      label.textContent = 'Copied!';
-      setTimeout(() => {
-        btn.classList.remove('copied');
-        label.textContent = 'Copy';
-      }, 1500);
+  <script define:vars={{ mcpEndpoint, hasTokenInit: hasToken, apiUrl }}>
+    const API = apiUrl;   // full URL to Fastify API (port 8080)
+
+    // ---- helpers ----
+    function copyText(text, labelEl, original) {
+      navigator.clipboard.writeText(text).catch(() => {});
+      labelEl.textContent = 'Copied!';
+      setTimeout(() => { labelEl.textContent = original; }, 1500);
+    }
+
+    function setStatus(active) {
+      const dot = document.querySelector('.cc-status-dot');
+      const txt = document.getElementById('cc-status-text');
+      const sb  = document.getElementById('sb-conn-status');
+      const revokeAll = document.getElementById('cc-revoke-all-btn');
+      if (dot) { dot.className = `cc-status-dot ${active ? 'active' : 'inactive'}`; }
+      if (txt) txt.textContent = active ? 'Active' : 'Not connected';
+      if (sb)  sb.textContent  = `Claude · ${active ? 'connected' : 'not connected'}`;
+      if (revokeAll) revokeAll.disabled = !active;
+    }
+
+    function addTokenRow(token) {
+      const section = document.getElementById('cc-tokens-section');
+      const list    = document.getElementById('cc-token-list');
+      if (!section || !list) return;
+      section.style.display = '';
+      const expires = token.expires_at
+        ? `Expires ${new Date(token.expires_at).toLocaleDateString()}`
+        : 'No expiry';
+      const row = document.createElement('div');
+      row.className = 'cc-token-row';
+      row.dataset.tokenId = token.id;
+      row.innerHTML = `
+        <div class="cc-token-row-info">
+          <span class="cc-token-row-name">${token.name}</span>
+          <span class="cc-token-row-meta">Created ${new Date(token.created_at).toLocaleDateString()} · ${expires}</span>
+        </div>
+        <button class="cc-danger-btn cc-revoke-btn" data-token-id="${token.id}" type="button" style="font-size:11.5px;padding:6px 10px;">Revoke</button>
+      `;
+      list.appendChild(row);
+      row.querySelector('.cc-revoke-btn')?.addEventListener('click', () => revokeToken(token.id));
+    }
+
+    async function generateToken() {
+      const btn = document.getElementById('cc-connect-btn') ?? document.getElementById('cc-add-btn');
+      const box = document.getElementById('cc-token-box');
+      const val = document.getElementById('cc-token-value');
+      const err = document.getElementById('cc-err');
+      const step1 = document.getElementById('cc-step1');
+
+      if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+      if (err) err.classList.remove('visible');
+
+      try {
+        const res = await fetch(`${API}/api/mcp-tokens`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Claude Desktop' }),
+        });
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const data = await res.json();
+
+        // Show the token
+        if (val) val.textContent = data.jwt;
+        if (box) box.classList.add('visible');
+
+        // Update config snippet
+        const snippet = document.getElementById('cc-config-snippet');
+        if (snippet) {
+          snippet.textContent = `"mnema": {\n  "url": "${mcpEndpoint}",\n  "headers": { "Authorization": "Bearer ${data.jwt}" }\n}`;
+        }
+
+        // Update step 1 to done
+        if (step1) {
+          step1.classList.add('done');
+          const numEl = step1.querySelector('.cc-step-num');
+          if (numEl) numEl.innerHTML = `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+        }
+
+        // Swap Connect → New token button
+        const connectBtn = document.getElementById('cc-connect-btn');
+        if (connectBtn) {
+          connectBtn.id = 'cc-add-btn';
+          connectBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> New token`;
+          connectBtn.className = 'cc-btn-sec';
+          connectBtn.disabled = false;
+        }
+
+        addTokenRow(data.token);
+        setStatus(true);
+      } catch (e) {
+        if (err) err.classList.add('visible');
+        if (btn) { btn.disabled = false; btn.textContent = btn.id === 'cc-add-btn' ? 'New token' : 'Connect'; }
+      }
+    }
+
+    async function revokeToken(id) {
+      if (!confirm('Revoke this token? Claude Desktop will lose access immediately.')) return;
+      const res = await fetch(`${API}/api/mcp-tokens/${id}`, { method: 'DELETE', credentials: 'include' });
+      if (!res.ok && res.status !== 204) return alert('Failed to revoke token');
+      const row = document.querySelector(`[data-token-id="${id}"]`);
+      row?.remove();
+      const list = document.getElementById('cc-token-list');
+      if (list && list.children.length === 0) {
+        const sec = document.getElementById('cc-tokens-section');
+        if (sec) sec.style.display = 'none';
+        setStatus(false);
+        // Re-show connect button
+        const card = document.querySelector('.cc-status-card > div:last-child');
+        if (card) {
+          card.innerHTML = `<button class="cc-btn-pri" id="cc-connect-btn" type="button">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Connect</button>`;
+          document.getElementById('cc-connect-btn')?.addEventListener('click', generateToken);
+        }
+      }
+    }
+
+    // ---- wire events ----
+    document.getElementById('cc-connect-btn') && document.getElementById('cc-connect-btn').addEventListener('click', generateToken);
+    document.getElementById('cc-add-btn') && document.getElementById('cc-add-btn').addEventListener('click', generateToken);
+
+    // Revoke individual token rows (server-rendered)
+    document.querySelectorAll('.cc-revoke-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() { revokeToken(btn.dataset.tokenId); });
+    });
+
+    var revokeAllBtn = document.getElementById('cc-revoke-all-btn');
+    if (revokeAllBtn) revokeAllBtn.addEventListener('click', async function() {
+      if (!confirm('Revoke ALL active tokens? Claude will lose access immediately.')) return;
+      var rows = Array.from(document.querySelectorAll('[data-token-id]'));
+      await Promise.all(rows.map(function(r) { return fetch(API + '/api/mcp-tokens/' + r.dataset.tokenId, { method: 'DELETE', credentials: 'include' }); }));
+      document.querySelectorAll('.cc-token-row').forEach(function(r) { r.remove(); });
+      var sec = document.getElementById('cc-tokens-section');
+      if (sec) sec.style.display = 'none';
+      setStatus(false);
+    });
+
+    var copyBtn = document.getElementById('cc-copy-btn');
+    if (copyBtn) copyBtn.addEventListener('click', function() {
+      var url = (document.getElementById('cc-mcp-url') && document.getElementById('cc-mcp-url').textContent || '').trim();
+      copyText(url, document.getElementById('cc-copy-label'), 'Copy');
+    });
+
+    var copyTokenBtn = document.getElementById('cc-copy-token-btn');
+    if (copyTokenBtn) copyTokenBtn.addEventListener('click', function() {
+      var jwt = (document.getElementById('cc-token-value') && document.getElementById('cc-token-value').textContent || '').trim();
+      copyText(jwt, document.getElementById('cc-copy-token-label'), 'Copy token');
+    });
+
+    var copyConfigBtn = document.getElementById('cc-copy-config-btn');
+    if (copyConfigBtn) copyConfigBtn.addEventListener('click', function() {
+      var snippet = (document.getElementById('cc-config-snippet') && document.getElementById('cc-config-snippet').textContent || '').trim();
+      copyText(snippet, document.getElementById('cc-copy-config-label'), 'Copy');
     });
   </script>
 

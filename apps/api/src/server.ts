@@ -17,6 +17,7 @@ import { docReadStateRoutes } from './routes/doc-read-state.js';
 import { docVersionsRoutes } from './routes/doc-versions.js';
 import { docsRoutes } from './routes/docs.js';
 import { foldersRoutes } from './routes/folders.js';
+import { mcpTokenRoutes } from './routes/mcp-tokens.js';
 import { flowsRoutes } from './routes/flows.js';
 import { healthRoutes } from './routes/health.js';
 import { invitationsRoutes } from './routes/invitations.js';
@@ -50,6 +51,7 @@ await app.register(docReadStateRoutes);
 await app.register(completeRoutes);
 await app.register(razorpayRoutes);
 await app.register(billingRoutes);
+await app.register(mcpTokenRoutes);
 await app.register(mcpPlugin);
 
 const port = config.API_PORT;

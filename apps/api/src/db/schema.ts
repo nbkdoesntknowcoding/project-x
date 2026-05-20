@@ -484,6 +484,28 @@ export const flowNodes = pgTable(
   }),
 );
 
+// MCP API tokens — long-lived Bearer credentials for Claude Desktop / claude.ai.
+// The JWT itself is never stored; only the jti (JWT ID) is kept for revocation.
+export const mcpTokens = pgTable(
+  'mcp_tokens',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId: uuid('workspace_id').notNull(),
+    userId: text('user_id').notNull(),
+    name: text('name').notNull().default('Claude Desktop'),
+    jti: uuid('jti').notNull().default(sql`gen_random_uuid()`).unique(),
+    scopes: text('scopes').array().notNull().default(sql`ARRAY['docs:read','flows:read']`),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    workspaceIdx: index('mcp_tokens_workspace_idx').on(table.workspaceId),
+    jtiIdx: index('mcp_tokens_jti_idx').on(table.jti),
+  }),
+);
+
 export const flowEdges = pgTable(
   'flow_edges',
   {
