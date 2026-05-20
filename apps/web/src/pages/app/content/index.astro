@@ -27,27 +27,35 @@ interface DocSummary {
 interface FolderSummary {
   id: string;
   name: string;
+  parent_id: string | null;
   doc_count: number;
+  subfolder_count: number;
 }
 
 let docs: DocSummary[] = [];
-let folders: FolderSummary[] = [];
+let folders: FolderSummary[] = [];   // root folders (at root) or ALL folders (used for move-to lists)
+let subfolders: FolderSummary[] = []; // direct children when inside a folder
 let currentFolder: FolderSummary | null = null;
 const unreadByDoc = new Map<string, number>();
 
 try {
   const docsQuery = isInsideFolder ? `?folder_id=${folderParam}` : '';
-  const [docsRes, foldersRes, unreadRes] = await Promise.all([
-    fetch(`${apiUrl}/api/docs${docsQuery}`, {
-      headers: { Cookie: `boppl_jwt=${auth.jwt}` },
-    }),
-    fetch(`${apiUrl}/api/folders`, {
-      headers: { Cookie: `boppl_jwt=${auth.jwt}` },
-    }),
-    fetch(`${apiUrl}/api/doc-read-state/unread-counts`, {
-      headers: { Cookie: `boppl_jwt=${auth.jwt}` },
-    }),
-  ]);
+  // Root view: fetch only root folders (?parent_id=null)
+  // Folder view: fetch root folders (for move-to list) + subfolders of current folder
+  const rootFoldersUrl = `${apiUrl}/api/folders?parent_id=null`;
+  const subFoldersUrl  = isInsideFolder ? `${apiUrl}/api/folders?parent_id=${folderParam}` : null;
+
+  const fetches: Promise<Response>[] = [
+    fetch(`${apiUrl}/api/docs${docsQuery}`, { headers: { Cookie: `boppl_jwt=${auth.jwt}` } }),
+    fetch(rootFoldersUrl,                   { headers: { Cookie: `boppl_jwt=${auth.jwt}` } }),
+    fetch(`${apiUrl}/api/doc-read-state/unread-counts`, { headers: { Cookie: `boppl_jwt=${auth.jwt}` } }),
+  ];
+  if (subFoldersUrl) {
+    fetches.push(fetch(subFoldersUrl, { headers: { Cookie: `boppl_jwt=${auth.jwt}` } }));
+  }
+
+  const [docsRes, foldersRes, unreadRes, subFoldersRes] = await Promise.all(fetches);
+
   if (docsRes.ok) {
     const body = (await docsRes.json()) as { docs: DocSummary[] };
     docs = body.docs;
@@ -56,16 +64,25 @@ try {
     const body = (await foldersRes.json()) as { folders: FolderSummary[] };
     folders = body.folders;
     if (isInsideFolder) {
-      currentFolder = folders.find((f) => f.id === folderParam) ?? null;
+      // currentFolder won't be in the root list; fetch it from all folders
+      const allRes = await fetch(`${apiUrl}/api/folders`, { headers: { Cookie: `boppl_jwt=${auth.jwt}` } });
+      if (allRes.ok) {
+        const allBody = (await allRes.json()) as { folders: FolderSummary[] };
+        currentFolder = allBody.folders.find((f) => f.id === folderParam) ?? null;
+      }
     }
   }
-  if (unreadRes.ok) {
+  if (unreadRes?.ok) {
     const body = (await unreadRes.json()) as {
       unread: Array<{ doc_id: string; unread_comment_count: number }>;
     };
     for (const row of body.unread ?? []) {
       unreadByDoc.set(row.doc_id, row.unread_comment_count);
     }
+  }
+  if (subFoldersRes?.ok) {
+    const body = (await subFoldersRes.json()) as { folders: FolderSummary[] };
+    subfolders = body.folders;
   }
 } catch {
   /* API offline */
@@ -109,7 +126,7 @@ const heading = isInsideFolder
   : 'All docs';
 
 const totalItems = isInsideFolder
-  ? docs.length
+  ? subfolders.length + docs.length
   : folders.length + unfiledDocs.length;
 ---
 
@@ -402,6 +419,40 @@ const totalItems = isInsideFolder
   /* List row draggable */
   .co-lr[data-doc-id] { cursor: default; }
   .co-lr[data-doc-id].co-dragging { opacity: 0.35; }
+
+  /* ── RIGHT-CLICK CONTEXT MENU ── */
+  #co-ctx-menu {
+    position: fixed; z-index: 400;
+    background: color-mix(in srgb, var(--surface-overlay) 82%, transparent);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent);
+    border-radius: 10px;
+    box-shadow:
+      0 12px 40px rgba(0,0,0,0.38),
+      0 2px 8px rgba(0,0,0,0.22),
+      inset 0 1px 0 rgba(255,255,255,0.08);
+    padding: 4px;
+    min-width: 192px;
+    display: none;
+    user-select: none;
+  }
+  #co-ctx-menu.visible { display: block; }
+  .co-ctx-item {
+    display: flex; align-items: center; gap: 9px;
+    padding: 8px 10px; border-radius: 6px;
+    font: 400 13px/1 var(--sans); color: var(--ink);
+    cursor: pointer;
+  }
+  .co-ctx-item:hover { background: var(--surface-2); }
+  .co-ctx-item svg { flex-shrink: 0; color: var(--ink-muted); }
+  .co-ctx-item.danger { color: var(--status-error, #f25c5c); }
+  .co-ctx-item.danger svg { color: var(--status-error, #f25c5c); }
+  .co-ctx-sep {
+    height: 1px;
+    background: color-mix(in srgb, var(--line) 70%, transparent);
+    margin: 3px 8px;
+  }
 </style>
 
 <AppLayout title="Content — Mnema" workspaceName={workspaceName} email={auth.email} hasToolbar={true}>
@@ -473,6 +524,11 @@ const totalItems = isInsideFolder
       {totalItems} {totalItems === 1 ? 'item' : 'items'}{isInsideFolder ? ` · ${heading}` : ''}
     </span>
   </Fragment>
+
+  <!-- RIGHT-CLICK CONTEXT MENU -->
+  <div id="co-ctx-menu" role="menu">
+    <!-- items injected by JS based on what was right-clicked -->
+  </div>
 
   <!-- OS FILE DROP OVERLAY (shown when dragging files from Finder/Explorer) -->
   <div id="co-drop-overlay">
@@ -580,6 +636,82 @@ const totalItems = isInsideFolder
                 <input id="co-folder-name-inp" type="text" placeholder="Folder name" maxlength="200" autocomplete="off" />
               </div>
 
+              <button id="co-add-folder-btn" type="button" class="co-tile-add">
+                <div class="ico-wrap">
+                  <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
+                    <rect x="1" y="1" width="42" height="42" rx="9" stroke="var(--line)" stroke-width="1.5" stroke-dasharray="4 3"/>
+                    <path d="M22 14v16M14 22h16" stroke="var(--ink-muted)" stroke-width="1.5" stroke-linecap="round"/>
+                  </svg>
+                </div>
+                <div class="t-name">New folder</div>
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── SUBFOLDERS (inside a folder) ── */}
+        {isInsideFolder && (
+          <>
+            <div class="co-section-title">
+              <h3>Folders</h3>
+              <span class="co-count">{subfolders.length} {subfolders.length === 1 ? 'item' : 'items'}</span>
+            </div>
+            <div class="co-folder-grid" id="co-subfolder-grid">
+              {subfolders.map((f) => (
+                <a href={`/app/content?folder=${f.id}`} class="co-tile" data-folder-id={f.id} data-folder-name={f.name}>
+                  <div class="ico-wrap">
+                    <svg class="co-folder-svg" viewBox="0 0 168 130" fill="none" preserveAspectRatio="xMidYMid meet">
+                      <defs>
+                        <linearGradient id={`fgp-s-${f.id}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0" stop-color="#F5F5F5"/>
+                          <stop offset="1" stop-color="#D6D6D6"/>
+                        </linearGradient>
+                        <linearGradient id={`fgs-${f.id}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0" stop-color="#5C5E64"/>
+                          <stop offset="0.45" stop-color="#3E4046"/>
+                          <stop offset="1" stop-color="#2C2E33"/>
+                        </linearGradient>
+                      </defs>
+                      <g>
+                        <path d="M48 16 L106 16 L116 26 L116 84 Q116 88 112 88 L48 88 Q44 88 44 84 L44 20 Q44 16 48 16 Z" fill={`url(#fgp-s-${f.id})`}/>
+                        <path d="M106 16 L116 26 L106 26 Z" fill="#B8B8B8"/>
+                      </g>
+                      <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31 L152 116 Q152 120 148 120 L24 120 Q20 120 20 116 Z" fill={`url(#fgs-${f.id})`}/>
+                      <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31" stroke="rgba(255,255,255,0.18)" stroke-width="1" fill="none"/>
+                      <rect x="20" y="115" width="132" height="5" rx="2" fill="rgba(0,0,0,0.18)"/>
+                    </svg>
+                  </div>
+                  <div class="t-name">{f.name}</div>
+                  <div class="t-meta">{f.doc_count} {f.doc_count === 1 ? 'file' : 'files'}</div>
+                </a>
+              ))}
+
+              {/* ADD SUBFOLDER TILE */}
+              <div id="co-folder-input-wrap">
+                <div class="ico-wrap">
+                  <svg class="co-folder-svg" viewBox="0 0 168 130" fill="none" preserveAspectRatio="xMidYMid meet">
+                    <defs>
+                      <linearGradient id="fgp-sub-new" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="#F5F5F5"/>
+                        <stop offset="1" stop-color="#D6D6D6"/>
+                      </linearGradient>
+                      <linearGradient id="fgf-sub-new" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stop-color="#5C5E64"/>
+                        <stop offset="0.45" stop-color="#3E4046"/>
+                        <stop offset="1" stop-color="#2C2E33"/>
+                      </linearGradient>
+                    </defs>
+                    <g>
+                      <path d="M48 16 L106 16 L116 26 L116 84 Q116 88 112 88 L48 88 Q44 88 44 84 L44 20 Q44 16 48 16 Z" fill="url(#fgp-sub-new)"/>
+                      <path d="M106 16 L116 26 L106 26 Z" fill="#B8B8B8"/>
+                    </g>
+                    <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31 L152 116 Q152 120 148 120 L24 120 Q20 120 20 116 Z" fill="url(#fgf-sub-new)"/>
+                    <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31" stroke="rgba(255,255,255,0.18)" stroke-width="1" fill="none"/>
+                    <rect x="20" y="115" width="132" height="5" rx="2" fill="rgba(0,0,0,0.18)"/>
+                  </svg>
+                </div>
+                <input id="co-folder-name-inp" type="text" placeholder="Folder name" maxlength="200" autocomplete="off" />
+              </div>
               <button id="co-add-folder-btn" type="button" class="co-tile-add">
                 <div class="ico-wrap">
                   <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
@@ -752,7 +884,7 @@ const totalItems = isInsideFolder
       e.target.value = ''; // reset so same file can be re-uploaded
     });
 
-    // --- Create folder ---
+    // --- Create folder (supports nested via parent_id) ---
     const addBtn = document.getElementById('co-add-folder-btn');
     const inputWrap = document.getElementById('co-folder-input-wrap');
     const nameInp = document.getElementById('co-folder-name-inp');
@@ -766,11 +898,12 @@ const totalItems = isInsideFolder
     async function submitFolder() {
       const name = nameInp?.value?.trim();
       if (!name) { cancelFolder(); return; }
+      const body = folderParam ? { name, parent_id: folderParam } : { name };
       const res = await fetch(`${apiBase}/api/folders`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) { alert('Failed to create folder'); return; }
       window.location.reload();
@@ -792,6 +925,147 @@ const totalItems = isInsideFolder
           if (nameInp?.value?.trim()) { void submitFolder(); } else { cancelFolder(); }
         }
       }, 150);
+    });
+
+    // ── RIGHT-CLICK CONTEXT MENU ─────────────────────────────────────────
+    const ctxMenu = document.getElementById('co-ctx-menu');
+    let ctxTarget = null; // { type: 'doc'|'folder', id, name, el }
+
+    function hideCtx() {
+      if (ctxMenu) ctxMenu.classList.remove('visible');
+      ctxTarget = null;
+    }
+
+    function showCtx(x, y, items) {
+      if (!ctxMenu) return;
+      // Build menu items
+      ctxMenu.innerHTML = items.map(item => {
+        if (item === '---') return '<div class="co-ctx-sep"></div>';
+        const dangerClass = item.danger ? ' danger' : '';
+        return `<div class="co-ctx-item${dangerClass}" data-action="${item.action}">${item.icon ?? ''}${item.label}</div>`;
+      }).join('');
+      // Position near cursor, flip if off-screen
+      ctxMenu.style.left = '0px';
+      ctxMenu.style.top = '0px';
+      ctxMenu.classList.add('visible');
+      const mw = ctxMenu.offsetWidth;
+      const mh = ctxMenu.offsetHeight;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      ctxMenu.style.left = (x + mw > vw ? x - mw : x) + 'px';
+      ctxMenu.style.top  = (y + mh > vh ? y - mh : y) + 'px';
+    }
+
+    function iconSvg(path, size = 14) {
+      return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+    }
+
+    // Build menu for a doc tile
+    function docCtxItems() {
+      return [
+        { action: 'open',   label: 'Open',         icon: iconSvg('<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>') },
+        '---',
+        { action: 'delete', label: 'Delete',        icon: iconSvg('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>'), danger: true },
+      ];
+    }
+
+    // Build menu for a folder tile
+    function folderCtxItems() {
+      return [
+        { action: 'open',    label: 'Open',          icon: iconSvg('<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>') },
+        { action: 'rename',  label: 'Rename',        icon: iconSvg('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>') },
+        { action: 'new-sub', label: 'New folder inside', icon: iconSvg('<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>') },
+        '---',
+        { action: 'delete',  label: 'Delete',        icon: iconSvg('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>'), danger: true },
+      ];
+    }
+
+    // Attach contextmenu to doc tiles
+    document.querySelectorAll('.co-tile[data-doc-id], .co-lr[data-doc-id]').forEach(el => {
+      el.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        ctxTarget = { type: 'doc', id: el.dataset.docId, name: el.querySelector('.t-name,.co-name')?.textContent?.trim() ?? '', el, href: el.href };
+        showCtx(e.clientX + 2, e.clientY + 2, docCtxItems());
+      });
+    });
+
+    // Attach contextmenu to folder tiles
+    document.querySelectorAll('.co-tile[data-folder-id]').forEach(el => {
+      el.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        ctxTarget = { type: 'folder', id: el.dataset.folderId, name: el.dataset.folderName ?? '', el };
+        showCtx(e.clientX + 2, e.clientY + 2, folderCtxItems());
+      });
+    });
+
+    // Handle menu item clicks
+    ctxMenu?.addEventListener('click', async e => {
+      const item = e.target.closest('[data-action]');
+      if (!item || !ctxTarget) return;
+      const action = item.dataset.action;
+      const t = ctxTarget;
+      hideCtx();
+
+      if (action === 'open') {
+        if (t.type === 'doc') window.location.href = t.href ?? `/app/content/${t.id}?back=${backParam}`;
+        else window.location.href = `/app/content?folder=${t.id}`;
+        return;
+      }
+
+      if (action === 'rename' && t.type === 'folder') {
+        const newName = window.prompt('Rename folder:', t.name);
+        if (!newName?.trim() || newName.trim() === t.name) return;
+        const res = await fetch(`${apiBase}/api/folders/${t.id}`, {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName.trim() }),
+        });
+        if (res.ok) window.location.reload();
+        else alert('Failed to rename folder');
+        return;
+      }
+
+      if (action === 'new-sub' && t.type === 'folder') {
+        const name = window.prompt('New folder name:');
+        if (!name?.trim()) return;
+        const res = await fetch(`${apiBase}/api/folders`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name.trim(), parent_id: t.id }),
+        });
+        if (res.ok) window.location.href = `/app/content?folder=${t.id}`;
+        else alert('Failed to create folder');
+        return;
+      }
+
+      if (action === 'delete') {
+        if (t.type === 'doc') {
+          if (!confirm(`Delete "${t.name}"? This cannot be undone.`)) return;
+          const res = await fetch(`${apiBase}/api/docs/${t.id}`, {
+            method: 'DELETE', credentials: 'include',
+          });
+          if (res.ok || res.status === 204) window.location.reload();
+          else alert('Failed to delete doc');
+        } else {
+          if (!confirm(`Delete folder "${t.name}"? Docs inside will become unfiled.`)) return;
+          const res = await fetch(`${apiBase}/api/folders/${t.id}`, {
+            method: 'DELETE', credentials: 'include',
+          });
+          if (res.ok || res.status === 204) window.location.reload();
+          else alert('Failed to delete folder');
+        }
+        return;
+      }
+    });
+
+    // Dismiss on outside click / Escape
+    document.addEventListener('click', e => {
+      if (ctxMenu && !ctxMenu.contains(e.target)) hideCtx();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') hideCtx();
     });
 
     // --- Move doc to folder (list view select) ---

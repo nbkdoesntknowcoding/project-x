@@ -1,4 +1,4 @@
-import { and, count, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { docs, folders } from '../db/schema.js';
@@ -11,6 +11,8 @@ function isUuid(s: string): boolean {
 
 const createSchema = z.object({
   name: z.string().min(1).max(200),
+  // Phase 6.5: optional parent for nested folders. null/omitted = root.
+  parent_id: z.string().uuid().nullable().optional(),
 });
 
 const renameSchema = z.object({
@@ -22,39 +24,77 @@ const moveFolderSchema = z.object({
 });
 
 export const foldersRoutes: FastifyPluginAsync = async (app) => {
-  // List all folders with doc count
+  // List folders — optionally filtered by parent.
+  // ?parent_id=null  → root folders (parent_id IS NULL)
+  // ?parent_id=<uuid> → children of that folder
+  // (no param)        → all folders (for sidebar counts etc.)
   app.get('/api/folders', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
 
+    const q = (req.query as Record<string, unknown>) ?? {};
+    const rawParent = q.parent_id as string | undefined;
+
     const rows = await withTenant(req.auth.tenant_id, async (tx) => {
-      return await tx.execute(
-        sql`SELECT f.id, f.name, f.created_at, f.updated_at,
-                   COUNT(d.id)::int AS doc_count
-            FROM folders f
-            LEFT JOIN docs d ON d.folder_id = f.id AND d.deleted_at IS NULL
-            GROUP BY f.id, f.name, f.created_at, f.updated_at
-            ORDER BY f.name ASC`,
-      );
+      if (rawParent === 'null') {
+        return await tx.execute(
+          sql`SELECT f.id, f.name, f.parent_id, f.created_at, f.updated_at,
+                     COUNT(d.id)::int AS doc_count,
+                     COUNT(cf.id)::int AS subfolder_count
+              FROM folders f
+              LEFT JOIN docs d ON d.folder_id = f.id AND d.deleted_at IS NULL
+              LEFT JOIN folders cf ON cf.parent_id = f.id
+              WHERE f.parent_id IS NULL
+              GROUP BY f.id, f.name, f.parent_id, f.created_at, f.updated_at
+              ORDER BY f.name ASC`,
+        );
+      } else if (rawParent && UUID_RE.test(rawParent)) {
+        return await tx.execute(
+          sql`SELECT f.id, f.name, f.parent_id, f.created_at, f.updated_at,
+                     COUNT(d.id)::int AS doc_count,
+                     COUNT(cf.id)::int AS subfolder_count
+              FROM folders f
+              LEFT JOIN docs d ON d.folder_id = f.id AND d.deleted_at IS NULL
+              LEFT JOIN folders cf ON cf.parent_id = f.id
+              WHERE f.parent_id = ${rawParent}::uuid
+              GROUP BY f.id, f.name, f.parent_id, f.created_at, f.updated_at
+              ORDER BY f.name ASC`,
+        );
+      } else {
+        return await tx.execute(
+          sql`SELECT f.id, f.name, f.parent_id, f.created_at, f.updated_at,
+                     COUNT(d.id)::int AS doc_count,
+                     COUNT(cf.id)::int AS subfolder_count
+              FROM folders f
+              LEFT JOIN docs d ON d.folder_id = f.id AND d.deleted_at IS NULL
+              LEFT JOIN folders cf ON cf.parent_id = f.id
+              GROUP BY f.id, f.name, f.parent_id, f.created_at, f.updated_at
+              ORDER BY f.name ASC`,
+        );
+      }
     });
 
     return {
       folders: (rows as unknown as Array<{
         id: string;
         name: string;
+        parent_id: string | null;
         created_at: string;
         updated_at: string;
         doc_count: number;
+        subfolder_count: number;
       }>).map((r) => ({
         id: r.id,
         name: r.name,
+        parent_id: r.parent_id ?? null,
         doc_count: Number(r.doc_count) || 0,
+        subfolder_count: Number(r.subfolder_count) || 0,
         created_at: r.created_at,
         updated_at: r.updated_at,
       })),
     };
   });
 
-  // Create a new folder
+  // Create a new folder (optionally nested under a parent)
   app.post('/api/folders', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
     const parsed = createSchema.safeParse(req.body);
@@ -69,6 +109,7 @@ export const foldersRoutes: FastifyPluginAsync = async (app) => {
         .values({
           workspaceId: auth.tenant_id,
           name: parsed.data.name,
+          parentId: parsed.data.parent_id ?? null,
           createdBy: auth.sub,
         })
         .returning();
@@ -81,7 +122,9 @@ export const foldersRoutes: FastifyPluginAsync = async (app) => {
       folder: {
         id: created.id,
         name: created.name,
+        parent_id: created.parentId ?? null,
         doc_count: 0,
+        subfolder_count: 0,
         created_at: created.createdAt,
         updated_at: created.updatedAt,
       },
@@ -112,7 +155,7 @@ export const foldersRoutes: FastifyPluginAsync = async (app) => {
     return { folder: { id: updated.id, name: updated.name } };
   });
 
-  // Delete a folder (docs inside become unfiled)
+  // Delete a folder (docs inside become unfiled; subfolders become root)
   app.delete<{ Params: { id: string } }>('/api/folders/:id', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
     const { id } = req.params;
@@ -147,5 +190,24 @@ export const foldersRoutes: FastifyPluginAsync = async (app) => {
 
     if (!updated) return reply.code(404).send({ error: 'not_found' });
     return { doc: { id: updated.id, folder_id: updated.folderId } };
+  });
+
+  // Delete a doc (soft-delete)
+  app.delete<{ Params: { id: string } }>('/api/docs/:id', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params;
+    if (!isUuid(id)) return reply.code(400).send({ error: 'bad_id' });
+
+    const updated = await withTenant(req.auth.tenant_id, async (tx) => {
+      const rows = await tx
+        .update(docs)
+        .set({ deletedAt: new Date() })
+        .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
+        .returning({ id: docs.id });
+      return rows[0];
+    });
+
+    if (!updated) return reply.code(404).send({ error: 'not_found' });
+    return reply.code(204).send();
   });
 };

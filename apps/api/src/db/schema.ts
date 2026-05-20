@@ -150,12 +150,17 @@ export const folders = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
+    // Phase 6.5: self-referential FK for nested folders. Null = root folder.
+    // FK constraint lives in the DB (migration 0009); Drizzle doesn't handle
+    // self-references cleanly so we declare it as a plain uuid column here.
+    parentId: uuid('parent_id'),
     createdBy: uuid('created_by').references(() => users.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     workspaceIdx: index('folders_workspace_idx').on(table.workspaceId),
+    parentIdx: index('folders_parent_idx').on(table.parentId),
   }),
 );
 
