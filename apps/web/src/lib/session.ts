@@ -40,7 +40,22 @@ export async function getSession(
   const value = cookies.get(SESSION_COOKIE)?.value;
   if (!value) return null;
   try {
-    return await unsealData<SessionData>(value, { password: getPassword() });
+    const data = await unsealData<SessionData>(value, { password: getPassword() });
+    // If the embedded JWT is expired, treat as no session → forces re-login.
+    if (data?.jwt) {
+      const parts = data.jwt.split('.');
+      if (parts.length === 3) {
+        try {
+          const payload = JSON.parse(atob(parts[1]!)) as { exp?: number };
+          if (payload.exp && payload.exp * 1000 < Date.now()) {
+            return null;
+          }
+        } catch {
+          // malformed JWT payload — fall through, let API reject it
+        }
+      }
+    }
+    return data;
   } catch {
     return null;
   }
