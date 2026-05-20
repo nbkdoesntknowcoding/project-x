@@ -341,6 +341,37 @@ const totalItems = isInsideFolder
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .co-move-sel:hover { border-color: var(--accent); }
+
+  /* DRAG-AND-DROP */
+  .co-tile[data-doc-id] { cursor: default; }
+  .co-tile[data-doc-id].co-dragging { opacity: 0.35; pointer-events: none; }
+  .co-tile[data-folder-id].co-drag-over {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .co-tile[data-folder-id].co-drag-over .co-folder-svg {
+    filter: drop-shadow(0 6px 14px rgba(0,0,0,0.45)) brightness(1.15);
+    transform: scale(1.04);
+    transition: transform 120ms ease;
+  }
+  /* Unfile drop zone (shown when dragging inside a folder) */
+  .co-unfile-zone {
+    display: none; align-items: center; justify-content: center; gap: 8px;
+    border: 1.5px dashed var(--line); border-radius: 8px;
+    padding: 10px 16px; margin-bottom: 16px;
+    color: var(--ink-muted); font: 500 12px/1 var(--sans);
+    transition: border-color 120ms, background 120ms;
+  }
+  .co-unfile-zone.co-drag-active { display: flex; }
+  .co-unfile-zone.co-drag-over {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    color: var(--accent);
+  }
+  /* List row draggable */
+  .co-lr[data-doc-id] { cursor: default; }
+  .co-lr[data-doc-id].co-dragging { opacity: 0.35; }
 </style>
 
 <AppLayout title="Content — Mnema" workspaceName={workspaceName} email={auth.email} hasToolbar={true}>
@@ -530,13 +561,21 @@ const totalItems = isInsideFolder
               </span>
             </div>
 
+            {/* UNFILE DROP ZONE — shown only when dragging inside a folder */}
+            {isInsideFolder && (
+              <div id="co-unfile-zone" class="co-unfile-zone">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+                Drop here to move out of folder
+              </div>
+            )}
+
             {/* ICON GRID */}
             <div class="co-icon-grid">
               {(isInsideFolder ? docs : unfiledDocs).map((d) => {
                 const ext = extClass(d.type);
                 const label = extLabel(d.type);
                 return (
-                  <a href={`/app/content/${d.id}`} class="co-tile">
+                  <a href={`/app/content/${d.id}`} class="co-tile" draggable="true" data-doc-id={d.id}>
                     <div class="ico-wrap">
                       <div class={`co-fi ${ext}`}>
                         <div class="sheet">
@@ -568,7 +607,7 @@ const totalItems = isInsideFolder
                 const ext = extClass(d.type);
                 const label = extLabel(d.type);
                 return (
-                  <a href={`/app/content/${d.id}`} class="co-lr">
+                  <a href={`/app/content/${d.id}`} class="co-lr" draggable="true" data-doc-id={d.id}>
                     <div class="co-ic">
                       <div class={`co-file-ico ${ext}`}>
                         <div class="sheet"></div>
@@ -606,15 +645,15 @@ const totalItems = isInsideFolder
   </div>
 
   <script define:vars={{ folderParam, isInsideFolder }}>
-    const apiBase =
-      (typeof window !== 'undefined' && (window).__astroEnv?.PUBLIC_API_URL) ??
-      'http://localhost:8080';
+    const apiBase = 'http://localhost:8080';
 
     // --- Create doc ---
     async function createDoc() {
       const typeEl = document.getElementById('new-doc-type');
       const type = typeEl?.value ?? 'doc';
-      const body = { title: 'Untitled', type, folder_id: folderParam ?? undefined };
+      const body = folderParam
+        ? { title: 'Untitled', type, folder_id: folderParam }
+        : { title: 'Untitled', type };
       const res = await fetch(`${apiBase}/api/docs`, {
         method: 'POST',
         credentials: 'include',
@@ -667,7 +706,6 @@ const totalItems = isInsideFolder
       if (e.key === 'Escape') cancelFolder();
     });
     nameInp?.addEventListener('blur', () => {
-      // short delay so click on submit can fire first
       setTimeout(() => {
         if (document.activeElement !== nameInp) {
           if (nameInp?.value?.trim()) { void submitFolder(); } else { cancelFolder(); }
@@ -707,5 +745,89 @@ const totalItems = isInsideFolder
         b.style.color = isActive ? 'var(--ink)' : 'var(--ink-muted)';
       });
     });
+
+    // ── DRAG-AND-DROP ──────────────────────────────────────────────────────
+    let draggingDocId = null;
+    const unfileZone = document.getElementById('co-unfile-zone');
+
+    async function moveDocToFolder(docId, folderId) {
+      const res = await fetch(`${apiBase}/api/docs/${docId}/folder`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder_id: folderId }),
+      });
+      if (res.ok) window.location.reload();
+    }
+
+    // Make file tiles draggable
+    document.querySelectorAll('.co-tile[data-doc-id], .co-lr[data-doc-id]').forEach((el) => {
+      el.setAttribute('draggable', 'true');
+
+      el.addEventListener('dragstart', (e) => {
+        draggingDocId = el.dataset.docId;
+        e.dataTransfer.setData('text/plain', draggingDocId);
+        e.dataTransfer.effectAllowed = 'move';
+        // Slight delay so the drag image captures before opacity change
+        setTimeout(() => el.classList.add('co-dragging'), 0);
+        // Show unfile zone when inside a folder
+        if (unfileZone) unfileZone.classList.add('co-drag-active');
+      });
+
+      el.addEventListener('dragend', () => {
+        el.classList.remove('co-dragging');
+        draggingDocId = null;
+        if (unfileZone) {
+          unfileZone.classList.remove('co-drag-active');
+          unfileZone.classList.remove('co-drag-over');
+        }
+      });
+
+      // Prevent anchor navigation on drag
+      el.addEventListener('click', (e) => {
+        if (el.classList.contains('co-dragging')) e.preventDefault();
+      });
+    });
+
+    // Folder tiles as drop targets
+    document.querySelectorAll('.co-tile[data-folder-id]').forEach((folder) => {
+      folder.addEventListener('dragover', (e) => {
+        if (!draggingDocId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        folder.classList.add('co-drag-over');
+      });
+      folder.addEventListener('dragleave', (e) => {
+        if (!folder.contains(e.relatedTarget)) {
+          folder.classList.remove('co-drag-over');
+        }
+      });
+      folder.addEventListener('drop', (e) => {
+        e.preventDefault();
+        folder.classList.remove('co-drag-over');
+        const docId = e.dataTransfer.getData('text/plain') || draggingDocId;
+        const folderId = folder.dataset.folderId;
+        if (docId && folderId) void moveDocToFolder(docId, folderId);
+      });
+    });
+
+    // Unfile drop zone (inside folder view)
+    if (unfileZone) {
+      unfileZone.addEventListener('dragover', (e) => {
+        if (!draggingDocId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        unfileZone.classList.add('co-drag-over');
+      });
+      unfileZone.addEventListener('dragleave', () => {
+        unfileZone.classList.remove('co-drag-over');
+      });
+      unfileZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        unfileZone.classList.remove('co-drag-over');
+        const docId = e.dataTransfer.getData('text/plain') || draggingDocId;
+        if (docId) void moveDocToFolder(docId, null);
+      });
+    }
   </script>
 </AppLayout>
