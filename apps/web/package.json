@@ -28,6 +28,7 @@
     "@prosemirror-adapter/react": "^0.5.3",
     "@tailwindcss/vite": "^4.0.0",
     "@workos-inc/node": "^7.0.0",
+    "@xyflow/react": "^12.10.2",
     "astro": "^5.0.0",
     "iron-session": "^8.0.0",
     "jose": "^5.0.0",
