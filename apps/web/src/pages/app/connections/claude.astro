@@ -8,7 +8,12 @@ if (!auth) {
 
 const apiUrl =
   (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
-const mcpEndpoint = `${apiUrl}/mcp`;
+// PUBLIC_MCP_URL overrides the base for the MCP config snippet shown to the
+// user (e.g. a Cloudflare Tunnel URL) without routing ALL API calls through
+// the tunnel. Falls back to apiUrl so local-only setups still work.
+const mcpBaseUrl =
+  (import.meta.env.PUBLIC_MCP_URL as string | undefined) ?? apiUrl;
+const mcpEndpoint = `${mcpBaseUrl}/mcp`;
 
 const domainPart = auth.email?.split('@')[1]?.split('.')[0] ?? '';
 const workspaceName = domainPart
@@ -36,7 +41,7 @@ const liveConnection = tokens.some(t =>
 );
 // Status string
 const statusLabel = liveConnection ? 'Active' : hasToken ? 'Token issued — not connected' : 'Not connected';
-const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1');
+const isLocalhost = mcpBaseUrl.includes('localhost') || mcpBaseUrl.includes('127.0.0.1');
 ---
 
 <style>

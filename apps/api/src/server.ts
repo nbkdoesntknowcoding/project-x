@@ -29,9 +29,10 @@ const app = Fastify({ logger: loggerOptions });
 
 await app.register(helmet, { contentSecurityPolicy: false });
 await app.register(cors, {
-  // 5173 = web app (Astro). 6274 = MCP Inspector default UI.
-  // Phase 2.1: the MCP Inspector hits POST /mcp from the browser context.
-  origin: ['http://localhost:5173', 'http://localhost:6274'],
+  // Origins driven by CORS_ORIGINS env var. Defaults cover local dev (5173,
+  // 5175 for worktree, 6274 for MCP Inspector). Production adds the Vercel
+  // domain via that env var — no code change needed.
+  origin: config.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean),
   credentials: true,
 });
 await app.register(sensible);

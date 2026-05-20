@@ -60,11 +60,17 @@ const envSchema = z.object({
   // Phase 2.1 ships a placeholder so the route is testable; Phase 2.2 swaps
   // in the actual WorkOS AS URL once we wire DCR.
   MCP_AUTHORIZATION_SERVER: z.string().url().default('http://localhost:8080'),
+  // Origins permitted on all /api/* routes (browser CORS). Comma-separated.
+  // Include every host that serves the web app (localhost dev ports + Vercel).
+  CORS_ORIGINS: z
+    .string()
+    .default('http://localhost:5173,http://localhost:5175,http://localhost:6274'),
+
   // Origins permitted to POST to /mcp. Comma-separated. Browser clients only;
   // the claude.ai connector and MCP Inspector are explicitly listed.
   MCP_ORIGIN_ALLOWLIST: z
     .string()
-    .default('http://localhost:5173,http://localhost:6274'),
+    .default('http://localhost:5173,http://localhost:5175,http://localhost:6274'),
 
   // Voyage AI (Phase 3.1)
   // The user obtained this from voyageai.com — the worker crashes loudly
