@@ -103,7 +103,7 @@ function relativeTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString();
 }
 
-const domainPart = auth.email.split('@')[1]?.split('.')[0] ?? '';
+const domainPart = auth.email?.split('@')[1]?.split('.')[0] ?? '';
 const workspaceName = domainPart
   ? domainPart.charAt(0).toUpperCase() + domainPart.slice(1)
   : 'Workspace';
