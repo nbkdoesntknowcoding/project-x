@@ -34,19 +34,19 @@ export function FlowHeader({
   onPublishClick,
 }: Props) {
   return (
-    <div className="absolute top-0 left-0 right-0 z-10 bg-[var(--surface-base)]/80 backdrop-blur-sm border-b border-[var(--border-subtle)]">
+    <div className="shrink-0 bg-[var(--surface)] border-b border-[var(--line)] z-10">
       <div className="flex items-center justify-between px-6 h-14">
         <div className="flex items-center gap-4">
           <a
             href="/app/flows"
-            className="flex items-center gap-1.5 text-[13px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+            className="flex items-center gap-1.5 text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors"
           >
             <ArrowLeft size={14} strokeWidth={1.75} />
             All flows
           </a>
-          <div className="h-4 w-px bg-[var(--border-default)]" />
+          <div className="h-4 w-px bg-[var(--line-strong)]" />
           <div className="flex items-center gap-3">
-            <h1 className="text-[14px] font-medium text-[var(--text-primary)]">{flow.name}</h1>
+            <h1 className="text-[14px] font-medium text-[var(--ink)]">{flow.name}</h1>
             {flow.is_published ? (
               <StatusPill tone="success">Published</StatusPill>
             ) : (
@@ -62,13 +62,13 @@ export function FlowHeader({
           {/* Save state indicator */}
           <div className="flex items-center gap-1.5 text-[12px]">
             {saveState === 'saving' && (
-              <span className="flex items-center gap-1 text-[var(--text-tertiary)]">
+              <span className="flex items-center gap-1 text-[var(--ink-muted)]">
                 <Loader2 size={11} strokeWidth={1.75} className="animate-spin" />
                 Saving…
               </span>
             )}
             {saveState === 'saved' && lastSavedAt && (
-              <span className="flex items-center gap-1 text-[var(--text-tertiary)]">
+              <span className="flex items-center gap-1 text-[var(--ink-muted)]">
                 <CheckCircle size={11} strokeWidth={1.75} className="text-[var(--status-success)]" />
                 Saved {relativeTime(lastSavedAt)}
               </span>
@@ -124,7 +124,7 @@ export function FlowHeader({
       </div>
 
       {flow.description && (
-        <div className="px-6 pb-3 text-[12px] text-[var(--text-tertiary)] leading-[1.5] max-w-3xl">
+        <div className="px-6 pb-3 text-[12px] text-[var(--ink-muted)] leading-[1.5] max-w-3xl">
           {flow.description}
         </div>
       )}
