@@ -24,9 +24,14 @@ export function PublishModal({ flowId, onClose, onPublished }: Props) {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    fetch(`/api/flows/${flowId}/publish-preview`)
-      .then((r) => r.json())
-      .then((data) => setPreview(data))
+    fetch(`/api/flows/${flowId}/publish-preview`, { credentials: 'include' })
+      .then((r) => {
+        if (!r.ok) return null;
+        return r.json() as Promise<PublishPreview>;
+      })
+      .then((data) => {
+        if (data && 'added_nodes' in data) setPreview(data);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [flowId]);
@@ -37,6 +42,7 @@ export function PublishModal({ flowId, onClose, onPublished }: Props) {
       const res = await fetch(`/api/flows/${flowId}/publish`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ publish_message: message || undefined }),
       });
       if (!res.ok) throw new Error('Failed to publish');
@@ -81,6 +87,12 @@ export function PublishModal({ flowId, onClose, onPublished }: Props) {
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           {loading && (
             <div className="text-[12px] text-[var(--text-quaternary)]">Computing diff…</div>
+          )}
+
+          {!loading && !preview && (
+            <p className="text-[13px] text-[var(--text-secondary)]">
+              This will be the first published version of this flow.
+            </p>
           )}
 
           {!loading && preview && (

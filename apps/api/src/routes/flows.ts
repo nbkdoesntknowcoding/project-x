@@ -359,12 +359,31 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
           .orderBy(desc(flowVersions.versionNumber))
           .limit(1);
 
+        // Compute has_unpublished_changes: compare flows.updatedAt vs published version createdAt.
+        // PUT /draft always bumps flows.updatedAt, so if it's newer than when we published, edits exist.
+        let hasUnpublishedChanges = false;
+        if (!flow.publishedVersionId) {
+          hasUnpublishedChanges = true; // never published
+        } else {
+          const pubVer = await tx
+            .select({ createdAt: flowVersions.createdAt })
+            .from(flowVersions)
+            .where(eq(flowVersions.id, flow.publishedVersionId))
+            .limit(1);
+          if (pubVer[0]) {
+            // If flow was edited (updatedAt > published.createdAt by more than 2s), there are changes.
+            hasUnpublishedChanges = flow.updatedAt.getTime() - pubVer[0].createdAt.getTime() > 2000;
+          }
+        }
+
         return {
           flow,
           nodes,
           edges,
           versionId,
           draftVersionId: draft[0]?.id ?? null,
+          isPublished: !!flow.publishedVersionId,
+          hasUnpublishedChanges,
         };
       });
 
@@ -377,6 +396,8 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
         description: result.flow.description,
         published_version_id: result.flow.publishedVersionId,
         draft_version_id: result.draftVersionId,
+        is_published: result.isPublished,
+        has_unpublished_changes: result.hasUnpublishedChanges,
         nodes: result.nodes,
         edges: result.edges,
       });
@@ -587,6 +608,112 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
 
     if ('error' in result) return reply.code(404).send(result);
     return reply.code(204).send();
+  });
+
+  // -------------------------------------------------------------------
+  // GET /api/flows/:id/publish-preview — diff between draft and published
+  // Returns the set of added/removed/changed nodes and edge counts so the
+  // PublishModal can show the user what will change when they publish.
+  // -------------------------------------------------------------------
+  app.get<{ Params: { id: string } }>('/api/flows/:id/publish-preview', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+
+    const result = await withTenant(req.auth.tenant_id, async (tx) => {
+      const flow = await resolveFlow(tx, req.params.id);
+      if (!flow) return null;
+
+      // Draft nodes/edges
+      const draftRows = await tx
+        .select({ id: flowVersions.id })
+        .from(flowVersions)
+        .where(and(eq(flowVersions.flowId, flow.id), eq(flowVersions.isPublished, false)))
+        .orderBy(desc(flowVersions.versionNumber))
+        .limit(1);
+      const draftId = draftRows[0]?.id ?? null;
+
+      const draftNodes = draftId
+        ? await tx
+            .select({
+              client_node_id: flowNodes.clientNodeId,
+              title: flowNodes.title,
+              data: flowNodes.data,
+            })
+            .from(flowNodes)
+            .where(eq(flowNodes.flowVersionId, draftId))
+        : [];
+
+      const draftEdges = draftId
+        ? await tx
+            .select({ from_node_id: flowEdges.fromNodeId, to_node_id: flowEdges.toNodeId })
+            .from(flowEdges)
+            .where(eq(flowEdges.flowVersionId, draftId))
+        : [];
+
+      // Published nodes/edges (empty if flow has never been published)
+      const publishedId = flow.publishedVersionId;
+      const publishedNodes = publishedId
+        ? await tx
+            .select({
+              client_node_id: flowNodes.clientNodeId,
+              title: flowNodes.title,
+              data: flowNodes.data,
+            })
+            .from(flowNodes)
+            .where(eq(flowNodes.flowVersionId, publishedId))
+        : [];
+
+      const publishedEdges = publishedId
+        ? await tx
+            .select({ from_node_id: flowEdges.fromNodeId, to_node_id: flowEdges.toNodeId })
+            .from(flowEdges)
+            .where(eq(flowEdges.flowVersionId, publishedId))
+        : [];
+
+      // Compute diff
+      const publishedNodeMap = new Map(publishedNodes.map((n) => [n.client_node_id, n]));
+      const draftNodeMap = new Map(draftNodes.map((n) => [n.client_node_id, n]));
+
+      const addedNodes: string[] = [];
+      const changedNodes: string[] = [];
+      for (const dn of draftNodes) {
+        const pn = publishedNodeMap.get(dn.client_node_id);
+        if (!pn) {
+          addedNodes.push(dn.title);
+        } else if (
+          pn.title !== dn.title ||
+          JSON.stringify(pn.data) !== JSON.stringify(dn.data)
+        ) {
+          changedNodes.push(dn.title);
+        }
+      }
+      const removedNodes = publishedNodes
+        .filter((pn) => !draftNodeMap.has(pn.client_node_id))
+        .map((pn) => pn.title);
+
+      const pubEdgeSet = new Set(
+        publishedEdges.map((e) => `${e.from_node_id}__${e.to_node_id}`),
+      );
+      const draftEdgeSet = new Set(
+        draftEdges.map((e) => `${e.from_node_id}__${e.to_node_id}`),
+      );
+      const addedEdges = draftEdges.filter(
+        (e) => !pubEdgeSet.has(`${e.from_node_id}__${e.to_node_id}`),
+      ).length;
+      const removedEdges = publishedEdges.filter(
+        (e) => !draftEdgeSet.has(`${e.from_node_id}__${e.to_node_id}`),
+      ).length;
+
+      return {
+        added_nodes: addedNodes,
+        removed_nodes: removedNodes,
+        changed_nodes: changedNodes,
+        added_edges: addedEdges,
+        removed_edges: removedEdges,
+      };
+    });
+
+    if (!result) return reply.code(404).send({ error: 'flow_not_found' });
+    return reply.send(result);
   });
 
   // -------------------------------------------------------------------

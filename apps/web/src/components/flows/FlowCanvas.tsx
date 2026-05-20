@@ -158,8 +158,9 @@ function InnerCanvas({ flow }: InnerProps) {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [isDirty, setIsDirty] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [isPublished, setIsPublished] = useState(!!flow.is_published);
   const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(
-    flow.has_unpublished_changes || !flow.is_published,
+    flow.has_unpublished_changes ?? !flow.is_published,
   );
 
   const rfInstance = useRef<{ getViewport: () => { x: number; y: number; zoom: number } } | null>(null);
@@ -407,6 +408,7 @@ function InnerCanvas({ flow }: InnerProps) {
   // ─── Publish ─────────────────────────────────────────────────────────────
 
   const handlePublished = useCallback(() => {
+    setIsPublished(true);
     setHasUnpublishedChanges(false);
     setIsDirty(false);
   }, []);
@@ -419,7 +421,7 @@ function InnerCanvas({ flow }: InnerProps) {
       {/* Main canvas area */}
       <div className="flex-1 relative flex flex-col overflow-hidden">
         <FlowHeader
-          flow={{ ...flow, has_unpublished_changes: hasUnpublishedChanges }}
+          flow={{ ...flow, is_published: isPublished, has_unpublished_changes: hasUnpublishedChanges }}
           onWalkClick={() => setWalkMode(true)}
           saveState={saveState}
           isDirty={isDirty}
@@ -527,7 +529,7 @@ function InnerCanvas({ flow }: InnerProps) {
       {walkMode && (
         <WalkSimulator
           flowSlug={flow.slug}
-          version={flow.is_published ? 'published' : 'draft'}
+          version={isPublished ? 'published' : 'draft'}
           onClose={() => setWalkMode(false)}
         />
       )}
