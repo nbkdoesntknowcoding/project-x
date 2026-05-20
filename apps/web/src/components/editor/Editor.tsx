@@ -4,6 +4,7 @@ import { collab, collabServiceCtx } from '@milkdown/plugin-collab';
 import { editorViewCtx } from '@milkdown/core';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import type { EditorView } from 'prosemirror-view';
+import { TextSelection } from 'prosemirror-state';
 import { type JSX, useEffect, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import './editor.css';
@@ -205,6 +206,23 @@ export function Editor({
                 sel.empty ? null : { from: sel.from, to: sel.to },
               );
             }, 120);
+
+            // Collapse selection after toolbar button click so the toolbar
+            // dismisses once a format has been applied (UX: "done" signal).
+            root.addEventListener('click', (e) => {
+              if (!(e.target instanceof Element)) return;
+              if (!e.target.closest('.milkdown-toolbar .toolbar-item')) return;
+              // Wait one frame for Milkdown's command to execute, then collapse.
+              requestAnimationFrame(() => {
+                const v = viewRef;
+                if (!v) return;
+                const { state, dispatch } = v;
+                if (state.selection.empty) return;
+                const pos = state.selection.$head.pos;
+                dispatch(state.tr.setSelection(TextSelection.create(state.doc, pos)));
+                v.focus();
+              });
+            });
           }
         });
       })

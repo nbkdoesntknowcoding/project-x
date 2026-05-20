@@ -162,15 +162,50 @@
   background: var(--interactive-ghost-hover);
 }
 
-/* Selection toolbar */
-.milkdown-toolbar {
-  background: var(--surface-overlay) !important;
-  border: 1px solid var(--border-default) !important;
-  border-radius: 6px !important;
+/* Selection toolbar — glassmorphism card */
+.milkdown .milkdown-toolbar {
+  /* Glassmorphism */
+  background: color-mix(in srgb, var(--surface-overlay) 72%, transparent) !important;
+  backdrop-filter: blur(16px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.4) !important;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 60%, transparent) !important;
+  border-radius: 10px !important;
   box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
-  color: var(--text-primary);
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  overflow: visible !important;
+
+  /* Wire Crepe's internal color tokens to our palette */
+  --crepe-color-surface: transparent;
+  --crepe-color-outline: var(--text-primary);
+  --crepe-color-hover: var(--interactive-ghost-hover);
+  --crepe-color-selected: var(--interactive-ghost-active);
+  --crepe-color-primary: var(--accent-400, var(--text-primary));
+  --crepe-shadow-1: none;
+}
+
+/* Ensure icons are always the primary text colour */
+.milkdown .milkdown-toolbar .toolbar-item svg {
+  color: var(--text-primary) !important;
+  fill: var(--text-primary) !important;
+  opacity: 0.85;
+}
+.milkdown .milkdown-toolbar .toolbar-item:hover svg {
+  opacity: 1;
+}
+.milkdown .milkdown-toolbar .toolbar-item.active svg {
+  color: var(--text-primary) !important;
+  fill: var(--text-primary) !important;
+  opacity: 1;
+}
+/* Active (toggled-on) item has a tinted background so the state is visible */
+.milkdown .milkdown-toolbar .toolbar-item.active {
+  background: color-mix(in srgb, var(--text-primary) 14%, transparent) !important;
+}
+/* Divider */
+.milkdown .milkdown-toolbar .divider {
+  background: color-mix(in srgb, var(--text-primary) 18%, transparent) !important;
 }
 
 .milkdown ::selection {
@@ -496,10 +531,12 @@
     0 1px 2px rgba(0, 0, 0, 0.04) !important;
 }
 
-:root[data-theme='light'] .milkdown-toolbar {
+:root[data-theme='light'] .milkdown .milkdown-toolbar {
+  background: color-mix(in srgb, var(--surface-overlay) 80%, transparent) !important;
   box-shadow:
-    0 4px 16px rgba(0, 0, 0, 0.06),
-    0 1px 2px rgba(0, 0, 0, 0.04) !important;
+    0 8px 24px rgba(0, 0, 0, 0.10),
+    0 2px 4px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7) !important;
 }
 
 :root[data-theme='light'] .milkdown .ProseMirror .comment-anchor {
