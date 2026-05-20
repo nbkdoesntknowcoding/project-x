@@ -442,10 +442,12 @@ export const flowVersions = pgTable(
     flowId: uuid('flow_id')
       .notNull()
       .references(() => flows.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
     versionNumber: integer('version_number').notNull(),
     isPublished: boolean('is_published').notNull().default(false),
     createdBy: uuid('created_by')
-      .notNull()
       .references(() => users.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     publishMessage: text('publish_message'),

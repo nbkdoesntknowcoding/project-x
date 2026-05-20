@@ -53,6 +53,7 @@ export async function seedExampleFlow(
       .insert(flowVersions)
       .values({
         flowId: createdFlow.id,
+        workspaceId,
         versionNumber: 1,
         isPublished: true,
         createdBy: userId,

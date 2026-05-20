@@ -1,5 +1,6 @@
 import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
+import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { flows, flowVersions, flowNodes, flowEdges } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
@@ -31,7 +32,7 @@ const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const createSchema = z.object({
-  slug: z.string().min(1).max(64).regex(SLUG_RE, 'must be kebab-case alphanumeric'),
+  slug: z.string().min(1).max(64).regex(SLUG_RE, 'must be kebab-case alphanumeric').optional(),
   name: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
 });
@@ -94,6 +95,7 @@ async function getOrCreateDraftVersion(
   tx: Parameters<Parameters<typeof withTenant>[1]>[0],
   flowId: string,
   userId: string,
+  workspaceId: string,
 ) {
   const draft = await tx
     .select()
@@ -113,6 +115,7 @@ async function getOrCreateDraftVersion(
     .insert(flowVersions)
     .values({
       flowId,
+      workspaceId,
       versionNumber: next,
       isPublished: false,
       createdBy: userId,
@@ -135,12 +138,17 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
 
     const auth = req.auth;
     try {
+      // Auto-generate slug from name if not provided
+      const slug = parsed.data.slug ??
+        parsed.data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 50)
+        + '-' + nanoid(6).toLowerCase().replace(/[^a-z0-9]/g, 'x');
+
       const result = await withTenant(auth.tenant_id, async (tx) => {
         const [createdFlow] = await tx
           .insert(flows)
           .values({
             workspaceId: auth.tenant_id,
-            slug: parsed.data.slug,
+            slug,
             name: parsed.data.name,
             description: parsed.data.description ?? null,
             createdBy: auth.sub,
@@ -152,6 +160,7 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
           .insert(flowVersions)
           .values({
             flowId: createdFlow.id,
+            workspaceId: auth.tenant_id,
             versionNumber: 1,
             isPublished: false,
             createdBy: auth.sub,
@@ -163,12 +172,14 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
       });
 
       return reply.code(201).send({
-        id: result.flow.id,
-        slug: result.flow.slug,
-        name: result.flow.name,
-        description: result.flow.description,
-        created_at: result.flow.createdAt,
-        draft_version_id: result.draft.id,
+        flow: {
+          id: result.flow.id,
+          slug: result.flow.slug,
+          name: result.flow.name,
+          description: result.flow.description,
+          created_at: result.flow.createdAt,
+          draft_version_id: result.draft.id,
+        },
       });
     } catch (err) {
       // Unique-violation on (workspace_id, slug) → 409
@@ -397,7 +408,7 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
       const flow = await resolveFlow(tx, req.params.id);
       if (!flow) return { error: 'flow_not_found' as const };
 
-      const draft = await getOrCreateDraftVersion(tx, flow.id, auth.sub);
+      const draft = await getOrCreateDraftVersion(tx, flow.id, auth.sub, auth.tenant_id);
 
       // Full-replace strategy: delete everything in the draft, then insert
       // the new shape. Inside a tx, RLS keeps this scoped automatically.
@@ -511,6 +522,7 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
         .insert(flowVersions)
         .values({
           flowId: flow.id,
+          workspaceId: auth.tenant_id,
           versionNumber: draft.versionNumber + 1,
           isPublished: false,
           createdBy: auth.sub,

@@ -144,6 +144,7 @@ async function seedExampleFlow(workspaceId: string, userId: string): Promise<voi
     .insert(flowVersions)
     .values({
       flowId,
+      workspaceId,
       versionNumber: 1,
       isPublished: true,
       createdBy: userId,
