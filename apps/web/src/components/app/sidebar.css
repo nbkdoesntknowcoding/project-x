@@ -20,7 +20,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 4px 8px 2px;
-  font: 500 10px/1 var(--mono);
+  font: 500 11px/1 var(--mono);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--ink-muted);
@@ -30,10 +30,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
+  padding: 5px 8px;
   border-radius: 5px;
   cursor: pointer;
-  font: 500 12px/1 var(--sans);
+  font: 500 13px/1.2 var(--sans);
   color: var(--ink-soft);
   user-select: none;
   text-decoration: none;
@@ -67,7 +67,7 @@
   white-space: nowrap;
 }
 .sb-count {
-  font: 500 11px/1 var(--sans);
+  font: 500 12px/1 var(--sans);
   color: var(--ink-muted);
   flex-shrink: 0;
 }
@@ -79,7 +79,7 @@
   margin-top: auto;
   padding: 10px;
   border-top: 1px solid var(--line);
-  font: 500 11px/1.3 var(--sans);
+  font: 500 12px/1.3 var(--sans);
   color: var(--ink-muted);
   display: flex;
   align-items: center;
