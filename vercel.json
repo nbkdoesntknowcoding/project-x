@@ -1,6 +1,6 @@
 {
   "buildCommand": "pnpm --filter @boppl/web build",
-  "outputDirectory": "apps/web/dist",
-  "installCommand": "pnpm install",
-  "framework": null
+  "installCommand": "pnpm install --frozen-lockfile=false",
+  "framework": "astro",
+  "outputDirectory": "apps/web/.vercel/output"
 }
