@@ -7,6 +7,8 @@ import { docs } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { contentHash, emptyYjsState } from '../lib/yjs.js';
 
+const UUID_RE_DOCS = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const DOC_TYPE = z.enum(['doc', 'engineering', 'instruction', 'snippet']);
 
 const createSchema = z.object({
@@ -15,6 +17,8 @@ const createSchema = z.object({
   // Phase 5: content type. Defaults to 'doc' (freeform markdown) so
   // existing clients that don't send the field stay valid.
   type: DOC_TYPE.default('doc'),
+  // Phase 6.4: optional folder placement on creation.
+  folder_id: z.string().uuid().nullable().optional(),
 });
 
 // 1.2: title and markdown are both optional but at least one must be present.
@@ -68,20 +72,30 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/api/docs', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
 
+    const q = (req.query as Record<string, unknown> | null) ?? {};
+
     // Phase 5: optional ?type= filter for the sidebar's typed views.
-    const typeFilter = DOC_TYPE.safeParse(
-      (req.query as Record<string, unknown> | null)?.type,
-    );
+    const typeFilter = DOC_TYPE.safeParse(q.type);
+
+    // Phase 6.4: optional ?folder_id= filter. 'null' string → unfiled docs.
+    const rawFolder = q.folder_id as string | undefined;
+    const folderFilter =
+      rawFolder === 'null' ? 'null' :
+      rawFolder && UUID_RE_DOCS.test(rawFolder) ? rawFolder :
+      undefined;
 
     const rows = await withTenant(req.auth.tenant_id, async (tx) => {
       const conditions = [isNull(docs.deletedAt)];
       if (typeFilter.success) conditions.push(eq(docs.type, typeFilter.data));
+      if (folderFilter === 'null') conditions.push(isNull(docs.folderId));
+      else if (folderFilter) conditions.push(eq(docs.folderId, folderFilter));
       return await tx
         .select({
           id: docs.id,
           path: docs.path,
           title: docs.title,
           type: docs.type,
+          folder_id: docs.folderId,
           created_at: docs.createdAt,
           updated_at: docs.updatedAt,
         })
@@ -133,6 +147,7 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
         .insert(docs)
         .values({
           workspaceId: auth.tenant_id,
+          folderId: parsed.data.folder_id ?? null,
           path,
           title: parsed.data.title,
           type: parsed.data.type,

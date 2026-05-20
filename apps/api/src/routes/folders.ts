@@ -1,0 +1,151 @@
+import { and, count, eq, isNull, sql } from 'drizzle-orm';
+import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
+import { docs, folders } from '../db/schema.js';
+import { withTenant } from '../db/with-tenant.js';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isUuid(s: string): boolean {
+  return UUID_RE.test(s);
+}
+
+const createSchema = z.object({
+  name: z.string().min(1).max(200),
+});
+
+const renameSchema = z.object({
+  name: z.string().min(1).max(200),
+});
+
+const moveFolderSchema = z.object({
+  folder_id: z.string().uuid().nullable(),
+});
+
+export const foldersRoutes: FastifyPluginAsync = async (app) => {
+  // List all folders with doc count
+  app.get('/api/folders', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+
+    const rows = await withTenant(req.auth.tenant_id, async (tx) => {
+      return await tx.execute(
+        sql`SELECT f.id, f.name, f.created_at, f.updated_at,
+                   COUNT(d.id)::int AS doc_count
+            FROM folders f
+            LEFT JOIN docs d ON d.folder_id = f.id AND d.deleted_at IS NULL
+            GROUP BY f.id, f.name, f.created_at, f.updated_at
+            ORDER BY f.name ASC`,
+      );
+    });
+
+    return {
+      folders: (rows as unknown as Array<{
+        id: string;
+        name: string;
+        created_at: string;
+        updated_at: string;
+        doc_count: number;
+      }>).map((r) => ({
+        id: r.id,
+        name: r.name,
+        doc_count: Number(r.doc_count) || 0,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+      })),
+    };
+  });
+
+  // Create a new folder
+  app.post('/api/folders', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const parsed = createSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'bad_request', issues: parsed.error.issues });
+    }
+    const auth = req.auth;
+
+    const created = await withTenant(auth.tenant_id, async (tx) => {
+      const inserted = await tx
+        .insert(folders)
+        .values({
+          workspaceId: auth.tenant_id,
+          name: parsed.data.name,
+          createdBy: auth.sub,
+        })
+        .returning();
+      const row = inserted[0];
+      if (!row) throw new Error('Failed to create folder');
+      return row;
+    });
+
+    return reply.code(201).send({
+      folder: {
+        id: created.id,
+        name: created.name,
+        doc_count: 0,
+        created_at: created.createdAt,
+        updated_at: created.updatedAt,
+      },
+    });
+  });
+
+  // Rename a folder
+  app.patch<{ Params: { id: string } }>('/api/folders/:id', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params;
+    if (!isUuid(id)) return reply.code(400).send({ error: 'bad_id' });
+
+    const parsed = renameSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'bad_request', issues: parsed.error.issues });
+    }
+
+    const updated = await withTenant(req.auth.tenant_id, async (tx) => {
+      const rows = await tx
+        .update(folders)
+        .set({ name: parsed.data.name, updatedAt: new Date() })
+        .where(eq(folders.id, id))
+        .returning();
+      return rows[0];
+    });
+
+    if (!updated) return reply.code(404).send({ error: 'not_found' });
+    return { folder: { id: updated.id, name: updated.name } };
+  });
+
+  // Delete a folder (docs inside become unfiled)
+  app.delete<{ Params: { id: string } }>('/api/folders/:id', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params;
+    if (!isUuid(id)) return reply.code(400).send({ error: 'bad_id' });
+
+    await withTenant(req.auth.tenant_id, async (tx) => {
+      await tx.delete(folders).where(eq(folders.id, id));
+    });
+
+    return reply.code(204).send();
+  });
+
+  // Move a doc into a folder (or unfile it with folder_id: null)
+  app.patch<{ Params: { id: string } }>('/api/docs/:id/folder', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params;
+    if (!isUuid(id)) return reply.code(400).send({ error: 'bad_id' });
+
+    const parsed = moveFolderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'bad_request', issues: parsed.error.issues });
+    }
+
+    const updated = await withTenant(req.auth.tenant_id, async (tx) => {
+      const rows = await tx
+        .update(docs)
+        .set({ folderId: parsed.data.folder_id })
+        .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
+        .returning({ id: docs.id, folderId: docs.folderId });
+      return rows[0];
+    });
+
+    if (!updated) return reply.code(404).send({ error: 'not_found' });
+    return { doc: { id: updated.id, folder_id: updated.folderId } };
+  });
+};

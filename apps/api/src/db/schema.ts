@@ -141,6 +141,24 @@ export const invitations = pgTable(
   }),
 );
 
+// Phase 6.4: User-created folders for organising docs.
+export const folders = pgTable(
+  'folders',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    createdBy: uuid('created_by').references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    workspaceIdx: index('folders_workspace_idx').on(table.workspaceId),
+  }),
+);
+
 export const docs = pgTable(
   'docs',
   {
@@ -148,6 +166,8 @@ export const docs = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // Phase 6.4: nullable FK → folders. Null = unfiled (top-level).
+    folderId: uuid('folder_id').references(() => folders.id, { onDelete: 'set null' }),
     path: text('path').notNull(),
     title: text('title').notNull(),
     // Phase 5: content type. 'doc' is freeform markdown (existing
@@ -172,6 +192,7 @@ export const docs = pgTable(
       table.workspaceId,
       table.updatedAt.desc(),
     ),
+    folderIdx: index('docs_folder_idx').on(table.folderId),
   }),
 );
 
