@@ -29,15 +29,30 @@ export const GET_FLOW_STEP_TOOL = {
   description: [
     'Retrieves one step from a published flow by its index.',
     '',
-    'Call with step_index=1 for the first step, then increment until the response\'s',
-    '`has_more` field is false. Each response includes:',
-    ' - `instruction`: the author\'s guidance for this step — read it before the content',
-    ' - `content`: the actual material (doc markdown, snippet text, or instruction body)',
-    ' - `source`: where the content came from (doc id + title, filter, etc.)',
+    'EXECUTION MODEL — a flow is a program, not a document. Walk it one step at a',
+    'time and ACT on each step before fetching the next one. Never pre-fetch all',
+    'steps and summarize them — that defeats the flow\'s purpose.',
     '',
-    'Always read `instruction` first, then `content`, then reason about the step before',
-    'calling the next one. Walking a flow this way preserves the authorial intent —',
-    'the workspace author designed the order and the per-step framing.',
+    'Each step has a `kind` that tells you how to handle it:',
+    '  "instruction" — a directive from the flow author. Execute it immediately.',
+    '    The `instruction` field IS the action to take (there is no separate content).',
+    '    If it says to ask the user something, ask it and WAIT for their answer.',
+    '    If it says to adopt a role or set context, do so silently.',
+    '    `pause_for_user_input` will be true — do NOT call the next step until',
+    '    the user has responded and you have acted on their answer.',
+    '  "doc" or "docs" — reference material to ingest as background knowledge.',
+    '    Read the `instruction` framing, absorb the `content`, then proceed to',
+    '    the next step automatically (no user interaction needed).',
+    '',
+    'Step response includes:',
+    '  `instruction`: the author\'s framing or directive — always read this first',
+    '  `content`: the material (doc markdown, snippet, or empty for instruction steps)',
+    '  `source`: where the content came from',
+    '  `pause_for_user_input`: true when you must interact with the user before',
+    '    proceeding; false when you can call the next step immediately',
+    '',
+    'Call with step_index=1 for the first step, then increment ONLY after fully',
+    'executing the current step (including any required user interaction).',
     '',
     'Returns `error: "flow_not_found"` if the slug doesn\'t resolve to a published flow.',
     'Returns `error: "step_out_of_range"` if step_index is past the end.',
@@ -82,6 +97,10 @@ export interface GetFlowStepResult {
     content: string;
     content_type: string;
     source: Record<string, unknown> | null;
+    /** True when this step requires user interaction before proceeding to the next step.
+     *  Present on instruction-kind steps — stop, execute the instruction (e.g. ask
+     *  the user a question), wait for their response, then call the next step. */
+    pause_for_user_input: boolean;
   };
   error?: string;
   message?: string;
@@ -161,6 +180,11 @@ export async function getFlowStep(
         const node = ordered[args.step_index - 1]!;
         const rendered = await renderNodeContent(node, tx);
 
+        // instruction-kind nodes are pure action directives (no content body).
+        // Signal to Claude that it must pause and interact with the user before
+        // fetching the next step.
+        const pauseForUserInput = node.kind === 'instruction';
+
         return {
           flow_id: flow.slug,
           flow_name: flow.name,
@@ -175,6 +199,7 @@ export async function getFlowStep(
             content: rendered.content,
             content_type: rendered.content_type,
             source: rendered.source,
+            pause_for_user_input: pauseForUserInput,
           },
         };
       }),
