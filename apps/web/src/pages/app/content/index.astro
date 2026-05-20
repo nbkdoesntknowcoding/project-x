@@ -84,6 +84,36 @@ function extLabel(type: string): string {
     : type === 'snippet' ? 'SNIP'
     : 'MD';
 }
+
+// Compute type counts for folder tiles
+const typeCounts = new Map<string, number>();
+if (!activeType) {
+  // Only compute folders when showing all docs
+  for (const d of docs) {
+    typeCounts.set(d.type, (typeCounts.get(d.type) ?? 0) + 1);
+  }
+}
+
+// Folder types shown as folders: engineering, instruction, snippet
+// Regular 'doc' type appears directly as file tiles
+const FOLDER_TYPES = ['engineering', 'instruction', 'snippet'] as const;
+const FOLDER_LABELS: Record<string, string> = {
+  engineering: 'Engineering',
+  instruction: 'Instructions',
+  snippet: 'Snippets',
+};
+
+const folders = !activeType
+  ? FOLDER_TYPES.filter((t) => (typeCounts.get(t) ?? 0) > 0).map((t) => ({
+      type: t,
+      label: FOLDER_LABELS[t],
+      count: typeCounts.get(t) ?? 0,
+    }))
+  : [];
+
+// File tiles: when showing all docs, show only 'doc' type as tiles below folders.
+// When filtered, show all docs of that type.
+const fileDocs = activeType ? docs : docs.filter((d) => d.type === 'doc');
 ---
 
 <style>
@@ -103,14 +133,18 @@ function extLabel(type: string): string {
   /* VIEW TOGGLE */
   .co-wrap.view-icons .co-list { display: none; }
   .co-wrap.view-list .co-icon-grid { display: none; }
+  .co-wrap.view-list .co-folder-grid { display: none; }
 
-  /* ICON GRID */
-  .co-icon-grid {
+  /* ICON + FOLDER GRID */
+  .co-icon-grid,
+  .co-folder-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     gap: 6px;
     margin-bottom: 24px;
   }
+
+  /* TILE (shared between folders and files) */
   .co-tile {
     display: flex; flex-direction: column; align-items: center;
     gap: 6px;
@@ -143,6 +177,12 @@ function extLabel(type: string): string {
     font: 500 10.5px/1 var(--sans);
     color: var(--ink-muted);
     letter-spacing: 0.02em;
+  }
+
+  /* FOLDER ICON */
+  .co-folder-svg {
+    width: 96px; height: 74px;
+    filter: drop-shadow(0 6px 14px rgba(0,0,0,0.45));
   }
 
   /* LARGE FILE ICON */
@@ -190,8 +230,8 @@ function extLabel(type: string): string {
     color: white;
     letter-spacing: 0.08em;
   }
-  .co-fi.md .ext-tag  { background: linear-gradient(180deg, #1E1F23, #0E0F12); color: var(--accent); }
-  .co-fi.eng .ext-tag { background: linear-gradient(180deg, #7C9CFF, #4A67D9); }
+  .co-fi.md .ext-tag   { background: linear-gradient(180deg, #1E1F23, #0E0F12); color: var(--accent); }
+  .co-fi.eng .ext-tag  { background: linear-gradient(180deg, #7C9CFF, #4A67D9); }
   .co-fi.inst .ext-tag { background: linear-gradient(180deg, #FFB370, #FF7A8A); color: var(--on-ink); }
   .co-fi.snip .ext-tag { background: linear-gradient(180deg, #6BE39B, #2B9B9B); color: var(--on-ink); }
 
@@ -253,8 +293,7 @@ function extLabel(type: string): string {
   /* EMPTY STATE */
   .co-empty {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    min-height: calc(100% - 80px); padding: 60px 24px; text-align: center;
-    gap: 12px;
+    min-height: calc(100% - 80px); padding: 60px 24px; text-align: center; gap: 12px;
   }
   .co-empty-kicker {
     font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted);
@@ -338,67 +377,124 @@ function extLabel(type: string): string {
       </div>
     ) : (
       <div class="co-wrap view-icons" id="co-wrap">
-        <div class="co-section-title">
-          <h3>Docs</h3>
-          <span class="co-count">{docs.length} {docs.length === 1 ? 'item' : 'items'}</span>
-        </div>
 
-        <!-- ICON GRID -->
-        <div class="co-icon-grid">
-          {docs.map((d) => {
-            const ext = extClass(d.type);
-            const label = extLabel(d.type);
-            return (
-              <a href={`/app/content/${d.id}`} class="co-tile">
-                <div class="ico-wrap">
-                  <div class={`co-fi ${ext}`}>
-                    <div class="sheet">
-                      <div class="lines">
-                        <i></i><i></i><i></i><i></i><i></i>
+        {/* ── FOLDERS SECTION (only when no type filter and special types exist) ── */}
+        {folders.length > 0 && (
+          <>
+            <div class="co-section-title">
+              <h3>Folders</h3>
+              <span class="co-count">{folders.length} {folders.length === 1 ? 'item' : 'items'}</span>
+            </div>
+
+            <div class="co-folder-grid">
+              {folders.map((f) => (
+                <a href={`/app/content?type=${f.type}`} class="co-tile">
+                  <div class="ico-wrap">
+                    <svg
+                      class="co-folder-svg"
+                      viewBox="0 0 168 130"
+                      fill="none"
+                      preserveAspectRatio="xMidYMid meet"
+                    >
+                      <defs>
+                        <linearGradient id={`fgp-${f.type}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0" stop-color="#F5F5F5"/>
+                          <stop offset="1" stop-color="#D6D6D6"/>
+                        </linearGradient>
+                        <linearGradient id={`fgf-${f.type}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0" stop-color="#5C5E64"/>
+                          <stop offset="0.45" stop-color="#3E4046"/>
+                          <stop offset="1" stop-color="#2C2E33"/>
+                        </linearGradient>
+                      </defs>
+                      {/* paper sticking out of folder top */}
+                      <g>
+                        <path d="M48 16 L106 16 L116 26 L116 84 Q116 88 112 88 L48 88 Q44 88 44 84 L44 20 Q44 16 48 16 Z" fill={`url(#fgp-${f.type})`}/>
+                        <path d="M106 16 L116 26 L106 26 Z" fill="#B8B8B8"/>
+                      </g>
+                      {/* folder front face */}
+                      <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31 L152 116 Q152 120 148 120 L24 120 Q20 120 20 116 Z" fill={`url(#fgf-${f.type})`}/>
+                      {/* top edge highlight */}
+                      <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31" stroke="rgba(255,255,255,0.18)" stroke-width="1" fill="none"/>
+                      {/* bottom shadow */}
+                      <rect x="20" y="115" width="132" height="5" rx="2" fill="rgba(0,0,0,0.18)"/>
+                    </svg>
+                  </div>
+                  <div class="t-name">{f.label}</div>
+                  <div class="t-meta">{f.count} {f.count === 1 ? 'file' : 'files'}</div>
+                </a>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* ── DOCS / FILES SECTION ── */}
+        {fileDocs.length > 0 && (
+          <>
+            <div class="co-section-title">
+              <h3>{activeType ? TITLE_BY_TYPE[activeType] ?? 'Docs' : 'Docs'}</h3>
+              <span class="co-count">{fileDocs.length} {fileDocs.length === 1 ? 'item' : 'items'}</span>
+            </div>
+
+            {/* ICON GRID */}
+            <div class="co-icon-grid">
+              {fileDocs.map((d) => {
+                const ext = extClass(d.type);
+                const label = extLabel(d.type);
+                return (
+                  <a href={`/app/content/${d.id}`} class="co-tile">
+                    <div class="ico-wrap">
+                      <div class={`co-fi ${ext}`}>
+                        <div class="sheet">
+                          <div class="lines">
+                            <i></i><i></i><i></i><i></i><i></i>
+                          </div>
+                        </div>
+                        <div class="ext-tag">{label}</div>
                       </div>
                     </div>
-                    <div class="ext-tag">{label}</div>
-                  </div>
-                </div>
-                <div class="t-name">{d.title || 'Untitled'}</div>
-                <div class="t-meta">{relativeTime(d.updated_at)}</div>
-              </a>
-            );
-          })}
-        </div>
+                    <div class="t-name">{d.title || 'Untitled'}</div>
+                    <div class="t-meta">{relativeTime(d.updated_at)}</div>
+                  </a>
+                );
+              })}
+            </div>
 
-        <!-- LIST VIEW -->
-        <div class="co-list">
-          <div class="co-lr head">
-            <span></span>
-            <span>NAME</span>
-            <span>TYPE</span>
-            <span>UPDATED</span>
-            <span></span>
-          </div>
-          {docs.map((d) => {
-            const unread = unreadByDoc.get(d.id) ?? 0;
-            const ext = extClass(d.type);
-            const label = extLabel(d.type);
-            return (
-              <a href={`/app/content/${d.id}`} class="co-lr">
-                <div class="co-ic">
-                  <div class={`co-file-ico ${ext}`}>
-                    <div class="sheet"></div>
-                    <div class="ext">{label}</div>
-                  </div>
-                </div>
-                <span class="co-nm">
-                  {unread > 0 && <span class="co-unread" title={`${unread} unread`}></span>}
-                  <span class="co-name">{d.title || 'Untitled'}</span>
-                </span>
-                <span class="co-type">{d.type ?? 'doc'}</span>
-                <span class="co-dt">{relativeTime(d.updated_at)}</span>
+            {/* LIST VIEW */}
+            <div class="co-list">
+              <div class="co-lr head">
                 <span></span>
-              </a>
-            );
-          })}
-        </div>
+                <span>NAME</span>
+                <span>TYPE</span>
+                <span>UPDATED</span>
+                <span></span>
+              </div>
+              {docs.map((d) => {
+                const unread = unreadByDoc.get(d.id) ?? 0;
+                const ext = extClass(d.type);
+                const label = extLabel(d.type);
+                return (
+                  <a href={`/app/content/${d.id}`} class="co-lr">
+                    <div class="co-ic">
+                      <div class={`co-file-ico ${ext}`}>
+                        <div class="sheet"></div>
+                        <div class="ext">{label}</div>
+                      </div>
+                    </div>
+                    <span class="co-nm">
+                      {unread > 0 && <span class="co-unread" title={`${unread} unread`}></span>}
+                      <span class="co-name">{d.title || 'Untitled'}</span>
+                    </span>
+                    <span class="co-type">{d.type ?? 'doc'}</span>
+                    <span class="co-dt">{relativeTime(d.updated_at)}</span>
+                    <span></span>
+                  </a>
+                );
+              })}
+            </div>
+          </>
+        )}
+
       </div>
     )}
   </div>
