@@ -163,6 +163,15 @@ Then update `MCP_BASE_URL` to your stable custom domain — no token rotation ne
 
 ---
 
+## Vercel deployment status
+
+- Latest deployment: `https://project-l7x31i9no-nbkdoesntknowcodings-projects.vercel.app` — **Ready**
+- Note: The deployment returns `401` because **Vercel SSO Protection** is enabled on this project in the Vercel dashboard. The app itself built successfully. To access the deployed app, disable protection in Vercel → Project Settings → Deployment Protection.
+- WorkOS redirect must also be added in the WorkOS dashboard: `https://project-l7x31i9no-nbkdoesntknowcodings-projects.vercel.app/auth/callback`
+- Once SSO protection is lifted, add the Vercel domain to `CORS_ORIGINS` env var for cross-origin API calls.
+
+---
+
 ## Known limitations
 
 1. **Quick tunnel URL is ephemeral** — changes on every `cloudflared` restart. Tokens must be re-issued when it changes.
