@@ -12,6 +12,10 @@ const apiUrl = (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http:/
 const folderParam = Astro.url.searchParams.get('folder');
 const isInsideFolder = !!folderParam;
 
+// Back URL: encode current page URL so docs opened from here return here
+const currentPageUrl = Astro.url.pathname + Astro.url.search;
+const backParam = encodeURIComponent(currentPageUrl);
+
 interface DocSummary {
   id: string;
   title: string;
@@ -342,7 +346,33 @@ const totalItems = isInsideFolder
   }
   .co-move-sel:hover { border-color: var(--accent); }
 
-  /* DRAG-AND-DROP */
+  /* UPLOAD BUTTON */
+  .co-upload-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 10px 5px 8px; border-radius: 6px;
+    background: transparent; border: 1px solid var(--line);
+    font: 500 12px/1 var(--sans); color: var(--ink-muted); cursor: pointer;
+  }
+  .co-upload-btn:hover { background: var(--surface-2); color: var(--ink); border-color: var(--line-strong); }
+
+  /* OS FILE DROP OVERLAY */
+  #co-drop-overlay {
+    display: none; position: fixed; inset: 0; z-index: 200;
+    background: rgba(10,11,13,0.72); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  #co-drop-overlay.visible { display: flex; }
+  .co-drop-inner {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    border: 2px dashed var(--accent); border-radius: 16px;
+    padding: 48px 72px;
+    color: var(--accent); text-align: center;
+  }
+  .co-drop-inner p { margin: 0; font: 500 16px/1.4 var(--sans); }
+  .co-drop-inner span { font: 400 12px/1 var(--sans); color: var(--ink-muted); }
+
+  /* DRAG-AND-DROP (within-app) */
   .co-tile[data-doc-id] { cursor: default; }
   .co-tile[data-doc-id].co-dragging { opacity: 0.35; pointer-events: none; }
   .co-tile[data-folder-id].co-drag-over {
@@ -418,6 +448,11 @@ const totalItems = isInsideFolder
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
         </button>
       </div>
+      <label class="co-upload-btn" title="Upload .md or .txt files">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload
+        <input id="co-upload-inp" type="file" accept=".md,.txt,.markdown" multiple style="display:none" />
+      </label>
       <form id="new-doc-form" style="display:flex;align-items:center;gap:6px;">
         <select id="new-doc-type" style="height:28px;padding:0 8px;border-radius:6px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);font:500 12px/1 var(--sans);outline:none;cursor:pointer;">
           <option value="doc">Doc</option>
@@ -438,6 +473,15 @@ const totalItems = isInsideFolder
       {totalItems} {totalItems === 1 ? 'item' : 'items'}{isInsideFolder ? ` · ${heading}` : ''}
     </span>
   </Fragment>
+
+  <!-- OS FILE DROP OVERLAY (shown when dragging files from Finder/Explorer) -->
+  <div id="co-drop-overlay">
+    <div class="co-drop-inner">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="color:var(--accent)"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <p>Drop to import</p>
+      <span>.md and .txt files supported</span>
+    </div>
+  </div>
 
   <!-- MAIN CONTENT -->
   <div class="co-main">
@@ -575,7 +619,7 @@ const totalItems = isInsideFolder
                 const ext = extClass(d.type);
                 const label = extLabel(d.type);
                 return (
-                  <a href={`/app/content/${d.id}`} class="co-tile" draggable="true" data-doc-id={d.id}>
+                  <a href={`/app/content/${d.id}?back=${backParam}`} class="co-tile" draggable="true" data-doc-id={d.id}>
                     <div class="ico-wrap">
                       <div class={`co-fi ${ext}`}>
                         <div class="sheet">
@@ -607,7 +651,7 @@ const totalItems = isInsideFolder
                 const ext = extClass(d.type);
                 const label = extLabel(d.type);
                 return (
-                  <a href={`/app/content/${d.id}`} class="co-lr" draggable="true" data-doc-id={d.id}>
+                  <a href={`/app/content/${d.id}?back=${backParam}`} class="co-lr" draggable="true" data-doc-id={d.id}>
                     <div class="co-ic">
                       <div class={`co-file-ico ${ext}`}>
                         <div class="sheet"></div>
@@ -644,31 +688,68 @@ const totalItems = isInsideFolder
     )}
   </div>
 
-  <script define:vars={{ folderParam, isInsideFolder }}>
+  <script define:vars={{ folderParam, isInsideFolder, backParam }}>
     const apiBase = 'http://localhost:8080';
+    const DOC_DRAG_TYPE = 'application/x-mnema-doc-id';
 
-    // --- Create doc ---
-    async function createDoc() {
+    // --- Create doc (blank) ---
+    async function createDoc(title = 'Untitled', markdown = '') {
       const typeEl = document.getElementById('new-doc-type');
       const type = typeEl?.value ?? 'doc';
       const body = folderParam
-        ? { title: 'Untitled', type, folder_id: folderParam }
-        : { title: 'Untitled', type };
+        ? { title, type, markdown, folder_id: folderParam }
+        : { title, type, markdown };
       const res = await fetch(`${apiBase}/api/docs`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!res.ok) { alert('Failed to create doc'); return; }
+      if (!res.ok) { alert('Failed to create doc'); return null; }
       const { doc } = await res.json();
-      window.location.href = `/app/content/${doc.id}`;
+      return doc;
     }
-    document.getElementById('new-doc-form')?.addEventListener('submit', (e) => {
-      e.preventDefault(); void createDoc();
+
+    document.getElementById('new-doc-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const doc = await createDoc();
+      if (doc) window.location.href = `/app/content/${doc.id}?back=${backParam}`;
     });
-    document.getElementById('new-doc-form-empty')?.addEventListener('submit', (e) => {
-      e.preventDefault(); void createDoc();
+    document.getElementById('new-doc-form-empty')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const doc = await createDoc();
+      if (doc) window.location.href = `/app/content/${doc.id}?back=${backParam}`;
+    });
+
+    // --- Upload files (.md / .txt → new docs) ---
+    async function importFile(file) {
+      const text = await file.text();
+      const title = file.name.replace(/\.(md|txt|markdown)$/i, '').trim() || 'Untitled';
+      const body = folderParam
+        ? { title, type: 'doc', markdown: text, folder_id: folderParam }
+        : { title, type: 'doc', markdown: text };
+      const res = await fetch(`${apiBase}/api/docs`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return res.ok ? (await res.json()).doc : null;
+    }
+
+    async function importFiles(files) {
+      const valid = Array.from(files).filter(f => /\.(md|txt|markdown)$/i.test(f.name));
+      if (!valid.length) { alert('Only .md and .txt files are supported'); return; }
+      // Import all, then navigate to the first one
+      const results = await Promise.all(valid.map(importFile));
+      const first = results.find(Boolean);
+      if (first) window.location.href = `/app/content/${first.id}?back=${backParam}`;
+      else window.location.reload();
+    }
+
+    document.getElementById('co-upload-inp')?.addEventListener('change', (e) => {
+      if (e.target.files?.length) void importFiles(e.target.files);
+      e.target.value = ''; // reset so same file can be re-uploaded
     });
 
     // --- Create folder ---
@@ -716,9 +797,8 @@ const totalItems = isInsideFolder
     // --- Move doc to folder (list view select) ---
     document.querySelectorAll('.co-move-sel').forEach((sel) => {
       sel.addEventListener('change', async (e) => {
-        const target = e.target;
-        const docId = target.dataset.docId;
-        const folderId = target.value || null;
+        const docId = e.target.dataset.docId;
+        const folderId = e.target.value || null;
         if (!docId) return;
         await fetch(`${apiBase}/api/docs/${docId}/folder`, {
           method: 'PATCH',
@@ -746,7 +826,9 @@ const totalItems = isInsideFolder
       });
     });
 
-    // ── DRAG-AND-DROP ──────────────────────────────────────────────────────
+    // ── WITHIN-APP DRAG (move docs between folders) ──────────────────────
+    // Uses a custom MIME type so it never conflicts with OS file drops or
+    // the browser's default link-drag behaviour on <a> elements.
     let draggingDocId = null;
     const unfileZone = document.getElementById('co-unfile-zone');
 
@@ -760,74 +842,84 @@ const totalItems = isInsideFolder
       if (res.ok) window.location.reload();
     }
 
-    // Make file tiles draggable
     document.querySelectorAll('.co-tile[data-doc-id], .co-lr[data-doc-id]').forEach((el) => {
-      el.setAttribute('draggable', 'true');
-
       el.addEventListener('dragstart', (e) => {
         draggingDocId = el.dataset.docId;
-        e.dataTransfer.setData('text/plain', draggingDocId);
+        // Custom type prevents conflict with link/URL drag and OS file drops
+        e.dataTransfer.setData(DOC_DRAG_TYPE, draggingDocId);
+        e.dataTransfer.setData('text/plain', draggingDocId); // fallback
         e.dataTransfer.effectAllowed = 'move';
-        // Slight delay so the drag image captures before opacity change
         setTimeout(() => el.classList.add('co-dragging'), 0);
-        // Show unfile zone when inside a folder
         if (unfileZone) unfileZone.classList.add('co-drag-active');
       });
-
       el.addEventListener('dragend', () => {
         el.classList.remove('co-dragging');
         draggingDocId = null;
         if (unfileZone) {
-          unfileZone.classList.remove('co-drag-active');
-          unfileZone.classList.remove('co-drag-over');
+          unfileZone.classList.remove('co-drag-active', 'co-drag-over');
         }
-      });
-
-      // Prevent anchor navigation on drag
-      el.addEventListener('click', (e) => {
-        if (el.classList.contains('co-dragging')) e.preventDefault();
       });
     });
 
-    // Folder tiles as drop targets
+    // Folder tiles as drop targets (only accept within-app doc drags)
     document.querySelectorAll('.co-tile[data-folder-id]').forEach((folder) => {
       folder.addEventListener('dragover', (e) => {
-        if (!draggingDocId) return;
+        if (!e.dataTransfer.types.includes(DOC_DRAG_TYPE) && !draggingDocId) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         folder.classList.add('co-drag-over');
       });
       folder.addEventListener('dragleave', (e) => {
-        if (!folder.contains(e.relatedTarget)) {
-          folder.classList.remove('co-drag-over');
-        }
+        if (!folder.contains(e.relatedTarget)) folder.classList.remove('co-drag-over');
       });
       folder.addEventListener('drop', (e) => {
         e.preventDefault();
         folder.classList.remove('co-drag-over');
-        const docId = e.dataTransfer.getData('text/plain') || draggingDocId;
+        const docId = e.dataTransfer.getData(DOC_DRAG_TYPE) || draggingDocId;
         const folderId = folder.dataset.folderId;
         if (docId && folderId) void moveDocToFolder(docId, folderId);
       });
     });
 
-    // Unfile drop zone (inside folder view)
+    // Unfile drop zone
     if (unfileZone) {
       unfileZone.addEventListener('dragover', (e) => {
-        if (!draggingDocId) return;
+        if (!e.dataTransfer.types.includes(DOC_DRAG_TYPE) && !draggingDocId) return;
         e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
         unfileZone.classList.add('co-drag-over');
       });
-      unfileZone.addEventListener('dragleave', () => {
-        unfileZone.classList.remove('co-drag-over');
-      });
+      unfileZone.addEventListener('dragleave', () => unfileZone.classList.remove('co-drag-over'));
       unfileZone.addEventListener('drop', (e) => {
         e.preventDefault();
         unfileZone.classList.remove('co-drag-over');
-        const docId = e.dataTransfer.getData('text/plain') || draggingDocId;
+        const docId = e.dataTransfer.getData(DOC_DRAG_TYPE) || draggingDocId;
         if (docId) void moveDocToFolder(docId, null);
       });
     }
+
+    // ── OS FILE DROP (import .md/.txt from Finder/Explorer) ──────────────
+    const dropOverlay = document.getElementById('co-drop-overlay');
+    let osDropCounter = 0;
+
+    window.addEventListener('dragenter', (e) => {
+      if (!e.dataTransfer.types.includes('Files')) return;
+      osDropCounter++;
+      if (dropOverlay) dropOverlay.classList.add('visible');
+    });
+    window.addEventListener('dragleave', (e) => {
+      if (!e.dataTransfer.types.includes('Files')) return;
+      osDropCounter = Math.max(0, osDropCounter - 1);
+      if (osDropCounter === 0 && dropOverlay) dropOverlay.classList.remove('visible');
+    });
+    window.addEventListener('dragover', (e) => {
+      if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+    });
+    window.addEventListener('drop', (e) => {
+      if (!e.dataTransfer.files?.length) return;
+      e.preventDefault();
+      osDropCounter = 0;
+      if (dropOverlay) dropOverlay.classList.remove('visible');
+      void importFiles(e.dataTransfer.files);
+    });
   </script>
 </AppLayout>

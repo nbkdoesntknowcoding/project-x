@@ -7,9 +7,10 @@ interface Props {
   docType?: string;
   workspaceName?: string;
   email?: string;
+  backUrl?: string;
 }
 
-const { title, docType = 'doc', workspaceName: wsProp, email } = Astro.props;
+const { title, docType = 'doc', workspaceName: wsProp, email, backUrl = '/app/content' } = Astro.props;
 
 const auth = Astro.locals.auth;
 if (!auth) {
@@ -238,7 +239,9 @@ try {
         </button>
       </div>
       <div class="dl-crumbs">
-        <a href="/app/content" style="color:var(--ink-muted);text-decoration:none;">Content</a>
+        <a href={backUrl} style="color:var(--ink-muted);text-decoration:none;">
+          {backUrl.includes('?folder=') ? 'Folder' : 'Content'}
+        </a>
         <svg class="sep" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--ink-faint)"><path d="m9 6 6 6-6 6"/></svg>
         <span class="here">{title || 'Untitled'}</span>
       </div>
