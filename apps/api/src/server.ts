@@ -8,9 +8,10 @@ import { mcpPlugin } from './mcp/plugin.js';
 import { authPlugin } from './plugins/auth.js';
 import { loggerOptions } from './plugins/logger.js';
 import { authRoutes } from './routes/auth.js';
-import { billingRoutes } from './routes/billing.js';
+// Razorpay billing routes require RAZORPAY_KEY_ID/SECRET (not set in local dev)
+// import { billingRoutes } from './routes/billing.js';
 import { commentsRoutes } from './routes/comments.js';
-import { razorpayRoutes } from './routes/razorpay.js';
+// import { razorpayRoutes } from './routes/razorpay.js';
 // STRIPE: ENABLE WHEN APPROVED
 // import { stripeRoutes } from './routes/stripe.js';
 import { completeRoutes } from './routes/complete.js';
@@ -51,8 +52,8 @@ await app.register(commentsRoutes);
 await app.register(docVersionsRoutes);
 await app.register(docReadStateRoutes);
 await app.register(completeRoutes);
-await app.register(razorpayRoutes);
-await app.register(billingRoutes);
+// await app.register(razorpayRoutes);
+// await app.register(billingRoutes);
 await app.register(mcpTokenRoutes);
 await app.register(oauthPlugin);
 await app.register(mcpPlugin);

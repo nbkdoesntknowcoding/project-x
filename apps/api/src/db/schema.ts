@@ -634,3 +634,59 @@ export const oauthConsents = pgTable(
     uniqueGrant: unique('oauth_consents_unique').on(table.userId, table.workspaceId, table.clientId, table.scope),
   }),
 );
+
+// ── Billing / Razorpay ─────────────────────────────────────────────────────
+// These tables were created via raw SQL migrations (not tracked in the Drizzle
+// journal) so we declare them here to give the ORM typed access.
+
+export const subscriptions = pgTable(
+  'subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    razorpaySubscriptionId: text('razorpay_subscription_id').notNull().unique(),
+    razorpayCustomerId: text('razorpay_customer_id'),
+    status: text('status').notNull(),
+    planId: text('plan_id').notNull(),
+    planKey: text('plan_key').notNull(),
+    quantity: integer('quantity').notNull().default(1),
+    currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
+    currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
+    cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+    canceledAt: timestamp('canceled_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    workspaceIdx: index('subscriptions_workspace_idx').on(table.workspaceId),
+  }),
+);
+
+export const webhookEvents = pgTable(
+  'webhook_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    eventId: text('event_id').notNull().unique(),
+    eventType: text('event_type').notNull(),
+    payload: jsonb('payload').notNull(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    typeIdx: index('webhook_events_type_idx').on(table.eventType, table.createdAt),
+  }),
+);
+
+export const razorpayPlanIds = pgTable(
+  'razorpay_plan_ids',
+  {
+    planKey: text('plan_key').notNull(),
+    environment: text('environment').notNull(),
+    razorpayPlanId: text('razorpay_plan_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.planKey, table.environment] }),
+  }),
+);

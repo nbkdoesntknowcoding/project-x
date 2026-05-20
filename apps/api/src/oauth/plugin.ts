@@ -17,6 +17,7 @@
  */
 import type { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
+import formBody from '@fastify/formbody';
 import { loadKeyPair } from './keys.js';
 import { wellKnownRoutes } from './routes/well-known.js';
 import { registerRoute } from './routes/register.js';
@@ -26,6 +27,9 @@ import { revokeRoute } from './routes/revoke.js';
 import { userinfoRoute } from './routes/userinfo.js';
 
 export const oauthPlugin: FastifyPluginAsync = fp(async (app) => {
+  // RFC 6749 §4.1.3: token endpoint MUST accept application/x-www-form-urlencoded
+  await app.register(formBody);
+
   // Pre-warm keypair cache at startup — catches missing key files early
   await loadKeyPair();
 

@@ -3,7 +3,7 @@ import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import { requireOAuthBearer } from '../oauth/middleware/require-bearer.js';
 import { mcpConfig } from './config.js';
-import { protectedResourceRoutes } from './protected-resource.js';
+// protectedResourceRoutes removed — well-known routes now live in oauth/routes/well-known.ts
 import { McpForbiddenError } from './scope.js';
 import { createMcpServer } from './server.js';
 import { handleStreamableHttp } from './transport.js';
@@ -47,8 +47,6 @@ function send401(reply: FastifyReply): FastifyReply {
 }
 
 export const mcpPlugin: FastifyPluginAsync = fp(async (app) => {
-  await app.register(protectedResourceRoutes);
-
   app.post(
     '/mcp',
     { config: { mcpRoute: true } },
