@@ -54,10 +54,24 @@ export async function requireOAuthBearer(
   const oauthResult = await verifyOAuthAccessToken(token, `${config.OAUTH_ISSUER}/mcp`);
   if (oauthResult.valid) {
     const p = oauthResult.payload as OAuthJwtPayload;
+    // Expand external OAuth scopes → internal capability scopes used by tool
+    // requireScope() checks. workspace:read covers all read tools; workspace:write
+    // covers all write tools. This keeps the public OAuth surface simple while
+    // the internal scope strings stay descriptive.
+    const rawScopes = p.scope.split(' ');
+    const expanded = new Set(rawScopes);
+    if (expanded.has('workspace:read')) {
+      expanded.add('docs:read');
+      expanded.add('flows:read');
+    }
+    if (expanded.has('workspace:write')) {
+      expanded.add('docs:write');
+      expanded.add('flows:write');
+    }
     req.oauth = {
       userId: p.sub,
       workspaceId: p.workspace_id,
-      scope: p.scope.split(' '),
+      scope: [...expanded],
       clientId: p.client_id,
       jti: p.jti ?? null,
       tokenType: 'oauth',

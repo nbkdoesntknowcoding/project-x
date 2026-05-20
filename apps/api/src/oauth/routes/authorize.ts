@@ -30,9 +30,12 @@ import {
 } from '../../db/schema.js';
 import { withSystemPrivilege } from '../../db/with-system-privilege.js';
 import { JWT_COOKIE_NAME } from '../../plugins/auth.js';
-import { verifyJwt } from '../../lib/jwt.js';
+import { signJwt, verifyJwt } from '../../lib/jwt.js';
 import { renderConsentScreen, renderErrorPage } from '../consent.js';
 import { redirectToWorkOSLogin, completeWorkOSCallback } from '../workos-bridge.js';
+
+// 15-minute cookie lifetime — just long enough to survive the consent round-trip
+const CONSENT_COOKIE_MAX_AGE_SEC = 15 * 60;
 
 const AuthorizeQuerySchema = z.object({
   response_type: z.literal('code'),
@@ -153,6 +156,24 @@ export async function authorizeRoutes(app: FastifyInstance): Promise<void> {
         .where(eq(oauthClients.id, pending.clientId))
         .limit(1);
       if (!client) return renderErrorPage(reply, { error: 'invalid_client' });
+
+      // Set a short-lived session cookie so POST /oauth/authorize/approve can
+      // verify the user's identity. The user arrived via WorkOS (not the web
+      // app login), so no boppl_jwt exists yet. tenant_id is a placeholder —
+      // the approve route only reads claims.sub.
+      const sessionJwt = await signJwt({
+        sub: user.id,
+        tenant_id: user.id,   // placeholder; approve only needs sub
+        email: user.email,
+        scopes: ['oauth:consent'],
+      });
+      reply.setCookie(JWT_COOKIE_NAME, sessionJwt, {
+        path: '/',
+        httpOnly: true,
+        secure: true,     // tunnel is HTTPS
+        sameSite: 'lax',
+        maxAge: CONSENT_COOKIE_MAX_AGE_SEC,
+      });
 
       return showConsentScreen(reply, requestId, client.clientName, user.id, user.email);
     },
