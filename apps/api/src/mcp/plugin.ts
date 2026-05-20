@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import {
@@ -10,6 +11,8 @@ import { protectedResourceRoutes } from './protected-resource.js';
 import { McpForbiddenError } from './scope.js';
 import { createMcpServer } from './server.js';
 import { handleStreamableHttp } from './transport.js';
+import { db } from '../db/index.js';
+import { mcpTokens } from '../db/schema.js';
 
 declare module 'fastify' {
   interface FastifyContextConfig {
@@ -84,7 +87,16 @@ export const mcpPlugin: FastifyPluginAsync = fp(async (app) => {
         throw err;
       }
 
-      // 3. Build per-request server with the verified context captured in
+      // 3. Record that this token was used (fire-and-forget — never block the request).
+      if (authCtx.jwt_id) {
+        db.update(mcpTokens)
+          .set({ lastUsedAt: new Date() })
+          .where(eq(mcpTokens.jti, authCtx.jwt_id))
+          .execute()
+          .catch(() => { /* non-critical */ });
+      }
+
+      // 4. Build per-request server with the verified context captured in
       //    its handler closures. This is the only safe place to bind ctx.
       const server = createMcpServer(authCtx);
 

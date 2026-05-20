@@ -16,18 +16,27 @@ const workspaceName = domainPart
   : 'Workspace';
 
 // Check existing tokens server-side to set initial status
-let hasToken = false;
-let tokens: Array<{ id: string; name: string; scopes: string[]; expires_at: string | null; created_at: string }> = [];
+type TokenRow = { id: string; name: string; scopes: string[]; expires_at: string | null; last_used_at: string | null; created_at: string };
+let tokens: TokenRow[] = [];
 try {
   const res = await fetch(`${apiUrl}/api/mcp-tokens`, {
     headers: { Cookie: `boppl_jwt=${auth.jwt}` },
   });
   if (res.ok) {
-    const body = (await res.json()) as { tokens: typeof tokens };
+    const body = (await res.json()) as { tokens: TokenRow[] };
     tokens = body.tokens ?? [];
-    hasToken = tokens.length > 0;
   }
 } catch { /* API offline */ }
+
+const hasToken = tokens.length > 0;
+// "Live" = a token has been used by Claude in the last 2 hours
+const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
+const liveConnection = tokens.some(t =>
+  t.last_used_at && (Date.now() - new Date(t.last_used_at).getTime()) < LIVE_WINDOW_MS
+);
+// Status string
+const statusLabel = liveConnection ? 'Active' : hasToken ? 'Token issued — not connected' : 'Not connected';
+const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1');
 ---
 
 <style>
@@ -75,6 +84,21 @@ try {
   .cc-status-dot.inactive {
     background: var(--ink-muted);
   }
+  .cc-status-dot.pending {
+    background: #F5A623;
+  }
+
+  /* LOCALHOST WARNING */
+  .cc-warn-box {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 14px 16px; margin-bottom: 28px;
+    background: rgba(245,166,35,0.07); border: 1px solid rgba(245,166,35,0.30);
+    border-radius: 8px;
+  }
+  .cc-warn-icon { color: #F5A623; flex-shrink: 0; margin-top: 1px; }
+  .cc-warn-body { font: 400 13px/1.6 var(--sans); color: var(--ink-soft); }
+  .cc-warn-body strong { color: var(--ink); font-weight: 500; }
+  .cc-warn-body code { font-family: var(--mono); font-size: 11.5px; padding: 1px 5px; background: var(--surface-3); border-radius: 4px; color: var(--ink); }
   @keyframes cc-pulse {
     0%,100% { box-shadow: 0 0 0 0 rgba(107,227,155,0.55); }
     50% { box-shadow: 0 0 0 4px rgba(107,227,155,0); }
@@ -219,7 +243,7 @@ try {
 
   <Fragment slot="status-left">
     <span id="sb-conn-status" style="font:500 11px/1 var(--mono);color:var(--ink-muted);">
-      Claude · {hasToken ? 'connected' : 'not connected'}
+      Claude · {liveConnection ? 'active' : 'not connected'}
     </span>
   </Fragment>
 
@@ -241,9 +265,9 @@ try {
         <div class="cc-status-card">
           <div class="cc-status-lhs">
             <div class="cc-status-row">
-              <span class={`cc-status-dot ${hasToken ? 'active' : 'inactive'}`}></span>
+              <span class={`cc-status-dot ${liveConnection ? 'active' : hasToken ? 'pending' : 'inactive'}`}></span>
               <span class="cc-status-label">Connection status</span>
-              <span class="cc-status-state" id="cc-status-text">{hasToken ? 'Active' : 'Not connected'}</span>
+              <span class="cc-status-state" id="cc-status-text">{statusLabel}</span>
             </div>
             <div class="cc-status-meta">
               <div class="cc-status-item">
@@ -284,6 +308,23 @@ try {
         </div>
         <div class="cc-err" id="cc-err">Failed to generate token — check that the API is running.</div>
       </div>
+
+      <!-- LOCALHOST WARNING -->
+      {isLocalhost && (
+        <div class="cc-warn-box">
+          <span class="cc-warn-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </span>
+          <div class="cc-warn-body">
+            <strong>Localhost URLs won't work with Claude.ai or Claude Desktop's GUI.</strong>
+            <br/>
+            Claude's remote MCP connector requires a publicly reachable HTTPS URL.
+            For local testing you have two options:<br/>
+            • <strong>Tunnel with ngrok:</strong> run <code>ngrok http 8080</code>, then replace the URL below with the <code>https://…ngrok-free.app/mcp</code> URL.<br/>
+            • <strong>Direct config (Claude Desktop only):</strong> edit <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> manually — localhost URLs work there even though the GUI rejects them.
+          </div>
+        </div>
+      )}
 
       <!-- MCP ENDPOINT -->
       <div class="cc-section">
@@ -432,15 +473,17 @@ try {
       setTimeout(() => { labelEl.textContent = original; }, 1500);
     }
 
-    function setStatus(active) {
+    // state: 'active' | 'pending' | 'inactive'
+    function setStatus(state) {
       const dot = document.querySelector('.cc-status-dot');
       const txt = document.getElementById('cc-status-text');
       const sb  = document.getElementById('sb-conn-status');
       const revokeAll = document.getElementById('cc-revoke-all-btn');
-      if (dot) { dot.className = `cc-status-dot ${active ? 'active' : 'inactive'}`; }
-      if (txt) txt.textContent = active ? 'Active' : 'Not connected';
-      if (sb)  sb.textContent  = `Claude · ${active ? 'connected' : 'not connected'}`;
-      if (revokeAll) revokeAll.disabled = !active;
+      const label = state === 'active' ? 'Active' : state === 'pending' ? 'Token issued — not connected' : 'Not connected';
+      if (dot) dot.className = 'cc-status-dot ' + state;
+      if (txt) txt.textContent = label;
+      if (sb)  sb.textContent  = 'Claude · ' + (state === 'active' ? 'active' : 'not connected');
+      if (revokeAll) revokeAll.disabled = (state === 'inactive');
     }
 
     function addTokenRow(token) {
@@ -512,7 +555,7 @@ try {
         }
 
         addTokenRow(data.token);
-        setStatus(true);
+        setStatus('pending'); // token exists but Claude hasn't called yet
       } catch (e) {
         if (err) err.classList.add('visible');
         if (btn) { btn.disabled = false; btn.textContent = btn.id === 'cc-add-btn' ? 'New token' : 'Connect'; }
@@ -529,7 +572,7 @@ try {
       if (list && list.children.length === 0) {
         const sec = document.getElementById('cc-tokens-section');
         if (sec) sec.style.display = 'none';
-        setStatus(false);
+        setStatus('inactive');
         // Re-show connect button
         const card = document.querySelector('.cc-status-card > div:last-child');
         if (card) {
