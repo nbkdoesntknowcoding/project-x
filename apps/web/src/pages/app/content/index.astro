@@ -820,8 +820,9 @@ const totalItems = isInsideFolder
     )}
   </div>
 
-  <script define:vars={{ folderParam, isInsideFolder, backParam }}>
-    const apiBase = 'http://localhost:8080';
+  <script define:vars={{ folderParam, isInsideFolder, backParam, apiUrl, sessionJwt: auth.jwt }}>
+    const apiBase = apiUrl;
+    const AUTH_HEADER = sessionJwt ? { 'Authorization': `Bearer ${sessionJwt}` } : {};
     const DOC_DRAG_TYPE = 'application/x-mnema-doc-id';
 
     // --- Create doc (blank) ---
@@ -834,7 +835,7 @@ const totalItems = isInsideFolder
       const res = await fetch(`${apiBase}/api/docs`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
         body: JSON.stringify(body),
       });
       if (!res.ok) { alert('Failed to create doc'); return null; }
@@ -863,7 +864,7 @@ const totalItems = isInsideFolder
       const res = await fetch(`${apiBase}/api/docs`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
         body: JSON.stringify(body),
       });
       return res.ok ? (await res.json()).doc : null;
@@ -902,7 +903,7 @@ const totalItems = isInsideFolder
       const res = await fetch(`${apiBase}/api/folders`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
         body: JSON.stringify(body),
       });
       if (!res.ok) { alert('Failed to create folder'); return; }
@@ -1018,7 +1019,7 @@ const totalItems = isInsideFolder
         const res = await fetch(`${apiBase}/api/folders/${t.id}`, {
           method: 'PATCH',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
           body: JSON.stringify({ name: newName.trim() }),
         });
         if (res.ok) window.location.reload();
@@ -1032,7 +1033,7 @@ const totalItems = isInsideFolder
         const res = await fetch(`${apiBase}/api/folders`, {
           method: 'POST',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
           body: JSON.stringify({ name: name.trim(), parent_id: t.id }),
         });
         if (res.ok) window.location.href = `/app/content?folder=${t.id}`;
@@ -1044,14 +1045,14 @@ const totalItems = isInsideFolder
         if (t.type === 'doc') {
           if (!confirm(`Delete "${t.name}"? This cannot be undone.`)) return;
           const res = await fetch(`${apiBase}/api/docs/${t.id}`, {
-            method: 'DELETE', credentials: 'include',
+            method: 'DELETE', credentials: 'include', headers: { ...AUTH_HEADER },
           });
           if (res.ok || res.status === 204) window.location.reload();
           else alert('Failed to delete doc');
         } else {
           if (!confirm(`Delete folder "${t.name}"? Docs inside will become unfiled.`)) return;
           const res = await fetch(`${apiBase}/api/folders/${t.id}`, {
-            method: 'DELETE', credentials: 'include',
+            method: 'DELETE', credentials: 'include', headers: { ...AUTH_HEADER },
           });
           if (res.ok || res.status === 204) window.location.reload();
           else alert('Failed to delete folder');
@@ -1077,7 +1078,7 @@ const totalItems = isInsideFolder
         await fetch(`${apiBase}/api/docs/${docId}/folder`, {
           method: 'PATCH',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
           body: JSON.stringify({ folder_id: folderId }),
         });
         window.location.reload();
@@ -1110,7 +1111,7 @@ const totalItems = isInsideFolder
       const res = await fetch(`${apiBase}/api/docs/${docId}/folder`, {
         method: 'PATCH',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
         body: JSON.stringify({ folder_id: folderId }),
       });
       if (res.ok) window.location.reload();

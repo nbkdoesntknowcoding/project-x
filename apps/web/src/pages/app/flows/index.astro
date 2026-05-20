@@ -305,18 +305,17 @@ function statusLabel(flow: FlowSummary): string {
     </div>
   </div>
 
-  <script>
+  <script define:vars={{ apiUrl, sessionJwt: auth.jwt }}>
     async function createFlow() {
-      const apiBase =
-        (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
-      const res = await fetch(`${apiBase}/api/flows`, {
+      const AUTH_HEADER = sessionJwt ? { 'Authorization': `Bearer ${sessionJwt}` } : {};
+      const res = await fetch(`${apiUrl}/api/flows`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
         body: JSON.stringify({ name: 'Untitled flow' }),
       });
       if (!res.ok) { alert('Failed to create flow'); return; }
-      const { flow } = (await res.json()) as { flow: { slug: string } };
+      const { flow } = await res.json();
       window.location.href = `/app/flows/${flow.slug}`;
     }
     document.getElementById('fl-new-btn')?.addEventListener('click', () => void createFlow());
