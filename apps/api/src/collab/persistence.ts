@@ -48,6 +48,10 @@ export interface StoreResult {
   snapshotted: boolean;
 }
 
+export interface AiVersionMeta {
+  toolName: string;
+}
+
 // Per-process counter of successful content-changing stores per doc.
 // Resets on restart — snapshots are best-effort recovery anchors, not audit.
 const storeCounts = new Map<string, number>();
@@ -63,9 +67,17 @@ const storeCounts = new Map<string, number>();
  *   5. Every SNAPSHOT_EVERY content-changing stores per doc, INSERT a
  *      doc_versions row as a recovery anchor.
  */
+/**
+ * Persist the current Y.Doc state to the database.
+ *
+ * When `aiMeta` is provided the store ALWAYS creates a `doc_versions` snapshot
+ * tagged `author_kind = 'ai'`, regardless of the 50-store cycle. This is how
+ * MCP write tools (append, replace, create) leave a permanent version trail.
+ */
 export async function storeDocumentState(
   ctx: ConnectionContext,
   yjsDoc: Y.Doc,
+  aiMeta?: AiVersionMeta | null,
 ): Promise<StoreResult> {
   const encoded = Y.encodeStateAsUpdate(yjsDoc);
   const newMarkdown = await yjsStateToMarkdown(encoded);
@@ -98,7 +110,11 @@ export async function storeDocumentState(
     if (contentChanged) {
       const count = (storeCounts.get(ctx.doc_id) ?? 0) + 1;
       storeCounts.set(ctx.doc_id, count);
-      if (count % SNAPSHOT_EVERY === 0) {
+
+      // AI writes always snapshot; human edits snapshot every SNAPSHOT_EVERY stores.
+      const shouldSnapshot = aiMeta != null || count % SNAPSHOT_EVERY === 0;
+
+      if (shouldSnapshot) {
         const nextRow = await tx.execute(
           sql`SELECT COALESCE(MAX(version), 0) + 1 AS next FROM doc_versions WHERE doc_id = ${ctx.doc_id}`,
         );
@@ -109,9 +125,15 @@ export async function storeDocumentState(
           markdown: newMarkdown,
           yjsState: newYjsState,
           authorId: ctx.user_id,
-          comment: `Auto-snapshot at ${count} store events`,
+          authorKind: aiMeta != null ? 'ai' : 'human',
+          comment: aiMeta != null
+            ? `AI write: ${aiMeta.toolName}`
+            : `Auto-snapshot at ${count} store events`,
         });
         snapshotted = true;
+        // Reset the human counter after an AI-triggered snapshot so the 50-store
+        // cycle doesn't immediately fire again on the very next human keystroke.
+        if (aiMeta != null) storeCounts.set(ctx.doc_id, 0);
       }
     }
 

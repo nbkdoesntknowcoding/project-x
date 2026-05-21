@@ -5,6 +5,7 @@ import * as Y from 'yjs';
 import { config } from '../config/env.js';
 import { assignMissingAnchors } from '../mcp/anchors.js';
 import { authenticateConnection, type ConnectionContext } from './auth.js';
+import { consumeAiWrite, markAiWrite } from './ai-version-queue.js';
 import { markdownToYjsState } from './markdown-bridge.js';
 import { loadDocumentState, storeDocumentState } from './persistence.js';
 
@@ -66,9 +67,13 @@ const server = new Server<ConnectionContext>({
   async onStoreDocument(data) {
     const ctx = data.lastContext;
     if (!ctx) return;
-    const result = await storeDocumentState(ctx, data.document);
+    // Consume any pending AI-version signal for this doc (set by IPC handlers).
+    const aiToolName = consumeAiWrite(ctx.doc_id);
+    const aiMeta = aiToolName ? { toolName: aiToolName } : null;
+    const result = await storeDocumentState(ctx, data.document, aiMeta);
     if (result.snapshotted) {
-      console.log(`[collab] Snapshot taken for ${ctx.doc_id} (50-store anchor)`);
+      const label = aiMeta ? `AI write (${aiMeta.toolName})` : '50-store anchor';
+      console.log(`[collab] Version snapshot for ${ctx.doc_id} — ${label}`);
     }
   },
 
@@ -207,6 +212,7 @@ const server = new Server<ConnectionContext>({
           });
         }
 
+        if (markdown.trim()) markAiWrite(docId, 'create_doc');
         data.response.writeHead(200, { 'content-type': 'application/json' });
         data.response.end(JSON.stringify({ initialized: true }));
       } catch (err: unknown) {
@@ -327,6 +333,7 @@ const server = new Server<ConnectionContext>({
           }
         });
 
+        markAiWrite(docId, 'replace_doc_section');
         data.response.writeHead(200, { 'content-type': 'application/json' });
         data.response.end(JSON.stringify({ applied: true, new_anchors: newAnchors }));
       } catch (err: unknown) {
@@ -427,6 +434,7 @@ const server = new Server<ConnectionContext>({
           data.response.writeHead(409, { 'content-type': 'application/json' });
           data.response.end(JSON.stringify({ error: 'doc_changed' }));
         } else {
+          markAiWrite(docId, 'replace_doc_body');
           data.response.writeHead(200, { 'content-type': 'application/json' });
           data.response.end(JSON.stringify({ applied: true, new_anchors: newAnchors }));
         }
@@ -521,6 +529,7 @@ const server = new Server<ConnectionContext>({
           }
         });
 
+        markAiWrite(docId, 'append_blocks_to_doc');
         data.response.writeHead(200, { 'content-type': 'application/json' });
         data.response.end(JSON.stringify({ applied: true }));
       } catch (err: unknown) {

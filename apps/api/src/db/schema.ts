@@ -220,6 +220,8 @@ export const docVersions = pgTable(
     yjsState: bytea('yjs_state').notNull(),
     yjsUpdate: bytea('yjs_update'),
     authorId: uuid('author_id').references(() => users.id),
+    /** 'human' = manual Save or auto-snapshot; 'ai' = MCP write tool. */
+    authorKind: text('author_kind').notNull().default('human'),
     comment: text('comment'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
