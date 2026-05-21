@@ -8,7 +8,7 @@ import { TextSelection } from 'prosemirror-state';
 import { type JSX, useEffect, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import './editor.css';
-import { $prose } from '@milkdown/kit/utils';
+import { $prose, getMarkdown } from '@milkdown/kit/utils';
 import { ConnectionStatus } from './ConnectionStatus';
 import { createAutocompletePlugin } from './plugins/autocomplete/plugin';
 import { mathPlugin } from './plugins/math';
@@ -158,6 +158,7 @@ export function Editor({
     let viewRef: EditorView | null = null;
     let selectionPollTimer: ReturnType<typeof setInterval> | null = null;
     let lastSelectionKey = '';
+    let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
     crepe
       .create()
@@ -183,6 +184,35 @@ export function Editor({
           } else {
             hp.on('synced', seedIfEmpty);
           }
+
+          // ── Client-side auto-save ────────────────────────────────────────
+          // Observe local Yjs changes and flush to the REST API after a 4s
+          // debounce. This is a belt-and-suspenders fallback for when the
+          // Hocuspocus `onStoreDocument` path is slow or unreachable.
+          // We skip remote transactions (initial sync, peer edits) to avoid
+          // pointless round-trips.
+          const xml = ydoc.getXmlFragment('prosemirror');
+          const autoSaveObserver = (_events: unknown, tx: { local: boolean }) => {
+            if (!tx.local) return; // only save on user's own changes
+            if (autoSaveTimer !== null) clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(() => {
+              autoSaveTimer = null;
+              if (disposed) return;
+              try {
+                const md = crepe.editor.action(getMarkdown);
+                if (!md) return;
+                const saveUrl =
+                  (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+                void fetch(`${saveUrl}/api/docs/${docId}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({ markdown: md }),
+                });
+              } catch { /* best effort — never crash the editor */ }
+            }, 4000);
+          };
+          xml.observe(autoSaveObserver);
 
           // Capture the EditorView for the parent. We don't try to wire
           // a prosemirror Plugin.view dispatch listener here (Milkdown owns
@@ -235,6 +265,10 @@ export function Editor({
       if (selectionPollTimer !== null) {
         clearInterval(selectionPollTimer);
         selectionPollTimer = null;
+      }
+      if (autoSaveTimer !== null) {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = null;
       }
       onViewReadyRef.current?.(null);
       onProviderReadyRef.current?.(null);

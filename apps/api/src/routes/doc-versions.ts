@@ -106,7 +106,7 @@ export const docVersionsRoutes: FastifyPluginAsync = async (app) => {
       const docRows = await tx
         .select({ markdown: docs.markdown, yjsState: docs.yjsState })
         .from(docs)
-        .where(eq(docs.id, parsed.data.doc_id))
+        .where(and(eq(docs.id, parsed.data.doc_id), isNull(docs.deletedAt)))
         .limit(1);
       if (docRows.length === 0) return { error: 'doc_not_found' as const };
 
@@ -123,7 +123,10 @@ export const docVersionsRoutes: FastifyPluginAsync = async (app) => {
           docId: parsed.data.doc_id,
           version: versionNum,
           markdown: docRows[0]!.markdown,
-          yjsState: docRows[0]!.yjsState,
+          // yjsState may be null in the DB for older docs (schema says NOT NULL
+          // but legacy rows can violate this). Fall back to empty bytea so the
+          // insert succeeds; the markdown column is the authoritative content.
+          yjsState: docRows[0]!.yjsState ?? new Uint8Array(0),
           authorId: req.auth!.sub,
           comment: parsed.data.comment,
         })

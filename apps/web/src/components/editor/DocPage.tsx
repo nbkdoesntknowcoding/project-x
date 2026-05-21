@@ -64,6 +64,10 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
     if (title === savedTitle) return;
     await api.saveDoc(initialDoc.id, { title });
     setSavedTitle(title);
+    // Keep the browser tab title and SSR breadcrumb in sync without a reload.
+    document.title = `${title} — Mnema`;
+    const crumbEl = document.querySelector('.dl-crumbs .here');
+    if (crumbEl) crumbEl.textContent = title;
   }, [title, savedTitle, initialDoc.id]);
 
   // --- mark-read on mount --------------------------------------------------
