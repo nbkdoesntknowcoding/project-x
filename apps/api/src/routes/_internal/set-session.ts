@@ -1,7 +1,11 @@
+import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { config } from '../../config/env.js';
+import { db } from '../../db/index.js';
+import { workspaceMembers } from '../../db/schema.js';
 import { signJwt } from '../../lib/jwt.js';
+import { scopesForRole } from '../../lib/scopes.js';
 import { bootstrapUserAndWorkspace } from '../../lib/workspace.js';
 
 const bodySchema = z.object({
@@ -26,10 +30,24 @@ export const setSessionRoutes: FastifyPluginAsync = async (app) => {
       displayName: parsed.data.display_name,
     });
 
+    // Look up the user's role in the bootstrapped workspace so the JWT
+    // includes workspace:write for owner/admin/editor (Phase 9.1).
+    const memberRows = await db
+      .select({ role: workspaceMembers.role })
+      .from(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.userId, user_id),
+          eq(workspaceMembers.workspaceId, tenant_id),
+        ),
+      )
+      .limit(1);
+    const role = memberRows[0]?.role ?? 'viewer';
+
     const jwt = await signJwt({
       sub: user_id,
       tenant_id,
-      scopes: ['docs:read'],
+      scopes: scopesForRole(role),
       email: parsed.data.email,
     });
 

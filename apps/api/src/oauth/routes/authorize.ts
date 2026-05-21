@@ -231,6 +231,17 @@ export async function authorizeRoutes(app: FastifyInstance): Promise<void> {
       );
       if (!membership) return reply.status(403).send({ error: 'no_workspace_access' });
 
+      // Phase 9.1: strip workspace:write for viewer roles — they cannot write
+      // regardless of what the client requested or the consent form submitted.
+      const effectiveScope =
+        membership.role === 'viewer'
+          ? scope
+              .split(' ')
+              .filter((s) => s !== 'workspace:write')
+              .join(' ')
+              .trim()
+          : scope;
+
       // Issue authorization code
       const code = `mnema_ac_${randomBytes(32).toString('base64url')}`;
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -241,7 +252,7 @@ export async function authorizeRoutes(app: FastifyInstance): Promise<void> {
         userId: claims.sub,
         workspaceId: workspace_id,
         redirectUri: pending.redirectUri,
-        scope,
+        scope: effectiveScope,
         resource: pending.resource,
         codeChallenge: pending.codeChallenge,
         codeChallengeMethod: pending.codeChallengeMethod,
@@ -251,7 +262,7 @@ export async function authorizeRoutes(app: FastifyInstance): Promise<void> {
       // Persist consent so repeat authorizations skip the consent screen
       await withSystemPrivilege((tx) =>
         tx.insert(oauthConsents)
-          .values({ userId: claims.sub, workspaceId: workspace_id, clientId: pending.clientId, scope })
+          .values({ userId: claims.sub, workspaceId: workspace_id, clientId: pending.clientId, scope: effectiveScope })
           .onConflictDoUpdate({
             target: [oauthConsents.userId, oauthConsents.workspaceId, oauthConsents.clientId, oauthConsents.scope],
             set: { revokedAt: null, grantedAt: new Date() },
@@ -312,7 +323,12 @@ async function showConsentScreen(
 
   const userWorkspaces = await withSystemPrivilege((tx) =>
     tx
-      .select({ id: workspaces.id, name: workspaces.name, slug: workspaces.slug })
+      .select({
+        id: workspaces.id,
+        name: workspaces.name,
+        slug: workspaces.slug,
+        role: workspaceMembers.role,
+      })
       .from(workspaceMembers)
       .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
       .where(eq(workspaceMembers.userId, userId)),

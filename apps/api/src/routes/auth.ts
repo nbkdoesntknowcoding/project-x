@@ -11,6 +11,7 @@ import { withSystemPrivilege } from '../db/with-system-privilege.js';
 import { seedExampleFlow } from '../services/flow-seed.js';
 import { withTenant } from '../db/with-tenant.js';
 import { signJwt } from '../lib/jwt.js';
+import { scopesForRole } from '../lib/scopes.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Welcome doc copy lives as a static template so edits don't need a code
@@ -139,7 +140,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       sub: req.auth.sub,
       tenant_id: parsed.data.workspace_id,
       email: req.auth.email,
-      scopes: ['docs:read'],
+      scopes: scopesForRole(member[0]!.role),
     });
     reply.setCookie(JWT_COOKIE, jwt, {
       path: '/',
@@ -238,11 +239,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // Stage 3: re-mint JWT scoped to the new workspace + set cookie.
+    // Creator is always owner — they just inserted the membership above.
     const jwt = await signJwt({
       sub: req.auth.sub,
       tenant_id: setupResult.workspace.id,
       email: req.auth.email,
-      scopes: ['docs:read'],
+      scopes: scopesForRole('owner'),
     });
     reply.setCookie(JWT_COOKIE, jwt, {
       path: '/',

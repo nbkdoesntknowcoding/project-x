@@ -196,11 +196,11 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
         )}
       </div>
 
-      {/* Fixed bottom-right toolbar — status + actions */}
+      {/* Fixed top-right toolbar — status + actions */}
       <div
         className="fixed flex items-center gap-1"
         style={{
-          bottom: 50,
+          top: 86,
           right: 24,
           zIndex: 50,
           background: 'var(--surface-elevated)',

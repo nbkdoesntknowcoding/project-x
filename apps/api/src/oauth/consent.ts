@@ -14,26 +14,34 @@ interface ConsentParams {
   userEmail: string;
   scope: string;
   resource: string | null | undefined;
-  workspaces: Array<{ id: string; name: string; slug: string }>;
+  workspaces: Array<{ id: string; name: string; slug: string; role: string }>;
 }
+
+const WRITE_ROLES = new Set(['owner', 'admin', 'editor']);
 
 export function renderConsentScreen(reply: FastifyReply, params: ConsentParams): void {
   const { requestId, clientName, userEmail, scope, workspaces } = params;
-  const scopes = parseScopes(scope).filter((s) => s !== 'offline_access');
+  const scopeList = parseScopes(scope).filter((s) => s !== 'offline_access');
+  const requestsWrite = scopeList.includes('workspace:write');
 
   const workspaceOptions = workspaces
     .map(
       (ws, i) =>
         `<label class="ws-option">
-          <input type="radio" name="workspace_id" value="${esc(ws.id)}" ${i === 0 ? 'checked' : ''} required>
+          <input type="radio" name="workspace_id" value="${esc(ws.id)}" data-role="${esc(ws.role)}" ${i === 0 ? 'checked' : ''} required>
           <span class="ws-name">${esc(ws.name)}</span>
           <span class="ws-slug">@${esc(ws.slug)}</span>
+          <span class="ws-role${WRITE_ROLES.has(ws.role) ? '' : ' ws-role-viewer'}">${esc(ws.role)}</span>
         </label>`,
     )
     .join('');
 
-  const scopeItems = scopes
-    .map((s) => `<li class="scope-item"><span class="scope-dot">●</span>${esc(scopeLabel(s))}</li>`)
+  // Build scope items; tag the write item so JS can show/hide it per workspace
+  const scopeItems = scopeList
+    .map((s) => {
+      const isWrite = s === 'workspace:write';
+      return `<li class="scope-item${isWrite ? ' scope-write-item' : ''}" ${isWrite ? 'id="scope-write-item"' : ''}><span class="scope-dot">●</span>${esc(scopeLabel(s))}</li>`;
+    })
     .join('');
 
   const html = `<!DOCTYPE html>
@@ -88,7 +96,10 @@ export function renderConsentScreen(reply: FastifyReply, params: ConsentParams):
     .ws-option:has(input:checked) { border-color: var(--accent); }
     .ws-option input { accent-color: var(--accent); }
     .ws-name { font-weight: 500; }
-    .ws-slug { color: var(--ink-muted); font-size: 0.8rem; margin-left: auto; }
+    .ws-slug { color: var(--ink-muted); font-size: 0.8rem; }
+    .ws-role { font-size: 0.7rem; color: var(--ink-muted); margin-left: auto; background: #2a2a2a; padding: 0.15rem 0.4rem; border-radius: 4px; }
+    .ws-role-viewer { color: #f59e0b; background: rgba(245,158,11,0.1); }
+    .viewer-note { font-size: 0.78rem; color: #f59e0b; margin-bottom: 0.75rem; display: none; padding: 0.4rem 0.6rem; background: rgba(245,158,11,0.08); border-radius: 6px; border: 1px solid rgba(245,158,11,0.2); }
     .actions { display: flex; gap: 0.75rem; }
     .btn-approve { flex: 1; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 0.65rem 1rem; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: background 0.15s; }
     .btn-approve:hover { background: var(--accent-hover); }
@@ -105,7 +116,8 @@ export function renderConsentScreen(reply: FastifyReply, params: ConsentParams):
 
     <form method="POST" action="/oauth/authorize/approve">
       <input type="hidden" name="request_id" value="${esc(requestId)}">
-      <input type="hidden" name="scope" value="${esc(scope)}">
+      <input type="hidden" id="scope-input" name="scope" value="${esc(scope)}">
+      ${requestsWrite ? `<div class="viewer-note" id="viewer-note">⚠ Viewer role — write access will not be granted for this workspace.</div>` : ''}
 
       <div class="section-label">Permissions</div>
       <ul class="scope-list">${scopeItems}</ul>
@@ -132,6 +144,30 @@ export function renderConsentScreen(reply: FastifyReply, params: ConsentParams):
       document.body.appendChild(f);
       f.submit();
     }
+
+    ${requestsWrite ? `
+    // Phase 9.1: dynamically strip workspace:write from the submitted scope
+    // when the selected workspace role is viewer.
+    var FULL_SCOPE = ${JSON.stringify(scope)};
+    var WRITE_ROLES = ['owner','admin','editor'];
+    function updateScopeForRole() {
+      var checked = document.querySelector('input[name="workspace_id"]:checked');
+      if (!checked) return;
+      var role = checked.getAttribute('data-role') || 'viewer';
+      var isWriter = WRITE_ROLES.indexOf(role) !== -1;
+      var parts = FULL_SCOPE.split(' ').filter(Boolean);
+      if (!isWriter) parts = parts.filter(function(s){ return s !== 'workspace:write'; });
+      document.getElementById('scope-input').value = parts.join(' ');
+      var writeItem = document.getElementById('scope-write-item');
+      var viewerNote = document.getElementById('viewer-note');
+      if (writeItem) writeItem.style.display = isWriter ? '' : 'none';
+      if (viewerNote) viewerNote.style.display = isWriter ? 'none' : '';
+    }
+    document.querySelectorAll('input[name="workspace_id"]').forEach(function(r){
+      r.addEventListener('change', updateScopeForRole);
+    });
+    updateScopeForRole();
+    ` : ''}
   </script>
 </body>
 </html>`;

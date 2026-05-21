@@ -2,6 +2,7 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { docs } from '../../db/schema.js';
 import { withTenant } from '../../db/with-tenant.js';
+import { type AnchorEntry, extractAnchors } from '../anchors.js';
 import type { McpAuthContext } from '../auth.js';
 import { requireScope } from '../scope.js';
 import { withAudit } from './audit.js';
@@ -66,6 +67,8 @@ export type GetDocSectionResult =
       heading_text: string;
       line: number;
       markdown: string;
+      /** All block anchors in the document — use with append_blocks_to_doc. */
+      anchors: AnchorEntry[];
     }
   | {
       kind: 'multiple_matches';
@@ -99,7 +102,7 @@ export async function getDocSection(
     async () =>
       withTenant(ctx.tenant_id, async (tx) => {
         const rows = await tx
-          .select({ markdown: docs.markdown })
+          .select({ markdown: docs.markdown, yjsState: docs.yjsState })
           .from(docs)
           .where(and(eq(docs.id, args.id), isNull(docs.deletedAt)))
           .limit(1);
@@ -108,7 +111,17 @@ export async function getDocSection(
           throw new Error('Doc not found');
         }
 
-        const markdown = rows[0]!.markdown;
+        const { markdown, yjsState } = rows[0]!;
+
+        // Extract block anchors from Yjs state for use with append_blocks_to_doc.
+        let anchors: AnchorEntry[] = [];
+        try {
+          if (yjsState && yjsState.length > 0) {
+            anchors = extractAnchors(yjsState);
+          }
+        } catch {
+          // Non-fatal — section content is still returned.
+        }
 
         // Accept either bare heading ("Setup") or breadcrumb ("Overview > Setup").
         // We always match on the LAST segment text, then optionally filter by
@@ -131,6 +144,7 @@ export async function getDocSection(
             heading_text: m.heading_text,
             line: m.line,
             markdown: m.markdown,
+            anchors,
           } as const;
         }
 

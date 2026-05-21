@@ -2,6 +2,7 @@ import { and, eq, isNull, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { docs } from '../../db/schema.js';
 import { withTenant } from '../../db/with-tenant.js';
+import { type AnchorEntry, extractAnchors } from '../anchors.js';
 import type { McpAuthContext } from '../auth.js';
 import { requireScope } from '../scope.js';
 import { withAudit } from './audit.js';
@@ -27,7 +28,10 @@ export const GET_DOC_TOOL = {
     ' - You only need one section of a long doc — call get_doc_section instead',
     ' - You do not yet know which doc to fetch — call search_docs first',
     '',
-    'Returns the full markdown, the title, and timestamps.',
+    'Returns the full markdown, the title, timestamps, and an `anchors` array.',
+    'Each anchor entry has an `anchor` id, `kind` (block type), and `preview` text.',
+    'Pass an anchor id to append_blocks_to_doc as `after_anchor` to insert blocks',
+    'after a specific block rather than at the end of the document.',
     'Large docs are returned in full; consider get_doc_section for token efficiency.',
     'Typical latency: under 100ms.',
   ].join('\n'),
@@ -62,6 +66,8 @@ export interface GetDocResult {
   path: string;
   title: string;
   markdown: string;
+  /** Stable block anchors for use with append_blocks_to_doc. */
+  anchors: AnchorEntry[];
   created_at: string;
   updated_at: string;
 }
@@ -91,6 +97,7 @@ export async function getDoc(
             path: docs.path,
             title: docs.title,
             markdown: docs.markdown,
+            yjsState: docs.yjsState,
             createdAt: docs.createdAt,
             updatedAt: docs.updatedAt,
           })
@@ -102,11 +109,24 @@ export async function getDoc(
           throw new Error('Doc not found');
         }
         const r = rows[0]!;
+
+        // Extract stable block anchors from the Yjs state so callers can
+        // reference specific blocks in append_blocks_to_doc (Phase 9.1).
+        let anchors: AnchorEntry[] = [];
+        try {
+          if (r.yjsState && r.yjsState.length > 0) {
+            anchors = extractAnchors(r.yjsState);
+          }
+        } catch {
+          // Don't fail the read if anchor extraction errors.
+        }
+
         return {
           id: r.id,
           path: r.path,
           title: r.title,
           markdown: r.markdown,
+          anchors,
           created_at: r.createdAt.toISOString(),
           updated_at: r.updatedAt.toISOString(),
         };

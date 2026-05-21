@@ -1,4 +1,8 @@
 import type { McpAuthContext } from '../auth.js';
+import {
+  APPEND_BLOCKS_TO_DOC_TOOL,
+  appendBlocksToDoc,
+} from './append-blocks-to-doc.js';
 import { GET_DOC_SECTION_TOOL, getDocSection } from './get-doc-section.js';
 import { GET_DOC_TOOL, getDoc } from './get-doc.js';
 import { GET_FLOW_STEP_TOOL, getFlowStep } from './get-flow-step.js';
@@ -49,6 +53,9 @@ export const PRODUCTION_TOOLS: readonly ToolDescriptor[] = [
   // walkable.
   { spec: LIST_FLOWS_TOOL, handler: listFlows },
   { spec: GET_FLOW_STEP_TOOL, handler: getFlowStep },
+  // Phase 9.1: write tools. append_blocks_to_doc is the only write tool;
+  // it requires workspace:write scope + user confirmation + live role check.
+  { spec: APPEND_BLOCKS_TO_DOC_TOOL, handler: appendBlocksToDoc },
 ];
 
 export function listToolSpecs(): McpToolSpec[] {
