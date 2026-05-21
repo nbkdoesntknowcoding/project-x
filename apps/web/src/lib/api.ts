@@ -9,6 +9,21 @@ import type {
 const API_URL =
   (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
 
+// ── Auth token store ──────────────────────────────────────────────────────────
+// The JWT is httpOnly so JS can't read the cookie cross-origin. Astro SSR pages
+// receive the JWT and pass it as a prop. Call setAuthToken() once on mount and
+// every apiFetch / authHeaders() call will include Authorization: Bearer.
+let _authToken: string | null = null;
+
+export function setAuthToken(token: string): void {
+  _authToken = token;
+}
+
+/** Returns `{ Authorization: 'Bearer <token>' }` when a token is set, else `{}`. */
+export function authHeaders(): Record<string, string> {
+  return _authToken ? { Authorization: `Bearer ${_authToken}` } : {};
+}
+
 interface FetchOptions extends Omit<RequestInit, 'body' | 'signal'> {
   body?: BodyInit | object;
   /**
@@ -42,6 +57,7 @@ async function apiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...authHeaders(),
       ...(opts.headers ?? {}),
     },
     body: isJsonObject ? JSON.stringify(opts.body) : (opts.body as BodyInit | undefined),

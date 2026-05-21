@@ -1,6 +1,7 @@
 import { type JSX, useState } from 'react';
 import type { EditorView } from 'prosemirror-view';
 import { pmPosToRelative } from './relative-position';
+import { authHeaders } from '../../lib/api';
 
 interface Props {
   view: EditorView;
@@ -52,7 +53,7 @@ export function CommentComposer({
         (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
       const res = await fetch(`${apiUrl}/api/comment-threads`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         credentials: 'include',
         body: JSON.stringify({
           doc_id: docId,

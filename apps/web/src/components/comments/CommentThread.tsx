@@ -1,5 +1,6 @@
 import { type JSX, useState } from 'react';
 import type { ThreadDTO } from './types';
+import { authHeaders } from '../../lib/api';
 
 interface Props {
   thread: ThreadDTO;
@@ -37,7 +38,7 @@ export function CommentThread({ thread, anchorPmPos, onChange, onHoverChange }: 
         (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
       const res = await fetch(`${apiUrl}/api/comments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         credentials: 'include',
         body: JSON.stringify({ thread_id: thread.id, body: replyBody.trim() }),
       });
@@ -61,7 +62,7 @@ export function CommentThread({ thread, anchorPmPos, onChange, onHoverChange }: 
         (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
       const res = await fetch(`${apiUrl}/api/comment-threads/${thread.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         credentials: 'include',
         body: JSON.stringify({ resolved: !thread.resolved }),
       });

@@ -9,6 +9,7 @@ import { type JSX, useEffect, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import './editor.css';
 import { $prose, getMarkdown } from '@milkdown/kit/utils';
+import { authHeaders } from '../../lib/api';
 import { ConnectionStatus } from './ConnectionStatus';
 import { createAutocompletePlugin } from './plugins/autocomplete/plugin';
 import { mathPlugin } from './plugins/math';
@@ -205,7 +206,7 @@ export function Editor({
                   (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
                 void fetch(`${saveUrl}/api/docs/${docId}`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': 'application/json', ...authHeaders() },
                   credentials: 'include',
                   body: JSON.stringify({ markdown: md }),
                 });

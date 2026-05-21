@@ -1,4 +1,5 @@
 import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { authHeaders } from '../../lib/api';
 import type { EditorView } from 'prosemirror-view';
 import { CommentThread } from './CommentThread';
 import { relativeToPmPos } from './relative-position';
@@ -53,6 +54,7 @@ export function CommentsSidebar({
         (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
       const res = await fetch(`${apiUrl}/api/comment-threads?doc_id=${docId}`, {
         credentials: 'include',
+        headers: authHeaders(),
       });
       if (!res.ok) return;
       const body = (await res.json()) as { threads: ThreadDTO[] };

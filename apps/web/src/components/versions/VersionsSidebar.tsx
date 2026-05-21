@@ -1,6 +1,7 @@
 import { type JSX, useEffect, useState } from 'react';
 import { VersionItem } from './VersionItem';
 import type { VersionRow } from './types';
+import { authHeaders } from '../../lib/api';
 
 interface Props {
   docId: string;
@@ -43,6 +44,7 @@ export function VersionsSidebar({
       try {
         const res = await fetch(`${apiUrl}/api/doc-versions?doc_id=${docId}`, {
           credentials: 'include',
+          headers: authHeaders(),
         });
         if (!res.ok) return;
         const body = (await res.json()) as { versions: VersionRow[] };

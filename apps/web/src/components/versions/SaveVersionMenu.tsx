@@ -1,4 +1,5 @@
 import { type JSX, useState } from 'react';
+import { authHeaders } from '../../lib/api';
 
 interface Props {
   docId: string;
@@ -29,7 +30,7 @@ export function SaveVersionMenu({ docId, onSaved }: Props): JSX.Element {
         (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
       const res = await fetch(`${apiUrl}/api/doc-versions`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         credentials: 'include',
         body: JSON.stringify({ doc_id: docId, comment: comment.trim() }),
       });

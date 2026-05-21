@@ -1,7 +1,7 @@
 import type { DocFull } from '@boppl/shared';
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
 import type { EditorView } from 'prosemirror-view';
-import { api } from '../../lib/api';
+import { api, authHeaders, setAuthToken } from '../../lib/api';
 import { CommentComposer } from '../comments/CommentComposer';
 import { CommentsSidebar } from '../comments/CommentsSidebar';
 import { SaveVersionMenu } from '../versions/SaveVersionMenu';
@@ -70,13 +70,21 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
     if (crumbEl) crumbEl.textContent = title;
   }, [title, savedTitle, initialDoc.id]);
 
+  // --- register JWT for all cross-origin API calls -------------------------
+  // The boppl_jwt cookie is scoped to the Vercel domain and won't be sent
+  // to the Cloudflare tunnel URL automatically. Store it in the api module
+  // so apiFetch and authHeaders() include Authorization: Bearer on every call.
+  useEffect(() => {
+    setAuthToken(jwt);
+  }, [jwt]);
+
   // --- mark-read on mount --------------------------------------------------
   useEffect(() => {
     const apiUrl =
       (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
     void fetch(`${apiUrl}/api/doc-read-state/mark-read`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       credentials: 'include',
       body: JSON.stringify({ doc_id: initialDoc.id }),
     }).catch(() => {});
@@ -89,7 +97,10 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`${apiUrl}/api/auth/me`, { credentials: 'include' });
+        const res = await fetch(`${apiUrl}/api/auth/me`, {
+          credentials: 'include',
+          headers: authHeaders(),
+        });
         if (!res.ok) return;
         const body = (await res.json()) as { role?: string };
         if (cancelled) return;
@@ -110,7 +121,7 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
       try {
         const res = await fetch(
           `${apiUrl}/api/comment-threads?doc_id=${initialDoc.id}`,
-          { credentials: 'include' },
+          { credentials: 'include', headers: authHeaders() },
         );
         if (!res.ok) return;
         const body = (await res.json()) as { threads: unknown[] };
