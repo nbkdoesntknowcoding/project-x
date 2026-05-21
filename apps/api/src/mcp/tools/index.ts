@@ -17,6 +17,7 @@ import { LIST_FLOWS_TOOL, listFlows } from './list-flows.js';
 import { LIST_FOLDERS_TOOL, listFolders } from './list-folders.js';
 import { MOVE_DOC_TOOL, moveDoc } from './move-doc.js';
 import { MOVE_FOLDER_TOOL, moveFolder } from './move-folder.js';
+import { NOTIFY_MEMBERS_TOOL, notifyMembers } from './notify-members.js';
 import { PUBLISH_FLOW_TOOL, publishFlow } from './publish-flow.js';
 import { REMOVE_FLOW_EDGE_TOOL, removeFlowEdge } from './remove-flow-edge.js';
 import { REMOVE_FLOW_NODE_TOOL, removeFlowNode } from './remove-flow-node.js';
@@ -96,6 +97,8 @@ export const PRODUCTION_TOOLS: readonly ToolDescriptor[] = [
   { spec: CONNECT_FLOW_NODES_TOOL, handler: connectFlowNodes },
   { spec: REMOVE_FLOW_EDGE_TOOL, handler: removeFlowEdge },
   { spec: PUBLISH_FLOW_TOOL, handler: publishFlow },
+  // Phase 9.5: notify_members — sends in-app notifications to workspace members.
+  { spec: NOTIFY_MEMBERS_TOOL, handler: notifyMembers },
 ];
 
 export function listToolSpecs(): McpToolSpec[] {

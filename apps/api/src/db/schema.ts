@@ -701,3 +701,27 @@ export const razorpayPlanIds = pgTable(
     pk: primaryKey({ columns: [table.planKey, table.environment] }),
   }),
 );
+
+// ── Phase 9.5: Notification Center ───────────────────────────────────────────
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    actorId: uuid('actor_id').notNull().references(() => users.id),
+    kind: text('kind').notNull(),
+    title: text('title').notNull(),
+    body: text('body'),
+    link: text('link'),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    recipientIdx: index('notifications_recipient_idx').on(table.recipientId, table.createdAt),
+  }),
+);
