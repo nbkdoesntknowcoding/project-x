@@ -151,6 +151,294 @@ const server = new Server<ConnectionContext>({
       throw null;
     }
 
+    // ── /_internal/init/{docId} — CREATE/SEED semantics (Phase 9.2) ────────
+    if (url.startsWith('/_internal/init/')) {
+      if (data.request.method !== 'POST') {
+        data.response.writeHead(405).end();
+        throw null;
+      }
+      const secret = data.request.headers['x-boppl-internal-secret'];
+      if (!secret || secret !== process.env.WORKOS_COOKIE_PASSWORD) {
+        data.response.writeHead(403).end();
+        throw null;
+      }
+      const docId = url.replace('/_internal/init/', '').split('?')[0] ?? '';
+      if (!docId) {
+        data.response.writeHead(400).end();
+        throw null;
+      }
+
+      let body = '';
+      for await (const chunk of data.request) {
+        body += String(chunk);
+      }
+      const parsed = JSON.parse(body) as {
+        markdown?: string;
+        ctx?: ConnectionContext;
+      };
+      const markdown = parsed.markdown ?? '';
+
+      // openDirectConnection loads or creates the Y.Doc — unlike writeback,
+      // we intentionally allow this even for brand-new docs.
+      const direct = await data.instance.openDirectConnection(docId, parsed.ctx);
+      try {
+        if (markdown.trim()) {
+          const newState = await markdownToYjsState(markdown);
+          const incoming = new Y.Doc();
+          Y.applyUpdate(incoming, newState);
+          const incomingItems = incoming.getXmlFragment('prosemirror').toArray();
+
+          await direct.transact((live: Y.Doc) => {
+            const xml = live.getXmlFragment('prosemirror');
+            // Replace-all: clear whatever is there (empty for new doc) then
+            // insert the seed content.
+            if (xml.length > 0) xml.delete(0, xml.length);
+            const toInsert: Array<Y.XmlElement | Y.XmlText> = [];
+            for (const item of incomingItems) {
+              if (item instanceof Y.XmlElement || item instanceof Y.XmlText) {
+                const cloned = item.clone();
+                if (cloned instanceof Y.XmlElement && !cloned.getAttribute('data-anchor')) {
+                  cloned.setAttribute('data-anchor', `blk_${randomBytes(4).toString('hex')}`);
+                }
+                toInsert.push(cloned);
+              }
+            }
+            for (const el of toInsert) xml.push([el]);
+          });
+        }
+
+        data.response.writeHead(200, { 'content-type': 'application/json' });
+        data.response.end(JSON.stringify({ initialized: true }));
+      } catch (err: unknown) {
+        console.error('[collab] init failed', err);
+        data.response.writeHead(500).end();
+      } finally {
+        await direct.disconnect();
+      }
+      throw null;
+    }
+
+    // ── /_internal/replacesection/{docId} — REPLACE SECTION (Phase 9.2) ────
+    if (url.startsWith('/_internal/replacesection/')) {
+      if (data.request.method !== 'POST') {
+        data.response.writeHead(405).end();
+        throw null;
+      }
+      const secret = data.request.headers['x-boppl-internal-secret'];
+      if (!secret || secret !== process.env.WORKOS_COOKIE_PASSWORD) {
+        data.response.writeHead(403).end();
+        throw null;
+      }
+      const docId = url.replace('/_internal/replacesection/', '').split('?')[0] ?? '';
+      if (!docId) {
+        data.response.writeHead(400).end();
+        throw null;
+      }
+
+      let body = '';
+      for await (const chunk of data.request) {
+        body += String(chunk);
+      }
+      const parsed = JSON.parse(body) as {
+        section_anchor: string;
+        markdown: string;
+        ctx?: ConnectionContext;
+      };
+
+      const direct = await data.instance.openDirectConnection(docId, parsed.ctx);
+      try {
+        const newState = await markdownToYjsState(parsed.markdown);
+        const incoming = new Y.Doc();
+        Y.applyUpdate(incoming, newState);
+        const incomingItems = incoming.getXmlFragment('prosemirror').toArray();
+
+        let found = false;
+        const newAnchors: string[] = [];
+
+        await direct.transact((live: Y.Doc) => {
+          const xml = live.getXmlFragment('prosemirror');
+          const items = xml.toArray();
+
+          // Find the section heading by data-anchor.
+          let sectionIdx = -1;
+          let sectionLevel = 0;
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            if (
+              item instanceof Y.XmlElement &&
+              item.getAttribute('data-anchor') === parsed.section_anchor
+            ) {
+              sectionIdx = i;
+              // Detect heading level: Yjs/Milkdown stores `level` as attribute.
+              const levelAttr = item.getAttribute('level');
+              sectionLevel = levelAttr ? parseInt(String(levelAttr), 10) : 0;
+              break;
+            }
+          }
+
+          if (sectionIdx === -1) {
+            // Anchor not found — signal via a thrown string (caught below).
+            throw 'anchor_not_found';
+          }
+
+          found = true;
+
+          // Walk forward to find the end of the section: stop at a heading
+          // with level <= sectionLevel (or at EOF). We always include the
+          // heading node itself in the replaced range.
+          let endIdx = items.length; // exclusive
+          if (sectionLevel > 0) {
+            for (let i = sectionIdx + 1; i < items.length; i++) {
+              const item = items[i];
+              if (item instanceof Y.XmlElement) {
+                const nodeLevelAttr = item.getAttribute('level');
+                const nodeLevel = nodeLevelAttr ? parseInt(String(nodeLevelAttr), 10) : 0;
+                const nodeName = item.nodeName;
+                // Stop if we hit a heading that is same or higher level.
+                if (nodeName === 'heading' && nodeLevel > 0 && nodeLevel <= sectionLevel) {
+                  endIdx = i;
+                  break;
+                }
+              }
+            }
+          }
+
+          const deleteCount = endIdx - sectionIdx;
+
+          // Clone incoming elements and assign fresh anchors.
+          const toInsert: Array<Y.XmlElement | Y.XmlText> = [];
+          for (const item of incomingItems) {
+            if (item instanceof Y.XmlElement || item instanceof Y.XmlText) {
+              const cloned = item.clone();
+              if (cloned instanceof Y.XmlElement) {
+                if (!cloned.getAttribute('data-anchor')) {
+                  cloned.setAttribute('data-anchor', `blk_${randomBytes(4).toString('hex')}`);
+                }
+                newAnchors.push(cloned.getAttribute('data-anchor') as string);
+              }
+              toInsert.push(cloned);
+            }
+          }
+
+          // Atomic: delete old range, insert new content at same position.
+          xml.delete(sectionIdx, deleteCount);
+          if (toInsert.length > 0) {
+            xml.insert(sectionIdx, toInsert);
+          }
+        });
+
+        data.response.writeHead(200, { 'content-type': 'application/json' });
+        data.response.end(JSON.stringify({ applied: true, new_anchors: newAnchors }));
+      } catch (err: unknown) {
+        if (err === 'anchor_not_found') {
+          data.response.writeHead(404, { 'content-type': 'application/json' });
+          data.response.end(JSON.stringify({ error: 'anchor_not_found' }));
+        } else {
+          console.error('[collab] replacesection failed', err);
+          data.response.writeHead(500).end();
+        }
+      } finally {
+        await direct.disconnect();
+      }
+      throw null;
+    }
+
+    // ── /_internal/replacebody/{docId} — REPLACE BODY (Phase 9.2) ───────────
+    if (url.startsWith('/_internal/replacebody/')) {
+      if (data.request.method !== 'POST') {
+        data.response.writeHead(405).end();
+        throw null;
+      }
+      const secret = data.request.headers['x-boppl-internal-secret'];
+      if (!secret || secret !== process.env.WORKOS_COOKIE_PASSWORD) {
+        data.response.writeHead(403).end();
+        throw null;
+      }
+      const docId = url.replace('/_internal/replacebody/', '').split('?')[0] ?? '';
+      if (!docId) {
+        data.response.writeHead(400).end();
+        throw null;
+      }
+
+      let body = '';
+      for await (const chunk of data.request) {
+        body += String(chunk);
+      }
+      const parsed = JSON.parse(body) as {
+        markdown: string;
+        expected_anchors: string[];
+        ctx?: ConnectionContext;
+      };
+
+      const direct = await data.instance.openDirectConnection(docId, parsed.ctx);
+      try {
+        const newState = await markdownToYjsState(parsed.markdown);
+        const incoming = new Y.Doc();
+        Y.applyUpdate(incoming, newState);
+        const incomingItems = incoming.getXmlFragment('prosemirror').toArray();
+
+        let docChanged = false;
+        const newAnchors: string[] = [];
+
+        await direct.transact((live: Y.Doc) => {
+          const xml = live.getXmlFragment('prosemirror');
+
+          // Collect current anchors to compare with expected_anchors.
+          const currentAnchors: string[] = [];
+          for (const item of xml.toArray()) {
+            if (item instanceof Y.XmlElement) {
+              const anchor = item.getAttribute('data-anchor');
+              if (anchor) currentAnchors.push(anchor);
+            }
+          }
+
+          // Compare: same elements, same order.
+          const expected = parsed.expected_anchors ?? [];
+          const matches =
+            currentAnchors.length === expected.length &&
+            currentAnchors.every((a, i) => a === expected[i]);
+
+          if (!matches) {
+            docChanged = true;
+            return; // exit transact callback early without mutating
+          }
+
+          // Build cloned nodes with fresh anchors.
+          const toInsert: Array<Y.XmlElement | Y.XmlText> = [];
+          for (const item of incomingItems) {
+            if (item instanceof Y.XmlElement || item instanceof Y.XmlText) {
+              const cloned = item.clone();
+              if (cloned instanceof Y.XmlElement) {
+                if (!cloned.getAttribute('data-anchor')) {
+                  cloned.setAttribute('data-anchor', `blk_${randomBytes(4).toString('hex')}`);
+                }
+                newAnchors.push(cloned.getAttribute('data-anchor') as string);
+              }
+              toInsert.push(cloned);
+            }
+          }
+
+          // Atomic: wipe then insert.
+          if (xml.length > 0) xml.delete(0, xml.length);
+          for (const el of toInsert) xml.push([el]);
+        });
+
+        if (docChanged) {
+          data.response.writeHead(409, { 'content-type': 'application/json' });
+          data.response.end(JSON.stringify({ error: 'doc_changed' }));
+        } else {
+          data.response.writeHead(200, { 'content-type': 'application/json' });
+          data.response.end(JSON.stringify({ applied: true, new_anchors: newAnchors }));
+        }
+      } catch (err: unknown) {
+        console.error('[collab] replacebody failed', err);
+        data.response.writeHead(500).end();
+      } finally {
+        await direct.disconnect();
+      }
+      throw null;
+    }
+
     // ── /_internal/appendblocks/{docId} — APPEND semantics (Phase 9.1) ─────
     if (url.startsWith('/_internal/appendblocks/')) {
       if (data.request.method !== 'POST') {

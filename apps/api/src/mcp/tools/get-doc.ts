@@ -62,14 +62,16 @@ const argsSchema = z
   });
 
 export interface GetDocResult {
-  id: string;
-  path: string;
-  title: string;
-  markdown: string;
+  id?: string;
+  path?: string;
+  title?: string;
+  markdown?: string;
   /** Stable block anchors for use with append_blocks_to_doc. */
-  anchors: AnchorEntry[];
-  created_at: string;
-  updated_at: string;
+  anchors?: AnchorEntry[];
+  created_at?: string;
+  updated_at?: string;
+  error?: string;
+  message?: string;
 }
 
 export async function getDoc(
@@ -85,10 +87,12 @@ export async function getDoc(
     { tool_name: GET_DOC_TOOL.name, args: args as Record<string, unknown> },
     async () =>
       withTenant(ctx.tenant_id, async (tx) => {
+        // Fetch the doc regardless of deletedAt so we can distinguish
+        // "not found" from "trashed" in the error response.
         const where = (
           args.id
-            ? and(eq(docs.id, args.id), isNull(docs.deletedAt))
-            : and(eq(docs.path, args.path!), isNull(docs.deletedAt))
+            ? eq(docs.id, args.id)
+            : eq(docs.path, args.path!)
         ) as SQL;
 
         const rows = await tx
@@ -98,6 +102,7 @@ export async function getDoc(
             title: docs.title,
             markdown: docs.markdown,
             yjsState: docs.yjsState,
+            deletedAt: docs.deletedAt,
             createdAt: docs.createdAt,
             updatedAt: docs.updatedAt,
           })
@@ -109,6 +114,17 @@ export async function getDoc(
           throw new Error('Doc not found');
         }
         const r = rows[0]!;
+
+        // Phase 9.2: surface a distinct error for trashed docs rather than
+        // silently returning "not found".
+        if (r.deletedAt !== null) {
+          return {
+            error: 'doc_trashed',
+            message:
+              'This document has been moved to Trash and is not readable via MCP. ' +
+              'Restore it from the Trash in the app first.',
+          };
+        }
 
         // Extract stable block anchors from the Yjs state so callers can
         // reference specific blocks in append_blocks_to_doc (Phase 9.1).
@@ -131,6 +147,6 @@ export async function getDoc(
           updated_at: r.updatedAt.toISOString(),
         };
       }),
-    (result) => ({ doc_id: result.id, content_length: result.markdown.length }),
+    (result) => ({ doc_id: result.id ?? null, content_length: result.markdown?.length ?? 0 }),
   );
 }
