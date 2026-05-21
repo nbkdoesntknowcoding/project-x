@@ -3,8 +3,10 @@ import type { FastifyPluginAsync } from 'fastify';
 import { SignJWT } from 'jose';
 import { z } from 'zod';
 import { config } from '../config/env.js';
-import { mcpTokens } from '../db/schema.js';
+import { mcpTokens, workspaceMembers } from '../db/schema.js';
+import { withSystemPrivilege } from '../db/with-system-privilege.js';
 import { withTenant } from '../db/with-tenant.js';
+import { scopesForRole } from '../lib/scopes.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const secret = new TextEncoder().encode(config.JWT_SECRET);
@@ -54,6 +56,22 @@ export const mcpTokenRoutes: FastifyPluginAsync = async (app) => {
 
     const auth = req.auth;
 
+    // Resolve the caller's workspace role to determine which scopes to grant.
+    // Fall back to viewer-level scopes if the membership row is missing.
+    const [membership] = await withSystemPrivilege((tx) =>
+      tx
+        .select({ role: workspaceMembers.role })
+        .from(workspaceMembers)
+        .where(
+          and(
+            eq(workspaceMembers.userId, auth.sub),
+            eq(workspaceMembers.workspaceId, auth.tenant_id),
+          ),
+        )
+        .limit(1),
+    );
+    const scopes = scopesForRole(membership?.role ?? 'viewer');
+
     // Insert the metadata row first so we can capture the generated jti.
     const row = await withTenant(auth.tenant_id, async (tx) => {
       const inserted = await tx
@@ -62,6 +80,7 @@ export const mcpTokenRoutes: FastifyPluginAsync = async (app) => {
           workspaceId: auth.tenant_id,
           userId: auth.sub,
           name: parsed.data.name,
+          scopes,
           // 90-day expiry: long enough to be useful, short enough to rotate.
           expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
         })
@@ -70,12 +89,12 @@ export const mcpTokenRoutes: FastifyPluginAsync = async (app) => {
     });
 
     // Sign a JWT using the same secret / issuer / audience as the app JWT,
-    // but with docs:read + flows:read scopes and a 90-day expiry.
+    // with scopes determined by the caller's workspace role.
     const jwt = await new SignJWT({
       sub: auth.sub,
       tenant_id: auth.tenant_id,
       email: auth.email,
-      scopes: ['docs:read', 'flows:read'],
+      scopes,
       jti: row.jti,
     })
       .setProtectedHeader({ alg: 'HS256' })
