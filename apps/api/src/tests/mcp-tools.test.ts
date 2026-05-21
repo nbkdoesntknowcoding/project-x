@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
@@ -167,7 +167,7 @@ async function makeClient(scopes: string[] = ['docs:read']): Promise<ConnectedCl
     jwt_id: null,
   };
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const server: Server = createMcpServer(ctx);
+  const server: McpServer = createMcpServer(ctx);
   const client = new Client({ name: 'test', version: '0.0.0' }, { capabilities: {} });
   await Promise.all([
     server.connect(serverTransport),

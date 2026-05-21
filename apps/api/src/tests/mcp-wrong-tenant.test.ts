@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
@@ -122,7 +122,7 @@ interface ProbeResult {
 async function callProbe(authCtx: McpAuthContext): Promise<ProbeResult> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
-  const server: Server = createMcpServer(authCtx);
+  const server: McpServer = createMcpServer(authCtx);
   const client = new Client(
     { name: 'mcp-test-client', version: '0.0.0' },
     { capabilities: {} },
