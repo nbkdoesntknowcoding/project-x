@@ -36,6 +36,69 @@
       "when": 1778889600000,
       "tag": "0004_comments_threads_versions_read_state",
       "breakpoints": false
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779373156544,
+      "tag": "0005_doc_type",
+      "breakpoints": false
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779373156545,
+      "tag": "0006_flows_v1",
+      "breakpoints": false
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779373156546,
+      "tag": "0007_example_flow_backfill",
+      "breakpoints": false
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779373156547,
+      "tag": "0008_folders",
+      "breakpoints": false
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779373156548,
+      "tag": "0009_folder_nesting",
+      "breakpoints": false
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779373156549,
+      "tag": "0010_mcp_tokens",
+      "breakpoints": false
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1779373156550,
+      "tag": "0011_oauth_v1",
+      "breakpoints": false
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779373156551,
+      "tag": "0012_folders_soft_delete",
+      "breakpoints": false
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1779373156552,
+      "tag": "0013_doc_versions_author_kind",
+      "breakpoints": false
     }
   ]
 }
