@@ -1,4 +1,4 @@
-import { and, desc, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { docs } from '../../db/schema.js';
 import { withTenant } from '../../db/with-tenant.js';
@@ -27,7 +27,8 @@ export const LIST_DOCS_TOOL = {
     ' - The user is searching by topic or keyword — call search_docs instead',
     ' - You already know the doc ID or path — call get_doc directly',
     '',
-    'Returns up to 50 docs per call with id, path, title, and updated_at.',
+    'Returns up to 50 docs per call with id, path, title, folder_id, and updated_at.',
+    'Supply folder_id to list only docs inside that folder; omit for all docs.',
     'If more docs exist, the response includes a next_cursor to paginate.',
     'Typical latency: under 100ms.',
   ].join('\n'),
@@ -44,6 +45,10 @@ export const LIST_DOCS_TOOL = {
         maximum: 50,
         description: 'Maximum number of docs to return. Defaults to 50.',
       },
+      folder_id: {
+        type: 'string',
+        description: 'Optional folder UUID. If supplied, returns only docs inside that folder.',
+      },
     },
     additionalProperties: false,
   },
@@ -53,6 +58,7 @@ export const LIST_DOCS_TOOL = {
 const argsSchema = z.object({
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(50).optional(),
+  folder_id: z.string().uuid().optional(),
 });
 
 export interface ListDocsResult {
@@ -60,6 +66,7 @@ export interface ListDocsResult {
     id: string;
     path: string;
     title: string;
+    folder_id: string | null;
     updated_at: string;
     created_at: string;
   }>;
@@ -99,18 +106,23 @@ export async function listDocs(
           : undefined;
 
         // Fetch limit+1 to detect "has more" without a separate count query.
+        const folderClause = args.folder_id
+          ? eq(docs.folderId, args.folder_id)
+          : undefined;
+
         const rows = await tx
           .select({
             id: docs.id,
             path: docs.path,
             title: docs.title,
+            folderId: docs.folderId,
             createdAt: docs.createdAt,
             updatedAt: docs.updatedAt,
             // Microsecond-precise text for stable cursor encoding.
             updatedAtText: sql<string>`${docs.updatedAt}::text`,
           })
           .from(docs)
-          .where(and(isNull(docs.deletedAt), cursorClause))
+          .where(and(isNull(docs.deletedAt), folderClause, cursorClause))
           .orderBy(desc(docs.updatedAt), desc(docs.id))
           .limit(limit + 1);
 
@@ -127,6 +139,7 @@ export async function listDocs(
             id: r.id,
             path: r.path,
             title: r.title,
+            folder_id: r.folderId ?? null,
             // Public response keeps the JS-Date-derived ISO string (millis)
             // — clients don't need microsecond precision; only the cursor
             // round-trip does.

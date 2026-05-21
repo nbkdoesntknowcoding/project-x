@@ -141,7 +141,11 @@ export const invitations = pgTable(
   }),
 );
 
-// Phase 6.4: User-created folders for organising docs.
+// Phase 6.4 / 9.3: User-created folders for organising docs.
+// Phase 9.3 adds soft-delete columns (deleted_at, deleted_by) and renames
+// parent_id → parent_folder_id for consistency with the MCP API surface.
+// The DB column remains `parent_id` for backwards compatibility; the
+// TypeScript field is parentFolderId.
 export const folders = pgTable(
   'folders',
   {
@@ -150,17 +154,20 @@ export const folders = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
-    // Phase 6.5: self-referential FK for nested folders. Null = root folder.
-    // FK constraint lives in the DB (migration 0009); Drizzle doesn't handle
-    // self-references cleanly so we declare it as a plain uuid column here.
-    parentId: uuid('parent_id'),
+    // Self-referential FK for nested folders. Null = root folder.
+    // FK constraint lives in the DB (migration 0009/0012); Drizzle doesn't
+    // handle self-references cleanly so we declare it as a plain uuid column.
+    parentFolderId: uuid('parent_id'),
     createdBy: uuid('created_by').references(() => users.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    // Phase 9.3: soft-delete
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletedBy: text('deleted_by'),
   },
   (table) => ({
     workspaceIdx: index('folders_workspace_idx').on(table.workspaceId),
-    parentIdx: index('folders_parent_idx').on(table.parentId),
+    parentIdx: index('folders_parent_idx').on(table.parentFolderId),
   }),
 );
 
