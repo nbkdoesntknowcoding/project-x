@@ -20,7 +20,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   const url = new URL(context.request.url);
   if (url.pathname.startsWith('/app') && !session) {
-    return context.redirect('/auth/login');
+    return context.redirect('/login');
   }
   return next();
 });

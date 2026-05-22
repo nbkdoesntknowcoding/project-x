@@ -4,7 +4,7 @@ import { setSession } from '../../lib/session.ts';
 
 const code = Astro.url.searchParams.get('code');
 if (!code) {
-  return Astro.redirect('/auth/login?error=missing_code');
+  return Astro.redirect('/login?error=missing_code');
 }
 
 const clientId = import.meta.env.WORKOS_CLIENT_ID as string;
@@ -18,7 +18,7 @@ try {
   });
 } catch (err) {
   console.error('WorkOS code exchange failed', err);
-  return Astro.redirect('/auth/login?error=code_exchange_failed');
+  return Astro.redirect('/login?error=code_exchange_failed');
 }
 
 const { user, accessToken } = workosResult;
@@ -41,7 +41,7 @@ const response = await fetch(`${apiUrl}/api/_internal/set-session`, {
 if (!response.ok) {
   const text = await response.text();
   console.error('Internal set-session failed', response.status, text);
-  return Astro.redirect('/auth/login?error=bootstrap_failed');
+  return Astro.redirect('/login?error=bootstrap_failed');
 }
 
 const { user_id, tenant_id, jwt } = (await response.json()) as {
