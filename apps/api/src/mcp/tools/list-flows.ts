@@ -43,7 +43,7 @@ export const LIST_FLOWS_TOOL = {
   annotations: { readOnlyHint: true, title: 'List published flows in your workspace' },
 };
 
-const argsSchema = z.object({}).strict();
+const argsSchema = z.object({});
 
 export interface ListFlowsResult {
   flows: Array<{

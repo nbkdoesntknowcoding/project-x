@@ -23,10 +23,13 @@ export const LIST_FOLDERS_TOOL = {
     'Use this when:',
     ' - The user asks what folders or collections exist in their workspace',
     ' - You need to find a folder id before creating or moving a doc',
-    ' - You want to show the folder tree',
+    ' - You want to show the full folder tree',
     '',
-    'Supply parent_folder_id to list the direct children of a specific folder.',
-    'Omit parent_folder_id to list root-level folders.',
+    'Supply parent_folder_id to list direct children of a specific folder.',
+    'Omit parent_folder_id to list root-level folders only.',
+    'Pass include_all: true to return EVERY folder in the workspace (flat list,',
+    'regardless of nesting depth) — use this when you need to search for a folder',
+    'by name or id without knowing where it sits in the hierarchy.',
     '',
     'Each folder includes doc_count (direct non-trashed docs) and',
     'subfolder_count (direct non-trashed subfolders).',
@@ -39,6 +42,11 @@ export const LIST_FOLDERS_TOOL = {
         description:
           'UUID of the parent folder to list children of. Omit to list root-level folders.',
       },
+      include_all: {
+        type: 'boolean',
+        description:
+          'When true, returns every non-trashed folder in the workspace regardless of nesting. Overrides parent_folder_id.',
+      },
     },
     additionalProperties: false,
   },
@@ -50,6 +58,7 @@ export const LIST_FOLDERS_TOOL = {
 
 const argsSchema = z.object({
   parent_folder_id: z.string().uuid().optional(),
+  include_all: z.boolean().optional(),
 });
 
 export interface ListFoldersResult {
@@ -75,9 +84,13 @@ export async function listFolders(
     { tool_name: LIST_FOLDERS_TOOL.name, args: args as Record<string, unknown> },
     async () =>
       withTenant(ctx.tenant_id, async (tx) => {
-        // Build WHERE clause: filter by parent_folder_id (or IS NULL for root)
-        const parentClause =
-          args.parent_folder_id !== undefined
+        // Build WHERE clause:
+        //   include_all=true  → every non-trashed folder (ignore parent filter)
+        //   parent_folder_id  → direct children of that folder
+        //   default           → root-level folders (parentFolderId IS NULL)
+        const parentClause = args.include_all
+          ? undefined
+          : args.parent_folder_id !== undefined
             ? eq(folders.parentFolderId, args.parent_folder_id)
             : isNull(folders.parentFolderId);
 
@@ -98,7 +111,7 @@ export async function listFolders(
             )`,
           })
           .from(folders)
-          .where(and(isNull(folders.deletedAt), parentClause))
+          .where(parentClause ? and(isNull(folders.deletedAt), parentClause) : isNull(folders.deletedAt))
           .orderBy(folders.name);
 
         return {
