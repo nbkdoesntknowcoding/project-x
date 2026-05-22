@@ -27,6 +27,10 @@ export const LIST_FLOWS_TOOL = {
     'It contains sequenced steps — each step is either a directive (ask the user',
     'something, adopt a role, set context) or reference material (a doc to ingest).',
     '',
+    'Each item has two identifiers:',
+    '  id   — human-readable slug (e.g. "onboarding-eng"). Pass to get_flow_step.',
+    '  uuid — database UUID. Pass to get_flow, propose_flow_publish, publish_flow.',
+    '',
     'After listing, walk a flow by calling get_flow_step(flow_id, step_index)',
     'starting at step_index=1. Execute each step before fetching the next one.',
     'Do NOT pre-fetch all steps and summarize — walk and act, one step at a time.',
@@ -47,7 +51,8 @@ const argsSchema = z.object({});
 
 export interface ListFlowsResult {
   flows: Array<{
-    id: string;
+    id: string;      // slug — use with get_flow_step
+    uuid: string;    // DB UUID — use with get_flow, propose_flow_publish, publish_flow
     name: string;
     description: string | null;
     step_count: number;
@@ -73,6 +78,7 @@ export async function listFlows(
         // partial index `flows_active_idx` covers this case.
         const rows = await tx
           .select({
+            id: flows.id,
             slug: flows.slug,
             name: flows.name,
             description: flows.description,
@@ -94,6 +100,7 @@ export async function listFlows(
             .where(eq(flowNodes.flowVersionId, r.versionId));
           out.push({
             id: r.slug,
+            uuid: r.id,
             name: r.name,
             description: r.description,
             step_count: Number(c[0]?.n ?? 0),

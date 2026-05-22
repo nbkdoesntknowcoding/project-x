@@ -30,12 +30,12 @@ export const GET_FLOW_TOOL = {
     'If no draft exists yet (unmodified published flow), the published graph is returned.',
     '',
     'Arguments:',
-    '  flow_id — The flow UUID (from list_flows or create_flow).',
+    '  flow_id — The flow UUID. Use the `uuid` field from list_flows (not the slug `id` field).',
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,
     properties: {
-      flow_id: { type: 'string', description: 'UUID of the flow to fetch the draft of.' },
+      flow_id: { type: 'string', description: 'UUID of the flow. Use the `uuid` field from list_flows (not the slug `id` field).' },
     },
     required: ['flow_id'],
     additionalProperties: false,

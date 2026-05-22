@@ -45,7 +45,7 @@ export const PROPOSE_FLOW_PUBLISH_TOOL_SPEC = {
     properties: {
       flow_id: {
         type: 'string',
-        description: 'UUID of the flow to publish.',
+        description: 'UUID of the flow to publish. Use the `uuid` field from list_flows (not the slug `id` field).',
       },
       publish_message: {
         type: 'string',

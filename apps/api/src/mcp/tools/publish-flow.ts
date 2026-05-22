@@ -108,7 +108,7 @@ export const PUBLISH_FLOW_TOOL = {
   inputSchema: {
     type: 'object' as const,
     properties: {
-      flow_id: { type: 'string', description: 'UUID of the flow to publish.' },
+      flow_id: { type: 'string', description: 'UUID of the flow to publish. Use the `uuid` field from list_flows (not the slug `id` field).' },
       publish_message: { type: 'string', description: 'Optional note describing what changed.' },
       idempotency_key: { type: 'string', description: 'Caller-chosen unique key for safe retries.' },
       user_confirmed: { type: 'boolean', description: 'Must be true. Get explicit user approval first.' },
