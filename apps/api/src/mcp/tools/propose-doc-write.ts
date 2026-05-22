@@ -7,13 +7,13 @@
  * URI. The actual commit only happens when the user clicks Approve in the iframe.
  *
  * Visibility: ["model"] — only the AI can call this tool.
- * The companion commit_proposed_write is ["app"]-only (UI-triggered only).
+ * The companion commit_doc_write is ["app"]-only (UI-triggered only).
  *
- * Operations supported in Chunk 1: append, replace_section, replace_body, create, trash_doc.
+ * Operations supported: append, replace_section, replace_body, create, trash_doc.
  *
  * Gate: requireWriteScope → live role check → validate doc + args → issue token
  * Returns: content (short summary), structuredContent (preview + token)
- * No audit here — this is a read-phase (no commit). Audit happens in commit_proposed_write.
+ * No audit here — this is a read-phase (no commit). Audit happens in commit_doc_write.
  */
 
 import { and, eq, isNull } from 'drizzle-orm';
@@ -39,8 +39,8 @@ export const PROPOSE_DOC_WRITE_TOOL_SPEC = {
     'buttons — the commit only fires when the user clicks Approve.',
     '',
     'Supported operations:',
-    '  append          — add blocks at the end of the doc (or after anchor)',
-    '  replace_section — replace one section (requires anchor_id)',
+    '  append          — add blocks at the end of the doc',
+    '  replace_section — replace one section (requires section_anchor)',
     '  replace_body    — replace the entire doc body',
     '  create          — create a new doc (doc_id not required)',
     '  trash_doc       — soft-delete a doc',
@@ -64,13 +64,25 @@ export const PROPOSE_DOC_WRITE_TOOL_SPEC = {
         type: 'string',
         description: 'The proposed markdown content to write.',
       },
-      anchor_id: {
+      section_anchor: {
         type: 'string',
         description: 'For replace_section: the anchor id of the section to replace.',
       },
-      doc_name: {
+      expected_anchors: {
+        type: 'string',
+        description: 'For replace_body: optional anchor list for optimistic-concurrency checking.',
+      },
+      title: {
         type: 'string',
         description: 'For create operation: the new doc title.',
+      },
+      folder_id: {
+        type: 'string',
+        description: 'For create operation: optional UUID of the target folder.',
+      },
+      doc_name: {
+        type: 'string',
+        description: 'For create operation: the new doc title (alias of title).',
       },
     },
     required: ['operation'],
@@ -83,7 +95,10 @@ const argsSchema = z.object({
   operation: z.enum(['append', 'replace_section', 'replace_body', 'create', 'trash_doc']),
   doc_id: z.string().uuid().optional(),
   markdown: z.string().max(100_000).optional(),
-  anchor_id: z.string().min(1).max(64).optional(),
+  section_anchor: z.string().min(1).max(64).optional(),
+  expected_anchors: z.array(z.string()).optional(),
+  title: z.string().min(1).max(200).optional(),
+  folder_id: z.string().uuid().optional(),
   doc_name: z.string().min(1).max(200).optional(),
 }).strict();
 
@@ -117,8 +132,9 @@ export async function proposeDocWrite(
   }
 
   // For operations that target an existing doc, validate it exists
-  let docTitle = args.doc_name ?? 'Untitled';
+  let docTitle = args.title ?? args.doc_name ?? 'Untitled';
   let beforeContent: string | undefined;
+  let fullMarkdown = '';
 
   if (args.operation !== 'create') {
     if (!args.doc_id) {
@@ -142,19 +158,27 @@ export async function proposeDocWrite(
       };
     }
     docTitle = docRows[0]!.title ?? 'Untitled';
-    if (args.operation === 'replace_section' || args.operation === 'replace_body') {
-      const fullMarkdown = docRows[0]!.markdown ?? '';
-      if (args.operation === 'replace_section' && args.anchor_id) {
-        // Show a truncated before view for sections; full replace shows the whole doc.
-        beforeContent = fullMarkdown.slice(0, 500) + (fullMarkdown.length > 500 ? '\n…' : '');
-      } else {
-        beforeContent = fullMarkdown;
-      }
+    fullMarkdown = docRows[0]!.markdown ?? '';
+    if (args.operation === 'replace_section') {
+      // Known limitation: proper section extraction by anchor requires Yjs.
+      // We show the full doc (first 2000 chars) as before-context.
+      beforeContent = fullMarkdown.slice(0, 2000) + (fullMarkdown.length > 2000 ? '\n…' : '');
+    } else if (args.operation === 'replace_body') {
+      beforeContent = fullMarkdown;
+    } else if (args.operation === 'trash_doc') {
+      beforeContent = fullMarkdown;
     }
   }
 
   const proposedContent = args.markdown ?? '';
   const contentHash = hashContent(proposedContent);
+
+  // OCC check for replace_body. In Chunk 2 we pass expected_anchors through to
+  // the commit (which lets replaceDocBody do the real lost-update guard) and
+  // always report anchor_drift: false in the preview.
+  // (A proper anchor-version check would compare expected_anchors[0] against
+  //  the doc's current markdown sha256 — deferred; the commit-side guard is
+  //  the authoritative check.)
 
   const { token, nonce, exp } = issueProposalToken({
     u: ctx.user_id,
@@ -162,20 +186,77 @@ export async function proposeDocWrite(
     d: args.doc_id ?? '',
     op: args.operation,
     h: contentHash,
-    ...(args.anchor_id ? { a: args.anchor_id } : {}),
+    ...(args.section_anchor ? { a: args.section_anchor } : {}),
   });
 
   // Store proposed content for commit retrieval (in-memory, 10-min TTL)
-  storeProposalContent(nonce, proposedContent, exp, args.anchor_id, args.doc_name);
+  storeProposalContent(
+    nonce,
+    proposedContent,
+    exp,
+    args.section_anchor,
+    args.title ?? args.doc_name,
+    args.expected_anchors,
+  );
+
+  // Build the operation-specific preview sub-object.
+  let preview: Record<string, unknown>;
+  switch (args.operation) {
+    case 'append':
+      preview = {
+        kind: 'append',
+        doc_title: docTitle,
+        new_blocks_markdown: proposedContent,
+        after_anchor: null,
+      };
+      break;
+    case 'replace_section':
+      preview = {
+        kind: 'replace_section',
+        doc_title: docTitle,
+        section_heading: args.section_anchor ?? 'section',
+        before_markdown: beforeContent ?? '',
+        after_markdown: proposedContent,
+      };
+      break;
+    case 'replace_body':
+      preview = {
+        kind: 'replace_body',
+        doc_title: docTitle,
+        before_markdown: fullMarkdown,
+        after_markdown: proposedContent,
+        anchor_drift: false,
+      };
+      break;
+    case 'create':
+      preview = {
+        kind: 'create',
+        title: args.title ?? args.doc_name ?? 'New Doc',
+        folder_name: args.folder_id ?? 'workspace root',
+        body_markdown: proposedContent,
+      };
+      break;
+    case 'trash_doc':
+      preview = {
+        kind: 'trash_doc',
+        doc_title: docTitle,
+        block_count: (beforeContent?.split('\n') ?? []).length,
+        restore_days: 30,
+      };
+      break;
+    default:
+      preview = { kind: args.operation };
+  }
 
   const structuredContent: Record<string, unknown> = {
+    commit_tool: 'commit_doc_write',
     operation: args.operation,
     doc_id: args.doc_id ?? null,
     doc_title: docTitle,
-    proposed_content: proposedContent,
-    before_content: beforeContent ?? null,
+    preview,
+    expected_anchors: args.expected_anchors ?? null,
     proposal_token: token,
-    anchor_id: args.anchor_id ?? null,
+    section_anchor: args.section_anchor ?? null,
   };
 
   const opDescriptions: Record<string, string> = {

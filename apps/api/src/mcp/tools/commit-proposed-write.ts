@@ -1,5 +1,5 @@
 /**
- * MCP tool: `commit_proposed_write`.
+ * MCP tool: `commit_doc_write`.
  *
  * Phase 10 — the UI-facing (app-only) half of the write-preview pattern.
  * Called exclusively by the write-preview iframe's Approve button — NEVER
@@ -7,6 +7,9 @@
  *
  * Validates the proposal_token (signature, expiry, single-use, workspace/user
  * match) then dispatches the actual write through the existing 9.x Yjs path.
+ *
+ * Note: the file name stays `commit-proposed-write.ts`; the tool is named
+ * `commit_doc_write`.
  *
  * Gate: requireWriteScope → withAudit → validate token → live role check
  *       → getProposalContent → dispatch write
@@ -27,10 +30,10 @@ import { trashDoc } from './trash-doc.js';
 
 const WRITE_ROLES = new Set(['owner', 'admin', 'editor']);
 
-export const COMMIT_PROPOSED_WRITE_TOOL_NAME = 'commit_proposed_write';
+export const COMMIT_DOC_WRITE_TOOL_NAME = 'commit_doc_write';
 
-export const COMMIT_PROPOSED_WRITE_TOOL_SPEC = {
-  name: COMMIT_PROPOSED_WRITE_TOOL_NAME,
+export const COMMIT_DOC_WRITE_TOOL_SPEC = {
+  name: COMMIT_DOC_WRITE_TOOL_NAME,
   description: [
     'Commit a previously proposed write. Called ONLY by the write-preview UI',
     '(Approve button). This tool is not visible to or callable by the model.',
@@ -72,7 +75,7 @@ export async function commitProposedWrite(
 
   return await withAudit(
     ctx,
-    { tool_name: COMMIT_PROPOSED_WRITE_TOOL_NAME, args: args as Record<string, unknown> },
+    { tool_name: COMMIT_DOC_WRITE_TOOL_NAME, args: args as Record<string, unknown> },
     async (): Promise<CommitProposedWriteResult> => {
       // Live role check
       const [member] = await withSystemPrivilege((tx) =>
@@ -129,12 +132,12 @@ export async function commitProposedWrite(
         }
 
         case 'replace_section': {
-          // anchor_id stored in payload.a (set during propose)
+          // section_anchor stored in payload.a (set during propose)
           if (!payload.d) return { error: 'missing_doc_id' };
           if (!payload.a) {
             return {
-              error: 'not_implemented',
-              message: 'replace_section commit requires anchor_id — coming in Chunk 2.',
+              error: 'missing_section_anchor',
+              message: 'replace_section commit requires a section_anchor in the proposal.',
             };
           }
           // Reuse replaceDocSection via dynamic import to avoid circular dep
@@ -153,12 +156,12 @@ export async function commitProposedWrite(
         case 'replace_body': {
           if (!payload.d) return { error: 'missing_doc_id' };
           // replace_doc_body requires expected_anchors for optimistic concurrency.
-          // For Phase 10 Chunk 1, we pass an empty array (skips the concurrency check
-          // in a future hardening pass; the token itself is the concurrency guard).
+          // We pass through whatever the propose step stored — if non-empty,
+          // replaceDocBody's lost-update guard rejects stale anchors.
           const result = await replaceDocBody(ctx, {
             doc_id: payload.d,
             markdown,
-            expected_anchors: [],
+            expected_anchors: stored?.expected_anchors ?? [],
             idempotency_key: iKey,
             user_confirmed: true,
           });

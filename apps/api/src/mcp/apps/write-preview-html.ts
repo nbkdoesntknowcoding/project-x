@@ -1,14 +1,21 @@
 /**
- * Write-preview MCP App HTML bundle — Phase 10, Step 1.4.
+ * Write-preview MCP App HTML bundle — Phase 10.
  *
- * Rendered in a sandboxed iframe when propose_doc_write returns.
- * Shows the proposed content, doc title, operation, and Approve/Reject buttons.
+ * ONE bundle for ALL write-preview operations. Rendered in a sandboxed iframe
+ * when any propose_* tool returns. Shows the proposed change, the target name,
+ * the operation, and Approve/Reject buttons.
  *
- * On Approve: calls commit_proposed_write tool via app.callServerTool().
- * On Reject: dismisses silently (no server call).
+ * On Approve: calls the tool named in structuredContent.commit_tool via
+ *   app.callServerTool() — commit_doc_write, commit_trash_folder,
+ *   commit_flow_publish.
+ * On Reject: posts a "Write cancelled by user." message and dismisses.
+ *
+ * Render switches on structuredContent.preview.kind:
+ *   append, replace_section, replace_body, create, trash_doc, trash_folder,
+ *   flow_publish.
  *
  * Design: pure-black Mnema theme, design tokens inlined (no external fetch).
- * CSP: no external origins.
+ * CSP: no external origins, no CDN, no google fonts.
  */
 
 import { readFileSync } from 'fs';
@@ -50,6 +57,7 @@ export function getWritePreviewHtml(): string {
   --text-muted: #525252;
   --green: #4ade80;
   --red: #f87171;
+  --amber: #fbbf24;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
 }
@@ -84,6 +92,13 @@ body { padding: 16px; display: flex; flex-direction: column; gap: 12px; min-heig
 .before-label { color: var(--red); }
 .after-label { color: var(--green); }
 .before-block { border-left-color: var(--red); }
+.danger-block { border-left-color: var(--red); }
+.danger-note { color: var(--red); margin-top: 8px; font-family: var(--font); }
+.drift-warning {
+  color: var(--amber); font-family: var(--font); font-size: 12px;
+  margin-bottom: 6px;
+}
+.meta-row { color: var(--text-secondary); font-family: var(--font); margin-top: 6px; }
 
 .actions { display: flex; gap: 8px; padding-top: 4px; }
 .btn {
@@ -115,53 +130,132 @@ const OP_LABELS = {
   create: '+ Create doc',
   trash_doc: '🗑 Trash doc',
   trash_folder: '🗑 Trash folder',
-  publish_flow: '▶ Publish flow',
+  flow_publish: '▶ Publish flow',
 };
 
 function escHtml(str) {
-  return String(str)
+  return String(str == null ? '' : str)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-function render(data, root) {
-  const { operation, doc_title, proposed_content, before_content, proposal_token, cascade_count } = data;
-  const opLabel = OP_LABELS[operation] || operation;
-  const isTrash = operation === 'trash_doc' || operation === 'trash_folder';
-  const isReplace = operation === 'replace_section' || operation === 'replace_body';
+// Shared two-column before/after diff renderer.
+function renderDiff(before, after) {
+  return \`
+    <div class="replace-grid">
+      <div>
+        <div class="preview-label before-label">Before</div>
+        <div class="preview-block before-block">\${escHtml(before)}</div>
+      </div>
+      <div>
+        <div class="preview-label after-label">After</div>
+        <div class="preview-block">\${escHtml(after)}</div>
+      </div>
+    </div>\`;
+}
 
-  let previewHtml = '';
-  if (isTrash) {
-    const cascadeNote = (cascade_count > 0)
-      ? \`<p style="color:var(--red);margin-top:8px;font-family:var(--font)">This will also trash \${cascade_count} item(s) inside.</p>\`
-      : '';
-    previewHtml = \`<div class="preview-block" style="border-left-color:var(--red);">\${escHtml(doc_title)}\${cascadeNote}</div>\`;
-  } else if (isReplace && before_content) {
-    previewHtml = \`
-      <div class="replace-grid">
-        <div>
-          <div class="preview-label before-label">Before</div>
-          <div class="preview-block before-block">\${escHtml(before_content)}</div>
-        </div>
-        <div>
-          <div class="preview-label after-label">After</div>
-          <div class="preview-block">\${escHtml(proposed_content || '')}</div>
-        </div>
-      </div>\`;
-  } else {
-    previewHtml = \`<div class="preview-block">\${escHtml(proposed_content || '')}</div>\`;
+// Returns { previewHtml, targetName, approveLabel } for a given preview kind.
+function renderPreview(preview) {
+  const kind = preview.kind;
+  switch (kind) {
+    case 'append':
+      return {
+        targetName: preview.doc_title,
+        approveLabel: 'Approve',
+        previewHtml: \`
+          <div class="preview-label" style="margin-bottom:6px">New content</div>
+          <div class="preview-block">\${escHtml(preview.new_blocks_markdown || '')}</div>\`,
+      };
+    case 'replace_section':
+      return {
+        targetName: preview.doc_title,
+        approveLabel: 'Approve',
+        previewHtml:
+          \`<div class="preview-label" style="margin-bottom:6px">Section: \${escHtml(preview.section_heading || 'section')}</div>\`
+          + renderDiff(preview.before_markdown || '', preview.after_markdown || ''),
+      };
+    case 'replace_body': {
+      const drift = preview.anchor_drift
+        ? '<div class="drift-warning">⚠ The document changed since this preview was generated — review carefully.</div>'
+        : '';
+      return {
+        targetName: preview.doc_title,
+        approveLabel: 'Replace entire document',
+        previewHtml: drift + renderDiff(preview.before_markdown || '', preview.after_markdown || ''),
+      };
+    }
+    case 'create':
+      return {
+        targetName: preview.title,
+        approveLabel: 'Approve',
+        previewHtml: \`
+          <div class="meta-row">Folder: \${escHtml(preview.folder_name || 'workspace root')}</div>
+          <div class="preview-label" style="margin:8px 0 6px">Body</div>
+          <div class="preview-block">\${escHtml(preview.body_markdown || '')}</div>\`,
+      };
+    case 'trash_doc':
+      return {
+        targetName: preview.doc_title,
+        approveLabel: 'Trash doc',
+        previewHtml: \`
+          <div class="preview-block danger-block">
+            \${escHtml(preview.doc_title)}
+            <div class="danger-note">\${preview.block_count || 0} block(s) will be moved to Trash.</div>
+            <div class="danger-note">Restorable for \${preview.restore_days || 30} days.</div>
+          </div>\`,
+      };
+    case 'trash_folder':
+      return {
+        targetName: preview.folder_name,
+        approveLabel: 'Trash folder',
+        previewHtml: \`
+          <div class="preview-block danger-block">
+            \${escHtml(preview.folder_name)}
+            <div class="danger-note">\${preview.doc_count || 0} doc(s) and \${preview.subfolder_count || 0} subfolder(s) will be moved to Trash.</div>
+            <div class="danger-note">Restorable for \${preview.restore_days || 30} days.</div>
+          </div>\`,
+      };
+    case 'flow_publish': {
+      const d = preview.node_diff || { added: [], removed: [], changed: [] };
+      const pub = preview.published_version == null
+        ? 'none (first publish)'
+        : 'v' + preview.published_version;
+      const msg = preview.publish_message
+        ? \`<div class="meta-row">Note: \${escHtml(preview.publish_message)}</div>\`
+        : '';
+      return {
+        targetName: preview.flow_name,
+        approveLabel: 'Publish',
+        previewHtml: \`
+          <div class="preview-block">
+            Draft v\${escHtml(preview.draft_version)} → published \${escHtml(pub)}
+            <div class="meta-row">\${escHtml(preview.branch_summary || '')}</div>
+            <div class="meta-row">Node diff — \${(d.added||[]).length} added, \${(d.removed||[]).length} removed, \${(d.changed||[]).length} changed</div>
+            \${msg}
+          </div>\`,
+      };
+    }
+    default:
+      return {
+        targetName: '',
+        approveLabel: 'Approve',
+        previewHtml: \`<div class="preview-block">Unknown preview kind: \${escHtml(kind)}</div>\`,
+      };
   }
+}
 
-  const approveLabel = isTrash
-    ? (operation === 'trash_folder' ? 'Trash folder' : 'Trash doc')
-    : operation === 'publish_flow'
-      ? 'Publish'
-      : 'Approve';
+function render(data, root) {
+  const preview = data.preview || {};
+  const commit_tool = data.commit_tool;
+  const proposal_token = data.proposal_token;
+  const opLabel = OP_LABELS[preview.kind] || preview.kind || 'Write';
+
+  const { previewHtml, targetName, approveLabel } = renderPreview(preview);
 
   root.innerHTML = \`
     <div class="header">
       <span class="op-badge">\${escHtml(opLabel)}</span>
-      <span class="doc-title">\${escHtml(doc_title || '')}</span>
+      <span class="doc-title">\${escHtml(targetName || data.doc_title || '')}</span>
     </div>
     <div>
       <div class="preview-label" style="margin-bottom:6px">Preview</div>
@@ -174,7 +268,7 @@ function render(data, root) {
     <div id="status" class="status-line"></div>
   \`;
 
-  return { proposal_token };
+  return { proposal_token, commit_tool };
 }
 
 async function main() {
@@ -192,13 +286,19 @@ async function main() {
       root.innerHTML = '<p style="color:var(--red)">Tool error — no preview available.</p>';
       return;
     }
-    const { proposal_token } = render(structuredContent, root);
+    const { proposal_token, commit_tool } = render(structuredContent, root);
 
-    // Approve button
+    if (!commit_tool) {
+      root.innerHTML = '<p style="color:var(--red)">Missing commit_tool — cannot commit.</p>';
+      return;
+    }
+
+    // Approve button — calls the commit tool named in structuredContent.commit_tool.
     document.getElementById('btn-approve').onclick = async () => {
       const approveBtn = document.getElementById('btn-approve');
       const rejectBtn = document.getElementById('btn-reject');
       const statusEl = document.getElementById('status');
+      const origLabel = approveBtn.textContent;
       approveBtn.disabled = true;
       rejectBtn.disabled = true;
       approveBtn.textContent = '…';
@@ -206,26 +306,34 @@ async function main() {
       statusEl.className = 'status-line';
       try {
         await app.callServerTool({
-          name: 'commit_proposed_write',
+          name: commit_tool,
           arguments: { proposal_token },
         });
-        statusEl.textContent = '✓ Written successfully';
+        statusEl.textContent = '✓ Done';
         statusEl.className = 'status-line ok';
-        approveBtn.textContent = 'Done';
+        approveBtn.textContent = '✓ Done';
       } catch (err) {
-        const msg = String(err?.message || err);
+        const msg = String((err && err.message) || err);
         statusEl.textContent = msg.includes('expired')
           ? '⚠ Preview expired — ask Claude to re-propose.'
           : '❌ ' + msg;
         statusEl.className = 'status-line err';
         approveBtn.disabled = false;
         rejectBtn.disabled = false;
-        approveBtn.textContent = 'Retry';
+        approveBtn.textContent = origLabel;
       }
     };
 
-    // Reject button
-    document.getElementById('btn-reject').onclick = () => {
+    // Reject button — post a cancellation message, then dismiss.
+    document.getElementById('btn-reject').onclick = async () => {
+      try {
+        await app.sendMessage({
+          role: 'user',
+          content: [{ type: 'text', text: 'Write cancelled by user.' }],
+        });
+      } catch (e) {
+        // If sendMessage fails, just update the UI.
+      }
       root.innerHTML = '<p style="color:var(--text-muted);font-size:12px">Write cancelled.</p>';
     };
   };

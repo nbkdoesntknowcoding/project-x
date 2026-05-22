@@ -14,10 +14,30 @@ import {
   proposeDocWrite,
 } from './tools/propose-doc-write.js';
 import {
-  COMMIT_PROPOSED_WRITE_TOOL_NAME,
-  COMMIT_PROPOSED_WRITE_TOOL_SPEC,
+  COMMIT_DOC_WRITE_TOOL_NAME,
+  COMMIT_DOC_WRITE_TOOL_SPEC,
   commitProposedWrite,
 } from './tools/commit-proposed-write.js';
+import {
+  PROPOSE_TRASH_FOLDER_TOOL_NAME,
+  PROPOSE_TRASH_FOLDER_TOOL_SPEC,
+  proposeTrashFolder,
+} from './tools/propose-trash-folder.js';
+import {
+  COMMIT_TRASH_FOLDER_TOOL_NAME,
+  COMMIT_TRASH_FOLDER_TOOL_SPEC,
+  commitTrashFolder,
+} from './tools/commit-trash-folder.js';
+import {
+  PROPOSE_FLOW_PUBLISH_TOOL_NAME,
+  PROPOSE_FLOW_PUBLISH_TOOL_SPEC,
+  proposeFlowPublish,
+} from './tools/propose-flow-publish.js';
+import {
+  COMMIT_FLOW_PUBLISH_TOOL_NAME,
+  COMMIT_FLOW_PUBLISH_TOOL_SPEC,
+  commitFlowPublish,
+} from './tools/commit-flow-publish.js';
 
 /**
  * Build a fresh McpServer instance per request, capturing the verified
@@ -165,43 +185,110 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
     },
   );
 
-  // ── Phase 10: commit_proposed_write (app-only, ["app"]) ────────────────────
-  registerAppTool(
-    mcpServer,
-    COMMIT_PROPOSED_WRITE_TOOL_NAME,
-    {
-      description: COMMIT_PROPOSED_WRITE_TOOL_SPEC.description,
-      inputSchema: jsonSchemaToZodShape(COMMIT_PROPOSED_WRITE_TOOL_SPEC.inputSchema),
-      annotations: COMMIT_PROPOSED_WRITE_TOOL_SPEC.annotations,
-      _meta: {
-        ui: {
-          // No resourceUri: this tool is only called from the write-preview iframe,
-          // not associated with a new resource.
-          visibility: ['app'], // HIDDEN from model — only the iframe Approve button can call this
+  // ── Phase 10: model-visible propose_* tools (["model"]) ────────────────────
+  // Shared registration helper for propose_* tools (open the write-preview UI).
+  const registerProposeTool = (
+    name: string,
+    spec: { description: string; inputSchema: object; annotations?: Record<string, unknown> },
+    handler: (
+      c: McpAuthContext,
+      a: Record<string, unknown>,
+    ) => Promise<{ content: string; structuredContent: Record<string, unknown>; error?: string; message?: string }>,
+  ) => {
+    registerAppTool(
+      mcpServer,
+      name,
+      {
+        description: spec.description,
+        inputSchema: jsonSchemaToZodShape(spec.inputSchema),
+        annotations: spec.annotations,
+        _meta: {
+          ui: {
+            resourceUri: WRITE_PREVIEW_RESOURCE_URI,
+            visibility: ['model'],
+          },
         },
       },
-    },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    async (args: any) => {
-      try {
-        const result = await commitProposedWrite(ctx, args as Record<string, unknown>);
-        if (result.error) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (args: any) => {
+        try {
+          const result = await handler(ctx, args as Record<string, unknown>);
+          if (result.error) {
+            return {
+              isError: true,
+              content: [{ type: 'text' as const, text: result.message ?? result.error }],
+            };
+          }
           return {
-            isError: true,
-            content: [{ type: 'text' as const, text: result.message ?? result.error }],
+            content: [{ type: 'text' as const, text: result.content }],
+            structuredContent: result.structuredContent,
           };
+        } catch (err) {
+          if (err instanceof McpForbiddenError) throw err;
+          const message = err instanceof Error ? err.message : String(err);
+          return { isError: true, content: [{ type: 'text' as const, text: message }] };
         }
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-          structuredContent: result as Record<string, unknown>,
-        };
-      } catch (err) {
-        if (err instanceof McpForbiddenError) throw err;
-        const message = err instanceof Error ? err.message : String(err);
-        return { isError: true, content: [{ type: 'text' as const, text: message }] };
-      }
-    },
-  );
+      },
+    );
+  };
+
+  // Shared registration helper for commit_* tools (app-only, UI-triggered).
+  const registerCommitTool = (
+    name: string,
+    spec: { description: string; inputSchema: object; annotations?: Record<string, unknown> },
+    handler: (
+      c: McpAuthContext,
+      a: Record<string, unknown>,
+    ) => Promise<{ error?: string; message?: string }>,
+  ) => {
+    registerAppTool(
+      mcpServer,
+      name,
+      {
+        description: spec.description,
+        inputSchema: jsonSchemaToZodShape(spec.inputSchema),
+        annotations: spec.annotations,
+        _meta: {
+          ui: {
+            // No resourceUri: commit tools are only called from the write-preview
+            // iframe, not associated with a new resource.
+            visibility: ['app'], // HIDDEN from model — only the iframe Approve button can call this
+          },
+        },
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (args: any) => {
+        try {
+          const result = await handler(ctx, args as Record<string, unknown>);
+          if (result.error) {
+            return {
+              isError: true,
+              content: [{ type: 'text' as const, text: result.message ?? String(result.error) }],
+            };
+          }
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+            structuredContent: result as Record<string, unknown>,
+          };
+        } catch (err) {
+          if (err instanceof McpForbiddenError) throw err;
+          const message = err instanceof Error ? err.message : String(err);
+          return { isError: true, content: [{ type: 'text' as const, text: message }] };
+        }
+      },
+    );
+  };
+
+  // ── Phase 10: commit_doc_write (app-only, ["app"]) ─────────────────────────
+  registerCommitTool(COMMIT_DOC_WRITE_TOOL_NAME, COMMIT_DOC_WRITE_TOOL_SPEC, commitProposedWrite);
+
+  // ── Phase 10 Chunk 2: propose/commit trash_folder ──────────────────────────
+  registerProposeTool(PROPOSE_TRASH_FOLDER_TOOL_NAME, PROPOSE_TRASH_FOLDER_TOOL_SPEC, proposeTrashFolder);
+  registerCommitTool(COMMIT_TRASH_FOLDER_TOOL_NAME, COMMIT_TRASH_FOLDER_TOOL_SPEC, commitTrashFolder);
+
+  // ── Phase 10 Chunk 2: propose/commit flow_publish ──────────────────────────
+  registerProposeTool(PROPOSE_FLOW_PUBLISH_TOOL_NAME, PROPOSE_FLOW_PUBLISH_TOOL_SPEC, proposeFlowPublish);
+  registerCommitTool(COMMIT_FLOW_PUBLISH_TOOL_NAME, COMMIT_FLOW_PUBLISH_TOOL_SPEC, commitFlowPublish);
 
   // ── Phase 10: __ui_probe (dev/test only — temporary) ───────────────────────
   if (process.env.NODE_ENV !== 'production') {

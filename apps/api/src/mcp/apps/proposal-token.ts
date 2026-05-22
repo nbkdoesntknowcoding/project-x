@@ -30,7 +30,8 @@ export interface ProposalPayload {
   iat: number; // issued-at (ms)
   exp: number; // expires-at (ms)
   n: string;   // nonce UUID for single-use tracking
-  a?: string;  // anchor_id (for replace_section)
+  a?: string;  // section_anchor (for replace_section)
+  f?: string;  // folder_id (for trash_folder)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -54,7 +55,14 @@ function pruneNonces(): void {
 
 // ── Proposal content store ────────────────────────────────────────────────────
 // Stores proposed markdown indexed by nonce. Retrieve at commit time.
-const contentStore = new Map<string, { markdown: string; anchor_id?: string; doc_name?: string; exp: number }>();
+interface ContentStoreEntry {
+  markdown: string;
+  anchor_id?: string;
+  doc_name?: string;
+  expected_anchors?: string[];
+  exp: number;
+}
+const contentStore = new Map<string, ContentStoreEntry>();
 
 export function storeProposalContent(
   nonce: string,
@@ -62,8 +70,15 @@ export function storeProposalContent(
   expMs: number,
   anchorId?: string,
   docName?: string,
+  expectedAnchors?: string[],
 ): void {
-  contentStore.set(nonce, { markdown, anchor_id: anchorId, doc_name: docName, exp: expMs });
+  contentStore.set(nonce, {
+    markdown,
+    anchor_id: anchorId,
+    doc_name: docName,
+    expected_anchors: expectedAnchors,
+    exp: expMs,
+  });
   if (contentStore.size > 1000) {
     const now = Date.now();
     for (const [k, v] of contentStore) {
@@ -72,11 +87,18 @@ export function storeProposalContent(
   }
 }
 
-export function getProposalContent(nonce: string): { markdown: string; anchor_id?: string; doc_name?: string } | null {
+export function getProposalContent(
+  nonce: string,
+): { markdown: string; anchor_id?: string; doc_name?: string; expected_anchors?: string[] } | null {
   const entry = contentStore.get(nonce);
   if (!entry) return null;
   if (Date.now() > entry.exp) { contentStore.delete(nonce); return null; }
-  return { markdown: entry.markdown, anchor_id: entry.anchor_id, doc_name: entry.doc_name };
+  return {
+    markdown: entry.markdown,
+    anchor_id: entry.anchor_id,
+    doc_name: entry.doc_name,
+    expected_anchors: entry.expected_anchors,
+  };
 }
 
 // ── Issue a token ─────────────────────────────────────────────────────────────
