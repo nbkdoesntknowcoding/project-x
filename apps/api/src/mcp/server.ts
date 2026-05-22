@@ -46,12 +46,15 @@ const API_ORIGIN = process.env.MCP_BASE_URL ?? 'https://api.theboringpeople.in';
 type JsonSchemaProp = { type?: string; description?: string };
 type JsonSchemaObj = { type?: string; properties?: Record<string, JsonSchemaProp>; required?: string[] };
 
-function jsonSchemaToZodShape(schema: object): Record<string, z.ZodTypeAny> {
+// Returns undefined for no-property schemas so the SDK treats the tool as
+// accepting any input (SDK rejects an empty {} object at runtime).
+function jsonSchemaToZodShape(schema: object): Record<string, z.ZodTypeAny> | undefined {
   const s = schema as JsonSchemaObj;
-  if (!s.properties) return {};
+  const entries = Object.entries(s.properties ?? {});
+  if (entries.length === 0) return undefined;
   const required = new Set(s.required ?? []);
   const shape: Record<string, z.ZodTypeAny> = {};
-  for (const [key, prop] of Object.entries(s.properties)) {
+  for (const [key, prop] of entries) {
     let field: z.ZodTypeAny;
     switch (prop.type) {
       case 'number':  field = z.number(); break;
@@ -107,8 +110,7 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
         probeDef.name,
         {
           description: probeDef.description,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          inputSchema: probeDef.inputSchema as any,
+          inputSchema: jsonSchemaToZodShape(probeDef.inputSchema as object),
         },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         async (args: any) => {
@@ -132,8 +134,7 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
     PROPOSE_DOC_WRITE_TOOL_NAME,
     {
       description: PROPOSE_DOC_WRITE_TOOL_SPEC.description,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      inputSchema: PROPOSE_DOC_WRITE_TOOL_SPEC.inputSchema as any,
+      inputSchema: jsonSchemaToZodShape(PROPOSE_DOC_WRITE_TOOL_SPEC.inputSchema),
       annotations: PROPOSE_DOC_WRITE_TOOL_SPEC.annotations,
       _meta: {
         ui: {
@@ -170,8 +171,7 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
     COMMIT_PROPOSED_WRITE_TOOL_NAME,
     {
       description: COMMIT_PROPOSED_WRITE_TOOL_SPEC.description,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      inputSchema: COMMIT_PROPOSED_WRITE_TOOL_SPEC.inputSchema as any,
+      inputSchema: jsonSchemaToZodShape(COMMIT_PROPOSED_WRITE_TOOL_SPEC.inputSchema),
       annotations: COMMIT_PROPOSED_WRITE_TOOL_SPEC.annotations,
       _meta: {
         ui: {
@@ -211,7 +211,7 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
       {
         description: 'TEMPORARY — proves the MCP Apps protocol end-to-end. Remove after verification.',
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        inputSchema: { type: 'object' as const, properties: {}, additionalProperties: false } as any,
+        inputSchema: undefined,
         _meta: {
           ui: {
             resourceUri: PROBE_RESOURCE_URI,
