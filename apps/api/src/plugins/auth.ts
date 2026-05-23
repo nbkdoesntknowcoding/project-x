@@ -15,6 +15,7 @@ export const JWT_COOKIE_NAME = 'boppl_jwt';
 const PUBLIC_ROUTES = new Set<string>([
   '/health',
   '/api/_internal/set-session',
+  '/api/_internal/join-workspace',
   // Phase 4.1 — invitation preview must work BEFORE the invitee signs in,
   // so the accept page can show "X invited you to Y" without forcing
   // auth-first. The endpoint only reveals workspace name + inviter, never

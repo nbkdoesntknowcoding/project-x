@@ -26,6 +26,7 @@ import { invitationsRoutes } from './routes/invitations.js';
 import { membersRoutes } from './routes/members.js';
 import { workspacesRoutes } from './routes/workspaces.js';
 import { setSessionRoutes } from './routes/_internal/set-session.js';
+import { joinWorkspaceRoutes } from './routes/_internal/join-workspace.js';
 
 const app = Fastify({ logger: loggerOptions });
 
@@ -41,6 +42,7 @@ await app.register(sensible);
 await app.register(authPlugin);
 await app.register(healthRoutes);
 await app.register(setSessionRoutes);
+await app.register(joinWorkspaceRoutes);
 await app.register(authRoutes);
 await app.register(docsRoutes);
 await app.register(foldersRoutes);

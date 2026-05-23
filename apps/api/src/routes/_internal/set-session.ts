@@ -13,6 +13,12 @@ const bodySchema = z.object({
   email: z.string().email(),
   display_name: z.string().nullable(),
   workos_user_id: z.string(),
+  /**
+   * When true, skip the same-domain workspace check and always create a fresh
+   * workspace. Set by the join-or-create page when the user explicitly chose
+   * "Create new workspace".
+   */
+  force_new_workspace: z.boolean().optional().default(false),
 });
 
 export const setSessionRoutes: FastifyPluginAsync = async (app) => {
@@ -25,10 +31,27 @@ export const setSessionRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(403).send({ error: 'forbidden' });
     }
 
-    const { user_id, tenant_id } = await bootstrapUserAndWorkspace({
+    const bootstrap = await bootstrapUserAndWorkspace({
       email: parsed.data.email,
       displayName: parsed.data.display_name,
+      skipDomainCheck: parsed.data.force_new_workspace,
     });
+
+    // ── Same-domain workspace detected ────────────────────────────────────────
+    // Return a signal to the web layer so it can redirect the user to the
+    // join-or-create choice page rather than silently creating a new workspace.
+    if (bootstrap.type === 'needs_workspace_choice') {
+      return {
+        needs_workspace_choice: true,
+        user_id: bootstrap.user_id,
+        email: parsed.data.email,
+        workos_user_id: parsed.data.workos_user_id,
+        domain_workspaces: bootstrap.domain_workspaces,
+      };
+    }
+
+    // ── Normal path: user already has a workspace ─────────────────────────────
+    const { user_id, tenant_id } = bootstrap;
 
     // Look up the user's role in the bootstrapped workspace so the JWT
     // includes workspace:write for owner/admin/editor (Phase 9.1).

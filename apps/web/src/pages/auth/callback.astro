@@ -1,6 +1,6 @@
 ---
 import { workos } from '../../lib/workos.ts';
-import { setSession } from '../../lib/session.ts';
+import { setSession, setPendingJoinSession } from '../../lib/session.ts';
 
 const code = Astro.url.searchParams.get('code');
 if (!code) {
@@ -44,12 +44,33 @@ if (!response.ok) {
   return Astro.redirect('/login?error=bootstrap_failed');
 }
 
-const { user_id, tenant_id, jwt } = (await response.json()) as {
-  user_id: string;
-  tenant_id: string;
-  jwt: string;
-};
+const data = (await response.json()) as
+  | { user_id: string; tenant_id: string; jwt: string }
+  | {
+      needs_workspace_choice: true;
+      user_id: string;
+      email: string;
+      workos_user_id: string;
+      domain_workspaces: Array<{ id: string; name: string; slug: string; member_count: number }>;
+    };
 
+// ── Same-domain workspace detected ────────────────────────────────────────────
+// Store a short-lived pending cookie so the join-or-create page knows who the
+// user is and which workspaces to offer, then let them choose.
+if ('needs_workspace_choice' in data && data.needs_workspace_choice) {
+  await setPendingJoinSession(Astro.cookies, {
+    user_id: data.user_id,
+    email: user.email,
+    display_name: displayName,
+    workos_user_id: user.id,
+    access_token: accessToken,
+    domain_workspaces: data.domain_workspaces,
+  });
+  return Astro.redirect('/auth/join-or-create');
+}
+
+// ── Normal path ───────────────────────────────────────────────────────────────
+const { user_id, tenant_id, jwt } = data as { user_id: string; tenant_id: string; jwt: string };
 await setSession(Astro.cookies, {
   user_id,
   email: user.email,

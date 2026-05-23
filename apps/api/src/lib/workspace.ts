@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { count, eq, ilike } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '../db/index.js';
 import {
@@ -13,15 +13,33 @@ import {
 } from '../db/schema.js';
 import { emptyYjsState } from './yjs.js';
 
+// Common free / personal email providers — skip domain-join prompt for these
+// so e.g. two Gmail users don't see each other's workspace.
+const GENERIC_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com', 'yahoo.com', 'ymail.com',
+  'hotmail.com', 'outlook.com', 'live.com', 'msn.com',
+  'icloud.com', 'me.com', 'mac.com',
+  'protonmail.com', 'pm.me', 'proton.me',
+  'aol.com', 'mail.com',
+]);
+
+export interface DomainWorkspace {
+  id: string;
+  name: string;
+  slug: string;
+  member_count: number;
+}
+
 interface BootstrapInput {
   email: string;
   displayName: string | null;
+  /** When true, skip domain-match check and always create a fresh workspace. */
+  skipDomainCheck?: boolean;
 }
 
-interface BootstrapOutput {
-  user_id: string;
-  tenant_id: string;
-}
+export type BootstrapOutput =
+  | { type: 'ready'; user_id: string; tenant_id: string }
+  | { type: 'needs_workspace_choice'; user_id: string; domain_workspaces: DomainWorkspace[] };
 
 export async function bootstrapUserAndWorkspace(
   input: BootstrapInput,
@@ -59,7 +77,19 @@ export async function bootstrapUserAndWorkspace(
     .limit(1);
 
   if (membership[0]) {
-    return { user_id: userId, tenant_id: membership[0].workspaceId };
+    return { type: 'ready', user_id: userId, tenant_id: membership[0].workspaceId };
+  }
+
+  // Brand-new user — check whether another workspace already uses this domain.
+  // Skip the check for free/generic providers and when caller forces a new workspace.
+  if (!input.skipDomainCheck) {
+    const emailDomain = input.email.split('@')[1]?.toLowerCase() ?? '';
+    if (emailDomain && !GENERIC_EMAIL_DOMAINS.has(emailDomain)) {
+      const domainWorkspaces = await findWorkspacesForDomain(emailDomain, userId);
+      if (domainWorkspaces.length > 0) {
+        return { type: 'needs_workspace_choice', user_id: userId, domain_workspaces: domainWorkspaces };
+      }
+    }
   }
 
   const localPart = input.email.split('@')[0] ?? 'user';
@@ -85,7 +115,68 @@ export async function bootstrapUserAndWorkspace(
   // ── Seed welcome doc + example-onboarding flow ────────────────────────────
   await seedExampleFlow(workspace.id, userId);
 
-  return { user_id: userId, tenant_id: workspace.id };
+  return { type: 'ready', user_id: userId, tenant_id: workspace.id };
+}
+
+/**
+ * Return workspaces that already have at least one member sharing `emailDomain`.
+ * Excludes any workspace the user themselves already owns (rare edge-case safety).
+ */
+async function findWorkspacesForDomain(emailDomain: string, excludeUserId: string): Promise<DomainWorkspace[]> {
+  // Find all user IDs whose email matches the domain (case-insensitive via citext)
+  const domainUsers = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(ilike(users.email, `%@${emailDomain}`));
+
+  if (domainUsers.length === 0) return [];
+
+  const domainUserIds = domainUsers.map((u) => u.id).filter((id) => id !== excludeUserId);
+  if (domainUserIds.length === 0) return [];
+
+  // Collect all workspace IDs belonging to same-domain users (deduplicated)
+  // One query per user — domain teams are small in practice; cap at 20 users.
+  const seenWsIds = new Set<string>();
+  const allWsIds: string[] = [];
+  for (const uid of domainUserIds.slice(0, 20)) {
+    const rows = await db
+      .selectDistinct({ workspaceId: workspaceMembers.workspaceId })
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.userId, uid));
+    for (const r of rows) {
+      if (!seenWsIds.has(r.workspaceId)) {
+        seenWsIds.add(r.workspaceId);
+        allWsIds.push(r.workspaceId);
+      }
+    }
+  }
+
+  if (allWsIds.length === 0) return [];
+
+  // Fetch workspace details + member counts
+  const result: DomainWorkspace[] = [];
+  for (const wsId of allWsIds.slice(0, 10)) {
+    const wsRows = await db
+      .select({ id: workspaces.id, name: workspaces.name, slug: workspaces.slug })
+      .from(workspaces)
+      .where(eq(workspaces.id, wsId))
+      .limit(1);
+    if (!wsRows[0]) continue;
+
+    const countRows = await db
+      .select({ n: count() })
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.workspaceId, wsId));
+
+    result.push({
+      id: wsRows[0].id,
+      name: wsRows[0].name,
+      slug: wsRows[0].slug,
+      member_count: Number(countRows[0]?.n ?? 1),
+    });
+  }
+
+  return result;
 }
 
 /**

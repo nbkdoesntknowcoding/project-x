@@ -2,6 +2,21 @@ import type { SessionData } from '@boppl/shared';
 import type { AstroCookies } from 'astro';
 import { sealData, unsealData } from 'iron-session';
 
+// ── Pending join session (same-domain workspace choice) ─────────────────────
+// Stored in a separate short-lived cookie so the user can complete OAuth before
+// picking a workspace. Cleared as soon as they finalise their choice.
+
+export interface PendingJoinData {
+  user_id: string;
+  email: string;
+  display_name: string | null;
+  workos_user_id: string;
+  access_token: string;
+  domain_workspaces: Array<{ id: string; name: string; slug: string; member_count: number }>;
+}
+
+const PENDING_JOIN_COOKIE = 'boppl_pending_join';
+
 const SESSION_COOKIE = 'boppl_session';
 const JWT_COOKIE = 'boppl_jwt';
 
@@ -64,4 +79,35 @@ export async function getSession(
 export function clearSession(cookies: AstroCookies): void {
   cookies.delete(SESSION_COOKIE, { path: '/' });
   cookies.delete(JWT_COOKIE, { path: '/' });
+}
+
+export async function setPendingJoinSession(
+  cookies: AstroCookies,
+  data: PendingJoinData,
+): Promise<void> {
+  const sealed = await sealData(data, { password: getPassword() });
+  cookies.set(PENDING_JOIN_COOKIE, sealed, {
+    httpOnly: true,
+    secure: false,
+    sameSite: 'lax',
+    path: '/',
+    // 30-minute window to complete the workspace choice
+    maxAge: 60 * 30,
+  });
+}
+
+export async function getPendingJoinSession(
+  cookies: AstroCookies,
+): Promise<PendingJoinData | null> {
+  const value = cookies.get(PENDING_JOIN_COOKIE)?.value;
+  if (!value) return null;
+  try {
+    return await unsealData<PendingJoinData>(value, { password: getPassword() });
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingJoinSession(cookies: AstroCookies): void {
+  cookies.delete(PENDING_JOIN_COOKIE, { path: '/' });
 }
