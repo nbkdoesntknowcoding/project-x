@@ -74,6 +74,14 @@ const API_ORIGIN = process.env.MCP_BASE_URL ?? 'https://api.theboringpeople.in';
 // the SDK publishes them correctly in tools/list. Without this, the SDK falls
 // through to z.string() and Claude passes objects as JSON strings — the handler
 // then rejects with "expected object, received string".
+//
+// ALL FIELDS ARE MADE OPTIONAL at the SDK level — this prevents the SDK's
+// validateToolInput() step from throwing McpError before our handler runs.
+// If validateToolInput throws, the SDK returns createToolError() with NO
+// structuredContent, which means the MCP Apps panel never opens.
+// By making everything optional here, validateToolInput always succeeds and
+// the handler runs — handlers catch validation errors themselves and always
+// return structuredContent so the panel can open even on error.
 type JsonSchemaProp = { type?: string; description?: string };
 type JsonSchemaObj = { type?: string; properties?: Record<string, JsonSchemaProp>; required?: string[] };
 
@@ -83,7 +91,6 @@ function jsonSchemaToZodShape(schema: object): Record<string, z.ZodTypeAny> | un
   const s = schema as JsonSchemaObj;
   const entries = Object.entries(s.properties ?? {});
   if (entries.length === 0) return undefined;
-  const required = new Set(s.required ?? []);
   const shape: Record<string, z.ZodTypeAny> = {};
   for (const [key, prop] of entries) {
     let field: z.ZodTypeAny;
@@ -101,8 +108,8 @@ function jsonSchemaToZodShape(schema: object): Record<string, z.ZodTypeAny> | un
       default:        field = z.string(); break;
     }
     if (prop.description) field = field.describe(prop.description);
-    if (!required.has(key)) field = field.optional();
-    shape[key] = field;
+    // Always optional — see comment above. Handler validates required fields.
+    shape[key] = field.optional();
   }
   return shape;
 }
