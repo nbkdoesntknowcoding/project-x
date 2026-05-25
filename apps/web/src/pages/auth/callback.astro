@@ -80,5 +80,14 @@ await setSession(Astro.cookies, {
   jwt,
 });
 
+// If the user arrived from an MCP OAuth flow (via /login?oauth_request_id=XXX),
+// bridge them back to the API consent screen instead of going to /app.
+const oauthRequestId = Astro.cookies.get('oauth_request_id')?.value;
+if (oauthRequestId) {
+  Astro.cookies.delete('oauth_request_id', { path: '/' });
+  const resumeUrl = `${apiUrl}/oauth/resume?request_id=${encodeURIComponent(oauthRequestId)}&proof=${encodeURIComponent(jwt)}`;
+  return Astro.redirect(resumeUrl);
+}
+
 return Astro.redirect('/app');
 ---

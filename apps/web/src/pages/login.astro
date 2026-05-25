@@ -4,6 +4,19 @@ import '../styles/global.css';
 const auth = Astro.locals.auth;
 if (auth) return Astro.redirect('/app');
 
+// If arriving from the MCP OAuth flow, persist the request_id in a short-lived
+// cookie so it survives through SSO redirects back to /auth/callback.
+const oauthRequestId = Astro.url.searchParams.get('oauth_request_id');
+if (oauthRequestId && /^[0-9a-f-]{36}$/.test(oauthRequestId)) {
+  Astro.cookies.set('oauth_request_id', oauthRequestId, {
+    httpOnly: true,
+    secure: false, // matches other web-app cookies
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 15 * 60, // 15 min — same window as the pending OAuth request
+  });
+}
+
 const errorParam = Astro.url.searchParams.get('error');
 const ERROR_MESSAGES: Record<string, string> = {
   missing_code:        'Authentication failed — no code returned. Please try again.',
@@ -759,7 +772,7 @@ const errorMessage = errorParam ? (ERROR_MESSAGES[errorParam] ?? 'Something went
               btn.style.background = '#6BE39B';
               btn.style.color = '#07140C';
               btn.style.borderColor = '#6BE39B';
-              window.location.href = '/app';
+              window.location.href = r.data.resume_url || '/app';
             } else {
               btn.disabled = false;
               var msg = r.data.error === 'invalid_credentials'

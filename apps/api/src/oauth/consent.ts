@@ -177,11 +177,12 @@ export function renderConsentScreen(reply: FastifyReply, params: ConsentParams):
 
 interface LoginPageParams {
   requestId: string;
-  workosLoginUrl: string;
+  loginUrl: string;
 }
 
 export function renderLoginPage(reply: FastifyReply, params: LoginPageParams): void {
-  const { requestId, workosLoginUrl } = params;
+  const { requestId, loginUrl } = params;
+  const workosLoginUrl = loginUrl; // alias for template use
 
   const html = `<!DOCTYPE html>
 <html lang="en">

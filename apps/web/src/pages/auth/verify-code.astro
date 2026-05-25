@@ -241,7 +241,7 @@ const error = Astro.url.searchParams.get('error');
             btn.textContent = '✓ Signed in';
             btn.style.background = '#6BE39B';
             btn.style.color = '#07140C';
-            window.location.href = '/app';
+            window.location.href = r.data.resume_url || '/app';
           } else {
             btn.disabled = false;
             btn.textContent = 'Verify code';

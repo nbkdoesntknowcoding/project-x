@@ -32,7 +32,8 @@ import { withSystemPrivilege } from '../../db/with-system-privilege.js';
 import { JWT_COOKIE_NAME } from '../../plugins/auth.js';
 import { signJwt, verifyJwt } from '../../lib/jwt.js';
 import { renderConsentScreen, renderErrorPage, renderLoginPage } from '../consent.js';
-import { getWorkOSLoginUrl, redirectToWorkOSLogin, completeWorkOSCallback } from '../workos-bridge.js';
+import { completeWorkOSCallback } from '../workos-bridge.js';
+import { config } from '../../config/env.js';
 
 // 15-minute cookie lifetime — just long enough to survive the consent round-trip
 const CONSENT_COOKIE_MAX_AGE_SEC = 15 * 60;
@@ -100,9 +101,10 @@ export async function authorizeRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      // No valid session → show Mnema-branded login page (links to WorkOS)
-      const workosLoginUrl = getWorkOSLoginUrl({ requestId });
-      return renderLoginPage(reply, { requestId, workosLoginUrl });
+      // No valid session → send user to the Mnema web app login page.
+      // After login the web app calls /oauth/resume to bridge the session back.
+      const loginUrl = `${config.WEB_BASE_URL}/login?oauth_request_id=${encodeURIComponent(requestId)}`;
+      return renderLoginPage(reply, { requestId, loginUrl });
     },
   );
 
@@ -303,6 +305,62 @@ export async function authorizeRoutes(app: FastifyInstance): Promise<void> {
         return reply.redirect(redirectUrl.toString(), 303);
       }
       return renderErrorPage(reply, { error: 'request_not_found' });
+    },
+  );
+
+  // ── GET /oauth/resume — bridge from Mnema web-app login back to OAuth ─────
+  // After the user logs in via mnema.theboringpeople.in, the web app redirects
+  // here with the request_id and the Mnema JWT as `proof`. We validate the JWT,
+  // set the boppl_jwt cookie, and show the consent screen directly.
+  app.get(
+    '/oauth/resume',
+    { config: { mcpRoute: true } },
+    async (req, reply) => {
+      const query = req.query as Record<string, string>;
+      const { request_id, proof } = query;
+      if (!request_id || !proof) {
+        return renderErrorPage(reply, { error: 'invalid_request', description: 'Missing request_id or proof' });
+      }
+
+      let claims: Awaited<ReturnType<typeof verifyJwt>>;
+      try {
+        claims = await verifyJwt(proof);
+      } catch {
+        return renderErrorPage(reply, { error: 'invalid_proof', description: 'Token is invalid or expired. Please try signing in again.' });
+      }
+
+      // Verify the pending OAuth request still exists
+      const [pending] = await db
+        .select({ clientId: oauthPendingAuthRequests.clientId })
+        .from(oauthPendingAuthRequests)
+        .where(
+          and(
+            eq(oauthPendingAuthRequests.id, request_id),
+            gt(oauthPendingAuthRequests.expiresAt, new Date()),
+          ),
+        )
+        .limit(1);
+      if (!pending) {
+        return renderErrorPage(reply, { error: 'request_expired', description: 'OAuth session expired. Please go back to Claude Desktop and try connecting again.' });
+      }
+
+      const [client] = await db
+        .select({ clientName: oauthClients.clientName })
+        .from(oauthClients)
+        .where(eq(oauthClients.id, pending.clientId))
+        .limit(1);
+      if (!client) return renderErrorPage(reply, { error: 'invalid_client' });
+
+      // Set a short-lived boppl_jwt so the consent POST can verify identity
+      reply.setCookie(JWT_COOKIE_NAME, proof, {
+        path: '/',
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        maxAge: CONSENT_COOKIE_MAX_AGE_SEC,
+      });
+
+      return showConsentScreen(reply, request_id, client.clientName, claims.sub, claims.email);
     },
   );
 }

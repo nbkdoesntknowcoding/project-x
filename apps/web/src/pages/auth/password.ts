@@ -11,6 +11,7 @@ import { setSession } from '../../lib/session.ts';
 const API_URL = (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
 
 export const POST: APIRoute = async ({ request, cookies }) => {
+  const oauthRequestId = cookies.get('oauth_request_id')?.value ?? null;
   let email: string;
   let password: string;
   try {
@@ -77,6 +78,14 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     access_token: accessToken,
     jwt,
   });
+
+  // If the user arrived from an MCP OAuth flow, bridge them back to the
+  // API consent screen instead of going to /app.
+  if (oauthRequestId) {
+    cookies.delete('oauth_request_id', { path: '/' });
+    const resumeUrl = `${API_URL}/oauth/resume?request_id=${encodeURIComponent(oauthRequestId)}&proof=${encodeURIComponent(jwt)}`;
+    return json({ ok: true, resume_url: resumeUrl }, 200);
+  }
 
   return json({ ok: true }, 200);
 };
