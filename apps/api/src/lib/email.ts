@@ -118,8 +118,8 @@ class ResendEmailSender implements EmailSender {
     this.client = new Resend(process.env.RESEND_API_KEY);
     this.defaultFrom =
       process.env.RESEND_FROM_ADDRESS ?? 'noreply@theboringpeople.in';
-    // Login alerts use the security address so they stand out in the inbox
-    this.securityFrom = 'security@theboringpeople.in';
+    // Login alerts use a distinct security address so they stand out in the inbox
+    this.securityFrom = 'security@mnema.theboringpeople.in';
   }
 
   async send(to: string, subject: string, html: string, from?: string): Promise<void> {
