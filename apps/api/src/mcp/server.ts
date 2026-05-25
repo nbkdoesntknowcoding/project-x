@@ -23,6 +23,11 @@ import {
   commitProposedWrite,
 } from './tools/commit-proposed-write.js';
 import {
+  CONFIRM_DOC_WRITE_TOOL_NAME,
+  CONFIRM_DOC_WRITE_TOOL_SPEC,
+  confirmDocWrite,
+} from './tools/confirm-doc-write.js';
+import {
   PROPOSE_TRASH_FOLDER_TOOL_NAME,
   PROPOSE_TRASH_FOLDER_TOOL_SPEC,
   proposeTrashFolder,
@@ -327,6 +332,44 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
 
   // ── Phase 10: commit_doc_write (app-only, ["app"]) ─────────────────────────
   registerCommitTool(COMMIT_DOC_WRITE_TOOL_NAME, COMMIT_DOC_WRITE_TOOL_SPEC, commitProposedWrite);
+
+  // ── Phase 10: confirm_doc_write (model-callable, ["model"]) — Claude Code ──
+  // CLI/Claude Code doesn't render the MCP Apps panel, so the model calls this
+  // after showing the user the proposed diff and receiving chat confirmation.
+  registerAppTool(
+    mcpServer,
+    CONFIRM_DOC_WRITE_TOOL_NAME,
+    {
+      description: CONFIRM_DOC_WRITE_TOOL_SPEC.description,
+      inputSchema: jsonSchemaToZodShape(CONFIRM_DOC_WRITE_TOOL_SPEC.inputSchema),
+      annotations: CONFIRM_DOC_WRITE_TOOL_SPEC.annotations,
+      _meta: {
+        ui: {
+          // No resourceUri — this tool has no panel; it fires a direct commit.
+          visibility: ['model'], // AI-callable; NOT the app/iframe
+        },
+      },
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async (args: any) => {
+      try {
+        const result = await confirmDocWrite(ctx, args as Record<string, unknown>);
+        if (result.error) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: result.message ?? result.error }],
+          };
+        }
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+        };
+      } catch (err) {
+        if (err instanceof McpForbiddenError) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        return { isError: true, content: [{ type: 'text' as const, text: message }] };
+      }
+    },
+  );
 
   // ── Phase 10 Chunk 2: propose/commit trash_folder ──────────────────────────
   registerProposeTool(PROPOSE_TRASH_FOLDER_TOOL_NAME, PROPOSE_TRASH_FOLDER_TOOL_SPEC, proposeTrashFolder);
