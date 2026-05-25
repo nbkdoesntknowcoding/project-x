@@ -590,123 +590,130 @@ function showCancelled(root) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
+// Uses import().then() Promise chains — same pattern as flow-walk-html.ts (confirmed working).
+// NO async/await at any level — classic <script> + await has issues in Electron iframes.
 
 function diag(msg, color) {
   var el = document.getElementById('diag');
   if (el) { el.textContent = msg; el.style.color = color || '#707479'; }
 }
 
-async function main() {
+function main() {
   var root = document.getElementById('root');
   diag('Loading SDK…');
 
   var blob = new Blob([window.__sdk], { type: 'text/javascript' });
   var url  = URL.createObjectURL(blob);
-  var mod  = await import(url);
-  URL.revokeObjectURL(url);
-  diag('SDK loaded. Connecting…');
+  import(url).then(function(mod) {
+    URL.revokeObjectURL(url);
+    diag('SDK loaded. Connecting…');
 
-  var App = mod.App;
-  var PostMessageTransport = mod.PostMessageTransport;
+    var App = mod.App;
+    var PostMessageTransport = mod.PostMessageTransport;
 
-  var app = new App({ name: 'mnema-write-preview', version: '1.0.0' }, {}, { autoResize: true });
+    var app = new App({ name: 'mnema-write-preview', version: '1.0.0' }, {}, { autoResize: true });
 
-  app.ontoolresult = function(result) {
-    diag('ontoolresult fired — kind: ' + ((result.structuredContent && result.structuredContent.preview && result.structuredContent.preview.kind) || (result.isError ? 'ERROR' : '?')), result.isError ? '#FF7A8A' : '#6BE39B');
-    try {
-      var sc = result.structuredContent;
-      var isError = result.isError;
+    app.ontoolresult = function(result) {
+      diag('ontoolresult fired — kind: ' + ((result.structuredContent && result.structuredContent.preview && result.structuredContent.preview.kind) || (result.isError ? 'ERROR' : '?')), result.isError ? '#FF7A8A' : '#6BE39B');
+      try {
+        var sc = result.structuredContent;
+        var isError = result.isError;
 
-      if (isError || !sc) {
-        var errMsg = (sc && sc.message) ? String(sc.message) : 'Tool error — no preview available.';
-        showError(root, errMsg);
-        return;
-      }
+        if (isError || !sc) {
+          var errMsg = (sc && sc.message) ? String(sc.message) : 'Tool error — no preview available.';
+          showError(root, errMsg);
+          return;
+        }
 
-      var preview = sc.preview || {};
-      var kind = preview.kind || '';
-      var commitTool = sc.commit_tool || '';
-      var proposalToken = sc.proposal_token || '';
+        var preview = sc.preview || {};
+        var kind = preview.kind || '';
+        var commitTool = sc.commit_tool || '';
+        var proposalToken = sc.proposal_token || '';
 
-      // Derive IDs and target name
-      var docId = sc.doc_id || preview.doc_id || '';
-      var flowId = sc.flow_id || preview.flow_id || '';
-      var folderId = sc.folder_id || preview.folder_id || '';
-      var targetName = '';
-      var html = '';
+        // Derive IDs and target name
+        var docId = sc.doc_id || preview.doc_id || '';
+        var flowId = sc.flow_id || preview.flow_id || '';
+        var folderId = sc.folder_id || preview.folder_id || '';
+        var targetName = '';
+        var html = '';
 
-      var docKinds = { append: 1, replace_section: 1, replace_body: 1, create: 1, trash_doc: 1 };
-      if (docKinds[kind]) {
-        targetName = preview.doc_title || preview.title || docId;
-        html = renderDocWrite(preview, docId);
-      } else if (kind === 'flow_publish') {
-        targetName = preview.flow_name || flowId;
-        html = renderFlowPublish(preview, flowId);
-      } else if (kind === 'trash_folder') {
-        targetName = preview.folder_name || folderId;
-        html = renderFolderTrash(preview, folderId);
-      } else {
-        showError(root, 'Unknown preview kind: ' + esc(kind));
-        return;
-      }
+        var docKinds = { append: 1, replace_section: 1, replace_body: 1, create: 1, trash_doc: 1 };
+        if (docKinds[kind]) {
+          targetName = preview.doc_title || preview.title || docId;
+          html = renderDocWrite(preview, docId);
+        } else if (kind === 'flow_publish') {
+          targetName = preview.flow_name || flowId;
+          html = renderFlowPublish(preview, flowId);
+        } else if (kind === 'trash_folder') {
+          targetName = preview.folder_name || folderId;
+          html = renderFolderTrash(preview, folderId);
+        } else {
+          showError(root, 'Unknown preview kind: ' + esc(kind));
+          return;
+        }
 
-      root.innerHTML = html;
+        root.innerHTML = html;
 
-      if (!commitTool) {
-        showError(root, 'Missing commit_tool — cannot commit.');
-        return;
-      }
+        if (!commitTool) {
+          showError(root, 'Missing commit_tool — cannot commit.');
+          return;
+        }
 
-      var approveBtn = document.getElementById('btn-approve');
-      var rejectBtn  = document.getElementById('btn-reject');
-      var cancelBtn  = document.getElementById('btn-cancel');
+        var approveBtn = document.getElementById('btn-approve');
+        var rejectBtn  = document.getElementById('btn-reject');
+        var cancelBtn  = document.getElementById('btn-cancel');
 
-      if (approveBtn) {
-        approveBtn.onclick = async function() {
-          approveBtn.setAttribute('disabled', 'true');
-          if (rejectBtn) rejectBtn.setAttribute('disabled', 'true');
-          if (cancelBtn) cancelBtn.setAttribute('disabled', 'true');
-          approveBtn.textContent = '…';
-          try {
-            await app.callServerTool({
+        if (approveBtn) {
+          approveBtn.onclick = function() {
+            var origLabel = approveBtn.textContent;
+            approveBtn.setAttribute('disabled', 'true');
+            if (rejectBtn) rejectBtn.setAttribute('disabled', 'true');
+            if (cancelBtn) cancelBtn.setAttribute('disabled', 'true');
+            approveBtn.textContent = '…';
+            app.callServerTool({
               name: commitTool,
               arguments: { proposal_token: proposalToken },
+            }).then(function() {
+              showSuccess(root, kind, targetName);
+            }).catch(function(err) {
+              var msg = String((err && err.message) || err);
+              showError(root, msg);
+              approveBtn.removeAttribute('disabled');
+              if (rejectBtn) rejectBtn.removeAttribute('disabled');
+              if (cancelBtn) cancelBtn.removeAttribute('disabled');
+              approveBtn.textContent = origLabel;
             });
-            showSuccess(root, kind, targetName);
-          } catch (err) {
-            var msg = String((err && err.message) || err);
-            showError(root, msg);
-          }
-        };
+          };
+        }
+
+        function doCancelOrReject() {
+          if (approveBtn) approveBtn.setAttribute('disabled', 'true');
+          if (rejectBtn) rejectBtn.setAttribute('disabled', 'true');
+          if (cancelBtn) cancelBtn.setAttribute('disabled', 'true');
+          app.sendMessage({
+            role: 'user',
+            content: [{ type: 'text', text: 'Write cancelled by user.' }],
+          }).catch(function() {});
+          showCancelled(root);
+        }
+
+        if (rejectBtn) { rejectBtn.onclick = doCancelOrReject; }
+        if (cancelBtn) { cancelBtn.onclick = doCancelOrReject; }
+      } catch (renderErr) {
+        showError(root, 'Render error: ' + String(renderErr && renderErr.message || renderErr));
       }
+    };
 
-      function doCancelOrReject() {
-        if (approveBtn) approveBtn.setAttribute('disabled', 'true');
-        if (rejectBtn) rejectBtn.setAttribute('disabled', 'true');
-        if (cancelBtn) cancelBtn.setAttribute('disabled', 'true');
-        app.sendMessage({
-          role: 'user',
-          content: [{ type: 'text', text: 'Write cancelled by user.' }],
-        }).catch(function() {});
-        showCancelled(root);
-      }
-
-      if (rejectBtn) { rejectBtn.onclick = doCancelOrReject; }
-      if (cancelBtn) { cancelBtn.onclick = doCancelOrReject; }
-    } catch (renderErr) {
-      showError(root, 'Render error: ' + String(renderErr && renderErr.message || renderErr));
-    }
-  };
-
-  await app.connect(new PostMessageTransport(window.parent, window.parent));
-  diag('Connected — awaiting tool result…', '#6BE39B');
+    return app.connect(new PostMessageTransport(window.parent, window.parent));
+  }).then(function() {
+    diag('Connected — awaiting tool result…', '#6BE39B');
+  }).catch(function(err) {
+    diag('Connect failed: ' + String(err), '#FF7A8A');
+    showError(document.getElementById('root'), 'Failed to connect: ' + String(err));
+  });
 }
 
-main().catch(function(err) {
-  diag('Connect failed: ' + String(err), '#FF7A8A');
-  var root = document.getElementById('root');
-  showError(root, 'Failed to connect: ' + String(err));
-});
+main();
 </script>
 </body>
 </html>`;
