@@ -213,9 +213,10 @@ button { font-family:inherit; color:inherit; cursor:pointer; }
   </div>
 </div>
 <script>window.__sdk=${JSON.stringify(APP_WITH_DEPS_JS)};</script>
-<script type="module">
+<script>
 // All JS uses var + function syntax and string concatenation.
 // NO backtick template literals — this runs inside an outer TS template literal.
+// NOTE: classic <script> (not type="module") — MCP iframe sandbox blocks ES module scripts.
 
 var ICO_CHECK = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>';
 var ICO_ARROW = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';

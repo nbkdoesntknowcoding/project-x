@@ -129,6 +129,8 @@ button { font-family:inherit; color:inherit; }
 .walk-doc-ref { display:flex; align-items:center; gap:9px; padding:10px 12px; background:var(--surface); border:1px solid var(--line); border-radius:7px; font:500 12.5px/1 var(--sans); color:var(--ink); }
 .walk-doc-ref .path { margin-left:auto; color:var(--ink-muted); font:400 11px var(--mono); }
 .walk-instr { font:400 14px/1.6 var(--sans); color:var(--ink-soft); background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:14px 16px; }
+.walk-doc-body { background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:14px 16px; max-height:320px; overflow-y:auto; }
+.walk-doc-body pre { font:400 12.5px/1.7 var(--mono); color:var(--ink-soft); margin:0; white-space:pre-wrap; word-break:break-word; }
 
 .walk-decision { display:flex; flex-direction:column; gap:10px; background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:16px; }
 .walk-decision-q { font:500 14px/1.4 var(--sans); color:var(--ink); margin:0 0 4px; }
@@ -343,7 +345,9 @@ button { font-family:inherit; color:inherit; }
     // ── Doc / Docs ──
     if (kind === 'doc' || kind === 'docs') {
       var sourcePath = '';
-      if (step.source && step.source.path) {
+      if (step.source && step.source.doc_title) {
+        sourcePath = step.source.doc_title;
+      } else if (step.source && step.source.path) {
         sourcePath = step.source.path;
       } else if (step.source && typeof step.source === 'string') {
         sourcePath = step.source;
@@ -359,6 +363,11 @@ button { font-family:inherit; color:inherit; }
         ? '<div class="walk-instr">' + esc(step.instruction) + '</div>'
         : '';
 
+      // Show the actual doc content (markdown text from the referenced doc)
+      var contentBlockHtml = (step.content && step.content.trim())
+        ? '<div class="walk-doc-body"><pre>' + esc(step.content) + '</pre></div>'
+        : '';
+
       var docHtml = '<div class="m-card">'
         + buildHead(flowId, current, total)
         + buildProgress(current, total)
@@ -367,6 +376,7 @@ button { font-family:inherit; color:inherit; }
         + '<h2 class="walk-title">' + esc(step.title || '') + '</h2>'
         + docRefHtml
         + instrBlockHtml
+        + contentBlockHtml
         + '</div>'
         + '<div class="m-foot">'
         + '<div class="left">' + buildKbdHints(kind, hasPrev) + '</div>'
@@ -377,14 +387,9 @@ button { font-family:inherit; color:inherit; }
         + '</div>'
         + '</div>';
       document.getElementById('root').innerHTML = docHtml;
-
-      if (pause === false) {
-        var docNext = nextIndex;
-        autoAdvanceTimer = setTimeout(function() {
-          autoAdvanceTimer = null;
-          navigate(docNext);
-        }, 600);
-      }
+      // Doc steps show content for the human to read — do NOT auto-advance.
+      // (pause_for_user_input is false for doc steps as a hint to Claude,
+      //  but the walk simulator always waits for the user to click Continue.)
       return;
     }
 
