@@ -18,9 +18,11 @@ async function main(): Promise<void> {
   }
   const plan = planArg as PlanKey;
 
+  // subscriptionStatus lives in the subscriptions table, not on workspaces.
+  // This script only patches the plan column for emergency overrides.
   const result = await db
     .update(workspaces)
-    .set({ plan, subscriptionStatus: plan === 'free' ? 'cancelled' : 'active' })
+    .set({ plan })
     .where(eq(workspaces.id, workspaceId))
     .returning({ id: workspaces.id, slug: workspaces.slug });
 

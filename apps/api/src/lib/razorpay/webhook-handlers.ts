@@ -74,11 +74,11 @@ async function upsertSubscription(
 }
 
 async function findWorkspaceBySubscription(subscriptionId: string): Promise<string | null> {
-  const rows = await db.select({ id: workspaces.id })
-    .from(workspaces)
-    .where(eq(workspaces.razorpaySubscriptionId, subscriptionId))
+  const rows = await db.select({ workspaceId: subscriptions.workspaceId })
+    .from(subscriptions)
+    .where(eq(subscriptions.razorpaySubscriptionId, subscriptionId))
     .limit(1);
-  return rows[0]?.id ?? null;
+  return rows[0]?.workspaceId ?? null;
 }
 
 export async function handleSubscriptionActivated(event: RazorpayWebhookEvent): Promise<void> {
@@ -97,12 +97,9 @@ export async function handleSubscriptionActivated(event: RazorpayWebhookEvent): 
 
   await upsertSubscription(event, wsId, planKey);
 
-  const periodEnd = sub.current_end != null ? new Date(sub.current_end * 1000) : null;
+  // Only workspaces.plan exists on workspaces — status/period live in subscriptions
   await db.update(workspaces).set({
     plan: planKey as 'pro' | 'team',
-    razorpaySubscriptionId: sub.id,
-    subscriptionStatus: 'active',
-    subscriptionCurrentPeriodEnd: periodEnd,
   }).where(eq(workspaces.id, wsId));
 
   console.log(`[razorpay-webhook] subscription.activated → workspace ${wsId} plan=${planKey}`);
@@ -116,10 +113,7 @@ export async function handleSubscriptionHalted(event: RazorpayWebhookEvent): Pro
   await db.update(subscriptions)
     .set({ status: 'halted', updatedAt: new Date() })
     .where(eq(subscriptions.razorpaySubscriptionId, sub.id));
-
-  await db.update(workspaces).set({
-    subscriptionStatus: 'halted',
-  }).where(eq(workspaces.id, wsId));
+  // subscriptionStatus doesn't exist on workspaces — status lives in subscriptions table
 
   console.log(`[razorpay-webhook] subscription.halted → workspace ${wsId} (payment failed)`);
 }
@@ -135,11 +129,9 @@ export async function handleSubscriptionCancelled(event: RazorpayWebhookEvent): 
     updatedAt: new Date(),
   }).where(eq(subscriptions.razorpaySubscriptionId, sub.id));
 
+  // Only plan exists on workspaces — status/period/subscription live in subscriptions
   await db.update(workspaces).set({
     plan: 'free',
-    razorpaySubscriptionId: null,
-    subscriptionStatus: 'cancelled',
-    subscriptionCurrentPeriodEnd: null,
   }).where(eq(workspaces.id, wsId));
 
   console.log(`[razorpay-webhook] subscription.cancelled → workspace ${wsId} downgraded to free`);
@@ -153,10 +145,7 @@ export async function handleSubscriptionPaused(event: RazorpayWebhookEvent): Pro
   await db.update(subscriptions)
     .set({ status: 'paused', updatedAt: new Date() })
     .where(eq(subscriptions.razorpaySubscriptionId, sub.id));
-
-  await db.update(workspaces).set({
-    subscriptionStatus: 'paused',
-  }).where(eq(workspaces.id, wsId));
+  // subscriptionStatus doesn't exist on workspaces — status lives in subscriptions table
 
   console.log(`[razorpay-webhook] subscription.paused → workspace ${wsId}`);
 }

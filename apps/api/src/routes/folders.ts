@@ -109,7 +109,7 @@ export const foldersRoutes: FastifyPluginAsync = async (app) => {
         .values({
           workspaceId: auth.tenant_id,
           name: parsed.data.name,
-          parentId: parsed.data.parent_id ?? null,
+          parentFolderId: parsed.data.parent_id ?? null,
           createdBy: auth.sub,
         })
         .returning();
@@ -122,7 +122,7 @@ export const foldersRoutes: FastifyPluginAsync = async (app) => {
       folder: {
         id: created.id,
         name: created.name,
-        parent_id: created.parentId ?? null,
+        parent_id: created.parentFolderId ?? null,
         doc_count: 0,
         subfolder_count: 0,
         created_at: created.createdAt,

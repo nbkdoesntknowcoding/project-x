@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { db } from '../../db/index.js';
-import { workspaces } from '../../db/schema.js';
+import { subscriptions } from '../../db/schema.js';
 import { razorpay } from './client.js';
 
 interface CreateCustomerArgs {
@@ -22,17 +22,19 @@ export async function createRazorpayCustomerForWorkspace(args: CreateCustomerArg
     },
   }) as Promise<{ id: string }>);
 
-  await db.update(workspaces)
-    .set({ razorpayCustomerId: customer.id })
-    .where(eq(workspaces.id, args.workspaceId));
-
+  // razorpayCustomerId is stored per-subscription in the subscriptions table,
+  // not on workspaces. The customer ID will be persisted when the first
+  // subscription is created (via the webhook upsert).
   return customer.id;
 }
 
 export async function getRazorpayCustomerForWorkspace(workspaceId: string): Promise<string | null> {
-  const rows = await db.select({ razorpayCustomerId: workspaces.razorpayCustomerId })
-    .from(workspaces)
-    .where(eq(workspaces.id, workspaceId))
+  // Customer ID is stored per-subscription in the subscriptions table.
+  // Return the most recent non-null customer ID for this workspace.
+  const rows = await db.select({ razorpayCustomerId: subscriptions.razorpayCustomerId })
+    .from(subscriptions)
+    .where(eq(subscriptions.workspaceId, workspaceId))
+    .orderBy(desc(subscriptions.createdAt))
     .limit(1);
   return rows[0]?.razorpayCustomerId ?? null;
 }

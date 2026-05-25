@@ -129,6 +129,12 @@ const envSchema = z.object({
   RATE_LIMIT_USER_PER_DAY: z.coerce.number().int().positive().default(1000),
   RATE_LIMIT_TENANT_DAILY_UNITS: z.coerce.number().int().positive().default(50000),
 
+  // Billing — Razorpay
+  RAZORPAY_KEY_ID: z.string().min(1),
+  RAZORPAY_KEY_SECRET: z.string().min(1),
+  RAZORPAY_WEBHOOK_SECRET: z.string().min(1),
+  RAZORPAY_ENVIRONMENT: z.enum(['test', 'live']).default('test'),
+
   // OAuth 2.1 Authorization Server (Phase A)
   // Externally-visible issuer URL — equals MCP_BASE_URL in practice.
   // The `iss` claim in every OAuth-issued JWT and the base for all AS URLs.

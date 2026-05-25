@@ -34,7 +34,7 @@ export const mcpTokenRoutes: FastifyPluginAsync = async (app) => {
         .from(mcpTokens)
         .where(
           and(
-            eq(mcpTokens.workspaceId, req.auth.tenant_id),
+            eq(mcpTokens.workspaceId, req.auth!.tenant_id),
             isNull(mcpTokens.revokedAt),
           ),
         )
