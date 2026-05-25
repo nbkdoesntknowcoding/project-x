@@ -3,6 +3,7 @@ import node from '@astrojs/node';
 import vercel from '@astrojs/vercel';
 import react from '@astrojs/react';
 import sitemap from '@astrojs/sitemap';
+import sentry from '@sentry/astro';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'astro/config';
 
@@ -15,7 +16,15 @@ export default defineConfig({
   // Use @astrojs/vercel when building on Vercel; fall back to standalone
   // Node.js server for local dev and manual builds.
   adapter: isVercel ? vercel() : node({ mode: 'standalone' }),
-  integrations: [react(), sitemap()],
+  integrations: [
+    react(),
+    sitemap(),
+    sentry({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.SENTRY_ENVIRONMENT ?? 'development',
+      tracesSampleRate: 0.1,
+    }),
+  ],
   server: { port: 5173 },
   vite: {
     envDir: repoRoot,

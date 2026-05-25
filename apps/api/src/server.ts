@@ -3,6 +3,10 @@ import helmet from '@fastify/helmet';
 import sensible from '@fastify/sensible';
 import Fastify from 'fastify';
 import { config } from './config/env.js';
+import { initSentry, Sentry } from './lib/sentry.js';
+
+// Initialise Sentry before anything else — no-op when SENTRY_DSN is unset.
+initSentry();
 import { oauthPlugin } from './oauth/plugin.js';
 import { mcpPlugin } from './mcp/plugin.js';
 import { authPlugin } from './plugins/auth.js';
@@ -60,6 +64,15 @@ await app.register(billingRoutes);
 await app.register(mcpTokenRoutes);
 await app.register(oauthPlugin);
 await app.register(mcpPlugin);
+
+// Forward unhandled errors to Sentry before replying with 500.
+app.setErrorHandler((error, request, reply) => {
+  Sentry.captureException(error, {
+    extra: { url: request.url, method: request.method },
+  });
+  app.log.error({ err: error, url: request.url }, 'unhandled_error');
+  void reply.code(500).send({ error: 'internal_server_error' });
+});
 
 const port = config.API_PORT;
 try {

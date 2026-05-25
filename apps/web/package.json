@@ -27,6 +27,7 @@
     "@milkdown/plugin-collab": "^7.21.1",
     "@milkdown/transformer": "^7.21.1",
     "@prosemirror-adapter/react": "^0.5.3",
+    "@sentry/astro": "^10.53.1",
     "@tailwindcss/vite": "^4.0.0",
     "@workos-inc/node": "^7.0.0",
     "@xyflow/react": "^12.10.2",
