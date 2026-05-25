@@ -12,6 +12,7 @@ import { seedExampleFlow } from '../services/flow-seed.js';
 import { withTenant } from '../db/with-tenant.js';
 import { emailSender } from '../lib/email.js';
 import { welcomeEmail } from '../emails/templates.js';
+import { enforceRateLimit } from '../lib/auth-rate-limit.js';
 import { signJwt } from '../lib/jwt.js';
 import { scopesForRole } from '../lib/scopes.js';
 
@@ -169,6 +170,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   app.post('/api/auth/create-workspace', async (req, reply) => {
     if (!req.auth) {
       return reply.code(401).send({ error: 'unauthorized' });
+    }
+    // Rate limit: 3 workspace creations per IP per hour
+    if (await enforceRateLimit(req, reply, { category: 'create-workspace', max: 3, windowSec: 3600 })) {
+      return;
     }
     const parsed = createWorkspaceSchema.safeParse(req.body);
     if (!parsed.success) {

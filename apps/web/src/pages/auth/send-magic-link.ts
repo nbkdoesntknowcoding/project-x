@@ -6,8 +6,13 @@
  */
 import type { APIRoute } from 'astro';
 import { workos } from '../../lib/workos.ts';
+import { enforceRateLimit } from '../../lib/rate-limit.ts';
 
 export const POST: APIRoute = async ({ request }) => {
+  // Rate limit: 5 requests per 15 minutes per IP
+  const rateLimitResponse = await enforceRateLimit(request, 'magic-link', 5, 900);
+  if (rateLimitResponse) return rateLimitResponse;
+
   let email: string;
   try {
     const body = await request.json() as { email?: string };

@@ -8,10 +8,15 @@
 import type { APIRoute } from 'astro';
 import { workos } from '../../lib/workos.ts';
 import { setSession } from '../../lib/session.ts';
+import { enforceRateLimit } from '../../lib/rate-limit.ts';
 
 const API_URL = (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
 
 export const POST: APIRoute = async ({ request, cookies }) => {
+  // Rate limit: 10 requests per 15 minutes per IP
+  const rateLimitResponse = await enforceRateLimit(request, 'verify-otp', 10, 900);
+  if (rateLimitResponse) return rateLimitResponse;
+
   let email: string;
   let code: string;
   try {

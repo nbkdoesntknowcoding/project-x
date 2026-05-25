@@ -6,6 +6,7 @@ import { db } from '../db/index.js';
 import { invitations, users, workspaceMembers, workspaces } from '../db/schema.js';
 import { withSystemPrivilege } from '../db/with-system-privilege.js';
 import { withTenant } from '../db/with-tenant.js';
+import { enforceRateLimit } from '../lib/auth-rate-limit.js';
 import { emailQueue } from '../queue/email.js';
 import { signInvitationToken, verifyInvitationToken } from '../lib/invitation-token.js';
 import { signJwt } from '../lib/jwt.js';
@@ -42,6 +43,10 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
   app.post('/api/invitations', async (req, reply) => {
     if (!req.auth) {
       return reply.code(401).send({ error: 'unauthorized' });
+    }
+    // Rate limit: 20 invitations per userId per hour
+    if (await enforceRateLimit(req, reply, { category: 'invite', max: 20, windowSec: 3600, identifier: req.auth.sub })) {
+      return;
     }
     try {
       await requireRole(req, 'editor');
