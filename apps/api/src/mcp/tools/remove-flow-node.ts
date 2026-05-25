@@ -24,7 +24,7 @@ import type { McpAuthContext } from '../auth.js';
 import { requireWriteScope } from '../scope.js';
 import { withAudit } from './audit.js';
 
-const WRITE_ROLES = new Set(['owner', 'admin', 'editor']);
+const WRITE_ROLES = new Set(['owner', 'editor']);
 
 // ── Idempotency ───────────────────────────────────────────────────────────────
 const idempotencyCache = new Map<string, number>();

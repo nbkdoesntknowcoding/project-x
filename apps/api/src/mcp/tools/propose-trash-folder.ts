@@ -21,7 +21,7 @@ import type { McpAuthContext } from '../auth.js';
 import { requireWriteScope } from '../scope.js';
 import { hashContent, issueProposalToken } from '../apps/proposal-token.js';
 
-const WRITE_ROLES = new Set(['owner', 'admin', 'editor']);
+const WRITE_ROLES = new Set(['owner', 'editor']);
 
 export const PROPOSE_TRASH_FOLDER_TOOL_NAME = 'propose_trash_folder';
 

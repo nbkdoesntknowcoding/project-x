@@ -48,7 +48,7 @@ function recordIdempotencyKey(key: string): void {
 }
 
 // ── Roles that may write ─────────────────────────────────────────────────────
-const WRITE_ROLES = new Set(['owner', 'admin', 'editor']);
+const WRITE_ROLES = new Set(['owner', 'editor']);
 
 // ── Tool spec ────────────────────────────────────────────────────────────────
 

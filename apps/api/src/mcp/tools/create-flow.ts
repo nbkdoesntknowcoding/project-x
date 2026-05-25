@@ -37,7 +37,7 @@ function recordIdempotencyKey(key: string, flowId: string): void {
   idempotencyCache.set(key, { flowId, expiry: Date.now() + IDEMPOTENCY_TTL_MS });
 }
 
-const WRITE_ROLES = new Set(['owner', 'admin', 'editor']);
+const WRITE_ROLES = new Set(['owner', 'editor']);
 
 // ── Slug helpers ───────────────────────────────────────────────────────────────
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;

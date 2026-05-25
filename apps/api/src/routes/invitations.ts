@@ -403,7 +403,7 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
     reply.setCookie(JWT_COOKIE, jwt, {
       path: '/',
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: COOKIE_MAX_AGE_SEC,
     });

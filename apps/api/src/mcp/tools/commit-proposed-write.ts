@@ -28,7 +28,7 @@ import { replaceDocBody } from './replace-doc-body.js';
 import { createDoc } from './create-doc.js';
 import { trashDoc } from './trash-doc.js';
 
-const WRITE_ROLES = new Set(['owner', 'admin', 'editor']);
+const WRITE_ROLES = new Set(['owner', 'editor']);
 
 export const COMMIT_DOC_WRITE_TOOL_NAME = 'commit_doc_write';
 

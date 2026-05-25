@@ -53,7 +53,7 @@ function recordIdempotencyKey(key: string): void {
 }
 
 // ── Roles that may trash ─────────────────────────────────────────────────────
-const WRITE_ROLES = new Set(['owner', 'admin', 'editor']);
+const WRITE_ROLES = new Set(['owner', 'editor']);
 
 // ── 30-day restore window ──────────────────────────────────────────────────────
 const RESTORE_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;

@@ -145,7 +145,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     reply.setCookie(JWT_COOKIE, jwt, {
       path: '/',
       httpOnly: true,
-      secure: false, // local dev; Phase D flips this on
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: COOKIE_MAX_AGE_SEC,
     });
@@ -249,7 +249,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     reply.setCookie(JWT_COOKIE, jwt, {
       path: '/',
       httpOnly: true,
-      secure: false,
+      secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: COOKIE_MAX_AGE_SEC,
     });

@@ -20,7 +20,7 @@ import { requireWriteScope } from '../scope.js';
 import { redeemProposalToken } from '../apps/proposal-token.js';
 import { publishFlow } from './publish-flow.js';
 
-const WRITE_ROLES = new Set(['owner', 'admin', 'editor']);
+const WRITE_ROLES = new Set(['owner', 'editor']);
 
 export const COMMIT_FLOW_PUBLISH_TOOL_NAME = 'commit_flow_publish';
 

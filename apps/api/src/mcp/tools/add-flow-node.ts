@@ -23,7 +23,7 @@ import type { McpAuthContext } from '../auth.js';
 import { requireWriteScope } from '../scope.js';
 import { withAudit } from './audit.js';
 
-const WRITE_ROLES = new Set(['owner', 'admin', 'editor']);
+const WRITE_ROLES = new Set(['owner', 'editor']);
 const KEBAB_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 // ── Idempotency ───────────────────────────────────────────────────────────────
