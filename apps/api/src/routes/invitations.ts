@@ -6,7 +6,7 @@ import { db } from '../db/index.js';
 import { invitations, users, workspaceMembers, workspaces } from '../db/schema.js';
 import { withSystemPrivilege } from '../db/with-system-privilege.js';
 import { withTenant } from '../db/with-tenant.js';
-import { emailSender } from '../lib/email.js';
+import { emailQueue } from '../queue/email.js';
 import { signInvitationToken, verifyInvitationToken } from '../lib/invitation-token.js';
 import { signJwt } from '../lib/jwt.js';
 import { requireRole, RoleError } from '../lib/role.js';
@@ -146,12 +146,15 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
     const inviterName =
       inviterRows[0]?.displayName || inviterRows[0]?.email || 'A teammate';
     const acceptUrl = `${config.WEB_BASE_URL}/invite/${token}`;
-    await emailSender.sendInvitation({
-      recipientEmail: parsed.data.email,
-      workspaceName: wsRows[0]?.name ?? 'a workspace',
-      inviterName,
-      acceptUrl,
-      expiresInDays: INVITATION_TTL_DAYS,
+    // Enqueue via BullMQ so the HTTP response returns immediately.
+    await emailQueue.add('invitation', {
+      type: 'invitation',
+      to: parsed.data.email,
+      params: {
+        inviterName,
+        workspaceName: wsRows[0]?.name ?? 'a workspace',
+        acceptUrl,
+      },
     });
 
     return {

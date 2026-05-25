@@ -10,15 +10,21 @@
  * entry — single deployment unit, three runtime processes.
  */
 import { startEmbeddingsWorker } from './embeddings/worker.js';
+import { startEmailWorker } from './email/worker.js';
 
 const embeddings = startEmbeddingsWorker();
 // eslint-disable-next-line no-console
 console.log('[workers] embeddings worker started');
 
+const emailWorker = startEmailWorker();
+// eslint-disable-next-line no-console
+console.log('[workers] email worker started');
+
 const shutdown = async (signal: string): Promise<void> => {
   // eslint-disable-next-line no-console
   console.log(`[workers] ${signal} received, draining and shutting down`);
   await embeddings.close();
+  await emailWorker.close();
   process.exit(0);
 };
 

@@ -1,26 +1,20 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 /**
  * Email sender abstraction.
  *
- * Phase 4.1: stdout. Every "email" prints a clearly-bracketed block to
- * the api stdout containing the recipient, subject, and body — including
- * any accept URLs. The block is deliberately copy-pasteable so the dev
- * smoke flow is: invite → see stdout → copy URL → open in new tab.
+ * Phase 4.1: stdout stub for local dev (StdoutEmailSender).
+ * Phase C: ResendEmailSender for production — activated when RESEND_API_KEY
+ * is set. The fallback to StdoutEmailSender means local dev without a key
+ * still works — every "email" prints a clearly-bracketed block to stdout.
  *
- * Phase D swaps this implementation for SendGrid/Resend. The interface
- * shape (`EmailSender.sendInvitation`) stays — production wiring just
- * provides a new class.
- *
- * Templates live in `src/emails/*.md` so copy edits don't need code
- * changes. `{{var}}` placeholders are interpolated by the simple
- * `render()` helper below — keep it dependency-free.
+ * The EmailSender interface is the public contract. All callers (invitations,
+ * auth) import only the interface + the exported emailSender singleton.
+ * Swapping implementations never touches call sites.
  */
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const TEMPLATE_DIR = join(__dirname, '..', 'emails');
+import { Resend } from 'resend';
+import { invitationEmail } from '../emails/templates.js';
+
+// ── Public interfaces ──────────────────────────────────────────────────────
 
 export interface InvitationEmailVars {
   recipientEmail: string;
@@ -31,41 +25,77 @@ export interface InvitationEmailVars {
 }
 
 export interface EmailSender {
+  /** Low-level send — used by welcome email and other one-off sends. */
+  send(to: string, subject: string, html: string): Promise<void>;
+  /** Convenience wrapper for the invitation flow. */
   sendInvitation(vars: InvitationEmailVars): Promise<void>;
 }
 
-function loadTemplate(name: string): string {
-  return readFileSync(join(TEMPLATE_DIR, `${name}.md`), 'utf-8');
-}
-
-function render(template: string, vars: Record<string, string | number>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => String(vars[key] ?? ''));
-}
+// ── StdoutEmailSender (local dev / no API key) ────────────────────────────
 
 class StdoutEmailSender implements EmailSender {
-  async sendInvitation(vars: InvitationEmailVars): Promise<void> {
-    const body = render(loadTemplate('invitation'), {
-      workspace_name: vars.workspaceName,
-      inviter_name: vars.inviterName,
-      accept_url: vars.acceptUrl,
-      expires_in_days: vars.expiresInDays,
-    });
-    const subject = `${vars.inviterName} invited you to ${vars.workspaceName} on Mnema`;
+  async send(to: string, subject: string, html: string): Promise<void> {
     // eslint-disable-next-line no-console
     console.log('\n========== EMAIL (dev mode — stdout) ==========');
     // eslint-disable-next-line no-console
-    console.log(`To:      ${vars.recipientEmail}`);
+    console.log(`To:      ${to}`);
     // eslint-disable-next-line no-console
     console.log(`Subject: ${subject}`);
     // eslint-disable-next-line no-console
     console.log('---');
     // eslint-disable-next-line no-console
-    console.log(body.trim());
+    console.log(html);
     // eslint-disable-next-line no-console
     console.log('========== END EMAIL ==========\n');
   }
+
+  async sendInvitation(vars: InvitationEmailVars): Promise<void> {
+    const { subject, html } = invitationEmail({
+      inviterName: vars.inviterName,
+      workspaceName: vars.workspaceName,
+      acceptUrl: vars.acceptUrl,
+    });
+    await this.send(vars.recipientEmail, subject, html);
+  }
 }
 
-// Phase D will conditionally export a SendGrid/Resend sender when an
-// EMAIL_PROVIDER env var is set. For 4.1 it's stdout, period.
-export const emailSender: EmailSender = new StdoutEmailSender();
+// ── ResendEmailSender (production / RESEND_API_KEY present) ───────────────
+
+class ResendEmailSender implements EmailSender {
+  private client: Resend;
+  private from: string;
+
+  constructor() {
+    if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY not set');
+    this.client = new Resend(process.env.RESEND_API_KEY);
+    this.from = process.env.RESEND_FROM_ADDRESS ?? 'noreply@mnema.theboringpeople.in';
+  }
+
+  async send(to: string, subject: string, html: string): Promise<void> {
+    const { error } = await this.client.emails.send({
+      from: this.from,
+      to,
+      subject,
+      html,
+    });
+    if (error) throw new Error(`Resend error: ${(error as { message?: string }).message ?? String(error)}`);
+  }
+
+  async sendInvitation(vars: InvitationEmailVars): Promise<void> {
+    const { subject, html } = invitationEmail({
+      inviterName: vars.inviterName,
+      workspaceName: vars.workspaceName,
+      acceptUrl: vars.acceptUrl,
+    });
+    await this.send(vars.recipientEmail, subject, html);
+  }
+}
+
+// ── Singleton export ───────────────────────────────────────────────────────
+
+// Use ResendEmailSender in production or when a key is explicitly provided
+// for integration testing. Fall back to stdout for local dev without a key.
+export const emailSender: EmailSender =
+  process.env.NODE_ENV === 'production' || process.env.RESEND_API_KEY
+    ? new ResendEmailSender()
+    : new StdoutEmailSender();

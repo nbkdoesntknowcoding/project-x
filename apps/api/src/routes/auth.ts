@@ -10,6 +10,8 @@ import { docs, workspaceMembers, workspaces } from '../db/schema.js';
 import { withSystemPrivilege } from '../db/with-system-privilege.js';
 import { seedExampleFlow } from '../services/flow-seed.js';
 import { withTenant } from '../db/with-tenant.js';
+import { emailSender } from '../lib/email.js';
+import { welcomeEmail } from '../emails/templates.js';
 import { signJwt } from '../lib/jwt.js';
 import { scopesForRole } from '../lib/scopes.js';
 
@@ -252,6 +254,15 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: COOKIE_MAX_AGE_SEC,
+    });
+
+    // Fire-and-forget welcome email — don't let email failure block the response.
+    const { subject, html } = welcomeEmail({
+      workspaceName: setupResult.workspace.name,
+      loginUrl: `${process.env.PUBLIC_SITE_URL ?? 'https://mnema.theboringpeople.in'}/app`,
+    });
+    emailSender.send(req.auth.email, subject, html).catch((err) => {
+      req.log.error({ err }, 'Failed to send welcome email');
     });
 
     // See switch-workspace: the JWT is returned in the body so the web tier
