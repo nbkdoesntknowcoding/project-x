@@ -286,7 +286,7 @@ function buildAddDiff(addLines, hunkLabel) {
 
 function splitLines(md) {
   if (!md) return [];
-  return String(md).split('\n');
+  return String(md).split('\\n');
 }
 
 // ── Doc Write renderer ────────────────────────────────────────────────────────
