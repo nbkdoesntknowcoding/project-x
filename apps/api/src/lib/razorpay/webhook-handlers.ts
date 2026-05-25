@@ -1,7 +1,19 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../../db/index.js';
-import { subscriptions, workspaces } from '../../db/schema.js';
+import { subscriptions, users, workspaceMembers, workspaces } from '../../db/schema.js';
 import { planKeyFromRazorpayPlanId } from './plan-state.js';
+import { emailQueue } from '../../queue/email.js';
+
+/** Look up the owner email for a workspace — used to send billing emails. */
+async function getWorkspaceOwnerEmail(workspaceId: string): Promise<string | null> {
+  const rows = await db
+    .select({ email: users.email })
+    .from(workspaceMembers)
+    .innerJoin(users, eq(users.id, workspaceMembers.userId))
+    .where(eq(workspaceMembers.workspaceId, workspaceId))
+    .limit(1);
+  return rows[0]?.email ?? null;
+}
 
 export interface RazorpaySubscriptionEntity {
   id: string;
@@ -103,6 +115,25 @@ export async function handleSubscriptionActivated(event: RazorpayWebhookEvent): 
   }).where(eq(workspaces.id, wsId));
 
   console.log(`[razorpay-webhook] subscription.activated → workspace ${wsId} plan=${planKey}`);
+
+  // Send payment_successful email to workspace owner (fire-and-forget)
+  void getWorkspaceOwnerEmail(wsId).then((email) => {
+    if (!email) return;
+    const periodEnd = sub.current_end
+      ? new Date(sub.current_end * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'next billing cycle';
+    return emailQueue.add('payment_successful', {
+      type: 'payment_successful',
+      to: email,
+      params: {
+        planName: planKey.charAt(0).toUpperCase() + planKey.slice(1),
+        amount: '—',
+        date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        nextBillingDate: periodEnd,
+        billingUrl: `${process.env.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in'}/app/settings/billing`,
+      },
+    });
+  }).catch((err) => console.error('[razorpay-webhook] failed to send payment_successful email', err));
 }
 
 export async function handleSubscriptionHalted(event: RazorpayWebhookEvent): Promise<void> {
@@ -135,6 +166,23 @@ export async function handleSubscriptionCancelled(event: RazorpayWebhookEvent): 
   }).where(eq(workspaces.id, wsId));
 
   console.log(`[razorpay-webhook] subscription.cancelled → workspace ${wsId} downgraded to free`);
+
+  // Send subscription_cancelled email to workspace owner (fire-and-forget)
+  void getWorkspaceOwnerEmail(wsId).then((email) => {
+    if (!email) return;
+    const accessEnd = sub.ended_at
+      ? new Date(sub.ended_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'end of billing period';
+    return emailQueue.add('subscription_cancelled', {
+      type: 'subscription_cancelled',
+      to: email,
+      params: {
+        planName: 'Pro',
+        accessEndDate: accessEnd,
+        reactivateUrl: `${process.env.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in'}/app/settings/billing`,
+      },
+    });
+  }).catch((err) => console.error('[razorpay-webhook] failed to send subscription_cancelled email', err));
 }
 
 export async function handleSubscriptionPaused(event: RazorpayWebhookEvent): Promise<void> {

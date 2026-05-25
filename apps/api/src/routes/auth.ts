@@ -10,8 +10,7 @@ import { docs, workspaceMembers, workspaces } from '../db/schema.js';
 import { withSystemPrivilege } from '../db/with-system-privilege.js';
 import { seedExampleFlow } from '../services/flow-seed.js';
 import { withTenant } from '../db/with-tenant.js';
-import { emailSender } from '../lib/email.js';
-import { welcomeEmail } from '../emails/templates.js';
+import { emailQueue } from '../queue/email.js';
 import { enforceRateLimit } from '../lib/auth-rate-limit.js';
 import { signJwt } from '../lib/jwt.js';
 import { scopesForRole } from '../lib/scopes.js';
@@ -261,14 +260,20 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       maxAge: COOKIE_MAX_AGE_SEC,
     });
 
-    // Fire-and-forget welcome email — don't let email failure block the response.
-    const { subject, html } = welcomeEmail({
-      workspaceName: setupResult.workspace.name,
-      loginUrl: `${process.env.PUBLIC_SITE_URL ?? 'https://mnema.theboringpeople.in'}/app`,
-    });
-    emailSender.send(req.auth.email, subject, html).catch((err) => {
-      req.log.error({ err }, 'Failed to send welcome email');
-    });
+    // Enqueue welcome email — fire-and-forget so it never blocks the response.
+    emailQueue
+      .add('welcome', {
+        type: 'welcome',
+        to: req.auth.email,
+        params: {
+          firstName: req.auth.email.split('@')[0] ?? 'there',
+          workspaceName: setupResult.workspace.name,
+          openUrl: `${process.env.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in'}/app`,
+        },
+      })
+      .catch((err) => {
+        req.log.error({ err }, 'Failed to enqueue welcome email');
+      });
 
     // See switch-workspace: the JWT is returned in the body so the web tier
     // can refresh its sealed session cookie alongside the JWT cookie.

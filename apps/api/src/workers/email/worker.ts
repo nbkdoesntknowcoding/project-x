@@ -1,31 +1,20 @@
 /**
  * BullMQ Worker for the email queue.
  *
- * Mirrors the pattern from workers/embeddings/worker.ts. Concurrency is
- * intentionally low (2) — email sends are fast I/O but we don't want to
- * hammer Resend's API limits on burst enqueues.
+ * Concurrency 2 — email sends are fast I/O but we don't want to hammer
+ * Resend's rate limits on burst enqueues.
  *
- * On retry exhaustion, BullMQ keeps the job in the failed set with the
- * full job data — can be manually reprocessed via BullMQ dashboard or CLI.
+ * On retry exhaustion BullMQ keeps the job in the failed set.
+ * Error logs intentionally omit the recipient address — log userId instead
+ * to avoid PII leaking into log aggregators.
  */
+
 import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import { config } from '../../config/env.js';
 import { emailSender } from '../../lib/email.js';
-import {
-  invitationEmail,
-  loginAlertEmail,
-  paymentFailedEmail,
-  welcomeEmail,
-} from '../../emails/templates.js';
-import {
-  type EmailJobData,
-  EMAIL_QUEUE_NAME,
-  type InvitationJobParams,
-  type LoginAlertJobParams,
-  type PaymentFailedJobParams,
-  type WelcomeJobParams,
-} from '../../queue/email.js';
+import type { EmailJobData } from '../../queue/email.js';
+import { EMAIL_QUEUE_NAME } from '../../queue/email.js';
 
 export function startEmailWorker(): Worker<EmailJobData> {
   const connection = new IORedis(config.REDIS_URL, {
@@ -38,48 +27,50 @@ export function startEmailWorker(): Worker<EmailJobData> {
       const { type, to, params } = job.data;
 
       switch (type) {
-        case 'invitation': {
-          const p = params as InvitationJobParams;
-          const { subject, html } = invitationEmail(p);
-          await emailSender.send(to, subject, html);
+        case 'welcome':
+          await emailSender.sendWelcome(to, params);
           break;
-        }
-        case 'welcome': {
-          const p = params as WelcomeJobParams;
-          const { subject, html } = welcomeEmail(p);
-          await emailSender.send(to, subject, html);
+        case 'invitation':
+          await emailSender.sendInvitation(to, params);
           break;
-        }
-        case 'login_alert': {
-          const p = params as LoginAlertJobParams;
-          const { subject, html } = loginAlertEmail(p);
-          await emailSender.send(to, subject, html);
+        case 'invitation_accepted':
+          await emailSender.sendInvitationAccepted(to, params);
           break;
-        }
-        case 'payment_failed': {
-          const p = params as PaymentFailedJobParams;
-          const { subject, html } = paymentFailedEmail(p);
-          await emailSender.send(to, subject, html);
+        case 'payment_successful':
+          await emailSender.sendPaymentSuccessful(to, params);
           break;
-        }
+        case 'payment_failed':
+          await emailSender.sendPaymentFailed(to, params);
+          break;
+        case 'subscription_cancelled':
+          await emailSender.sendSubscriptionCancelled(to, params);
+          break;
+        case 'login_alert':
+          await emailSender.sendLoginAlert(to, params);
+          break;
+        case 'trial_ending':
+          await emailSender.sendTrialEnding(to, params);
+          break;
+        case 'renewal_reminder':
+          await emailSender.sendRenewalReminder(to, params);
+          break;
+        case 'mcp_connected':
+          await emailSender.sendMcpConnected(to, params);
+          break;
         default:
           console.error(`[email-worker] unknown job type: ${String(type)}`);
       }
     },
-    {
-      connection,
-      concurrency: 2,
-    },
+    { connection, concurrency: 2 },
   );
 
   worker.on('completed', (job) => {
-    // eslint-disable-next-line no-console
-    console.log(`[email] ${job.id} sent type=${job.data.type} to=${job.data.to}`);
+    console.log(`[email] ${job.id} sent type=${job.data.type}`);
   });
   worker.on('failed', (job, err) => {
+    // Omit `to` from error log — avoid PII in aggregators
     console.error(
-      `[email] ${job?.id ?? '?'} failed type=${job?.data.type} to=${job?.data.to}: ${err.message}`,
-      { jobData: job?.data },
+      `[email] ${job?.id ?? '?'} failed type=${job?.data.type}: ${err.message}`,
     );
   });
   worker.on('error', (err) => {

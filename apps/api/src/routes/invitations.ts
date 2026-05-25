@@ -416,6 +416,38 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
       maxAge: COOKIE_MAX_AGE_SEC,
     });
 
+    // Notify the inviter that their invitation was accepted. Look up inviter
+    // email + workspace name for the template. Fire-and-forget.
+    void (async () => {
+      try {
+        const inviterRows = await db
+          .select({ email: users.email })
+          .from(invitations)
+          .innerJoin(users, eq(users.id, invitations.invitedBy))
+          .where(eq(invitations.tokenJti, claims.jti))
+          .limit(1);
+        const wsRows = await db
+          .select({ name: workspaces.name })
+          .from(workspaces)
+          .where(eq(workspaces.id, result.workspace_id))
+          .limit(1);
+        const inviterEmail = inviterRows[0]?.email;
+        if (inviterEmail) {
+          await emailQueue.add('invitation_accepted', {
+            type: 'invitation_accepted',
+            to: inviterEmail,
+            params: {
+              inviteeName: req.auth!.email,
+              workspaceName: wsRows[0]?.name ?? 'your workspace',
+              membersUrl: `${config.WEB_BASE_URL}/app/settings/members`,
+            },
+          });
+        }
+      } catch (err) {
+        req.log.warn({ err }, 'Failed to enqueue invitation_accepted email');
+      }
+    })();
+
     return { workspace_id: result.workspace_id };
   });
 };

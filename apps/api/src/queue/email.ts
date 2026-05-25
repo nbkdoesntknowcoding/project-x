@@ -1,62 +1,44 @@
 /**
  * BullMQ Queue declaration for the email pipeline.
  *
- * Mirrors the pattern from queue/embeddings.ts — imported by BOTH the api
- * process (which enqueues) AND the worker process (which dequeues).
+ * Imported by BOTH the api process (enqueuer) AND the worker process
+ * (dequeuer). Keep this file free of side effects.
  *
- * Job types:
- *   invitation   — workspace invitation email
- *   welcome      — new workspace welcome email
- *   login_alert  — sign-in notification
- *   payment_failed — payment failure notification
- *
- * Retry: 3 attempts with exponential backoff. On exhaustion, BullMQ moves
- * the job to the failed set and the worker logs the data so it can be
- * reprocessed manually if needed.
+ * 3 attempts with exponential backoff. On exhaustion BullMQ moves the job
+ * to the failed set — manually reprocess via BullMQ dashboard or CLI.
  */
+
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 import { config } from '../config/env.js';
+import type {
+  WelcomeEmailParams,
+  WorkspaceInvitationParams,
+  InvitationAcceptedParams,
+  PaymentSuccessfulParams,
+  PaymentFailedParams,
+  SubscriptionCancelledParams,
+  LoginAlertParams,
+  TrialEndingParams,
+  RenewalReminderParams,
+  McpConnectedParams,
+} from '../emails/templates.js';
+
+export { type WelcomeEmailParams, type WorkspaceInvitationParams };
 
 export const EMAIL_QUEUE_NAME = 'email';
 
-export type EmailJobType = 'invitation' | 'welcome' | 'login_alert' | 'payment_failed';
-
-export interface InvitationJobParams {
-  inviterName: string;
-  workspaceName: string;
-  acceptUrl: string;
-}
-
-export interface WelcomeJobParams {
-  workspaceName: string;
-  loginUrl: string;
-}
-
-export interface LoginAlertJobParams {
-  ipAddress: string;
-  userAgent: string;
-  time: string;
-  workspaceName: string;
-}
-
-export interface PaymentFailedJobParams {
-  workspaceName: string;
-  billingUrl: string;
-  amount: string;
-}
-
-export type EmailJobParams =
-  | InvitationJobParams
-  | WelcomeJobParams
-  | LoginAlertJobParams
-  | PaymentFailedJobParams;
-
-export interface EmailJobData {
-  type: EmailJobType;
-  to: string;
-  params: EmailJobParams;
-}
+export type EmailJobData =
+  | { type: 'welcome';               to: string; params: WelcomeEmailParams }
+  | { type: 'invitation';            to: string; params: WorkspaceInvitationParams }
+  | { type: 'invitation_accepted';   to: string; params: InvitationAcceptedParams }
+  | { type: 'payment_successful';    to: string; params: PaymentSuccessfulParams }
+  | { type: 'payment_failed';        to: string; params: PaymentFailedParams }
+  | { type: 'subscription_cancelled';to: string; params: SubscriptionCancelledParams }
+  | { type: 'login_alert';           to: string; params: LoginAlertParams }
+  | { type: 'trial_ending';          to: string; params: TrialEndingParams }
+  | { type: 'renewal_reminder';      to: string; params: RenewalReminderParams }
+  | { type: 'mcp_connected';         to: string; params: McpConnectedParams };
 
 const connection = new IORedis(config.REDIS_URL, {
   maxRetriesPerRequest: null,
