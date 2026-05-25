@@ -175,6 +175,121 @@ export function renderConsentScreen(reply: FastifyReply, params: ConsentParams):
   reply.header('Content-Type', 'text/html; charset=utf-8').send(html);
 }
 
+interface LoginPageParams {
+  requestId: string;
+  workosLoginUrl: string;
+}
+
+export function renderLoginPage(reply: FastifyReply, params: LoginPageParams): void {
+  const { requestId, workosLoginUrl } = params;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — Mnema</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --surface: #0f0f0f;
+      --surface-2: #1a1a1a;
+      --border: #2a2a2a;
+      --ink: #f0f0f0;
+      --ink-muted: #888;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+    }
+    body {
+      background: var(--surface);
+      color: var(--ink);
+      font-family: 'Geist', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 380px;
+      text-align: center;
+    }
+    .logo {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: -0.02em;
+      margin-bottom: 0.25rem;
+    }
+    .logo span { color: var(--ink-muted); font-weight: 400; }
+    .tagline {
+      font-size: 0.8rem;
+      color: var(--ink-muted);
+      margin-bottom: 2rem;
+    }
+    h1 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+    .sub {
+      font-size: 0.825rem;
+      color: var(--ink-muted);
+      margin-bottom: 1.75rem;
+      line-height: 1.5;
+    }
+    .btn-signin {
+      display: block;
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.7rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.15s;
+      line-height: 1;
+    }
+    .btn-signin:hover { background: var(--accent-hover); }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+    .footer {
+      font-size: 0.75rem;
+      color: var(--ink-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">mnema <span>/ connect</span></div>
+    <p class="tagline">Your team's shared knowledge</p>
+
+    <hr class="divider">
+
+    <h1>Sign in to continue</h1>
+    <p class="sub">You're connecting an external client to your Mnema workspace. Sign in to review and approve access.</p>
+
+    <a class="btn-signin" href="${esc(workosLoginUrl)}">Continue with Mnema</a>
+
+    <hr class="divider">
+    <p class="footer">You'll be asked to choose a workspace after signing in.</p>
+  </div>
+</body>
+</html>`;
+
+  reply.header('Content-Type', 'text/html; charset=utf-8').send(html);
+}
+
 export function renderErrorPage(reply: FastifyReply, opts: { error: string; description?: string }): void {
   const html = `<!DOCTYPE html>
 <html lang="en">

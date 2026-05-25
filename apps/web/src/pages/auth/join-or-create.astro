@@ -29,6 +29,7 @@ const pendingJson = JSON.stringify({
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Join or create workspace · Mnema</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preload" href="/fonts/GeistVF.woff2" as="font" type="font/woff2" crossorigin />
   <script is:inline>
     (function(){var t=localStorage.getItem('mnema-theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();
@@ -52,8 +53,7 @@ const pendingJson = JSON.stringify({
     /* TOPBAR */
     .jc-topbar { position:relative; z-index:2; display:flex; align-items:center; justify-content:space-between; padding:18px 28px; }
     .jc-brand { display:inline-flex; align-items:center; gap:9px; font:600 14px/1 var(--sans); color:var(--ink); text-decoration:none; }
-    .jc-glyph { width:26px; height:26px; border-radius:7px; background:var(--ink); color:var(--on-ink); display:inline-flex; align-items:center; justify-content:center; font:500 17px/1 var(--sans); padding-bottom:2px; position:relative; }
-    .jc-glyph::after { content:""; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(135deg,rgba(255,255,255,0.18),transparent 50%); }
+    .jc-glyph { width:26px; height:26px; border-radius:7px; overflow:hidden; display:inline-flex; flex-shrink:0; }
     .jc-top-right { display:flex; align-items:center; gap:16px; color:var(--ink-muted); font:500 12px/1 var(--sans); }
     .jc-ya { width:18px; height:18px; border-radius:50%; background:linear-gradient(135deg,rgba(var(--accent-rgb),0.95),rgba(255,122,138,0.95)); color:var(--on-ink); font:700 9px/1 var(--sans); display:inline-flex; align-items:center; justify-content:center; }
     .jc-top-right a { color:var(--ink-soft); text-decoration:none; }
@@ -166,7 +166,7 @@ const pendingJson = JSON.stringify({
 
 <header class="jc-topbar">
   <a href="/" class="jc-brand">
-    <span class="jc-glyph">μ</span>
+    <span class="jc-glyph"><img src="/logo.svg" width="26" height="26" alt="Mnema" draggable="false"></span>
     <span>Mnema</span>
   </a>
   <div class="jc-top-right">

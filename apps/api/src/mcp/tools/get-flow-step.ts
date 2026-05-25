@@ -7,6 +7,8 @@ import type { McpAuthContext } from '../auth.js';
 import { requireScope } from '../scope.js';
 import { withAudit } from './audit.js';
 
+export const GET_FLOW_STEP_TOOL_NAME = 'get_flow_step';
+
 /**
  * MCP tool: `get_flow_step`.
  *
@@ -79,7 +81,8 @@ export const GET_FLOW_STEP_TOOL = {
 const argsSchema = z
   .object({
     flow_id: z.string().min(1).max(64),
-    step_index: z.number().int().min(1),
+    // Coerce from string so clients that serialise integers as strings still work
+    step_index: z.coerce.number().int().min(1),
   })
   .strict();
 
@@ -211,6 +214,173 @@ export async function getFlowStep(
             step_index: result.step_index,
             total_steps: result.total_steps,
             has_more: result.has_more,
+          },
+  );
+}
+
+// ── Phase 11 Chunk A: structured result for Walk Simulator ─────────────────
+
+export interface GetFlowStepStructuredResult {
+  content: string;
+  structuredContent: Record<string, unknown>;
+  isError?: boolean;
+}
+
+/**
+ * Same DB logic as `getFlowStep` but returns:
+ *   - A short one-liner `content` string for model orientation
+ *   - Full `structuredContent` for the Walk Simulator HTML panel
+ *   - Decision branch data computed from edges
+ */
+export async function getFlowStepStructured(
+  ctx: McpAuthContext,
+  rawArgs: Record<string, unknown>,
+): Promise<GetFlowStepStructuredResult> {
+  requireScope(ctx, 'docs:read');
+  const args = argsSchema.parse(rawArgs);
+
+  return await withAudit(
+    ctx,
+    { tool_name: GET_FLOW_STEP_TOOL_NAME, args },
+    async () =>
+      withTenant(ctx.tenant_id, async (tx) => {
+        // 1) Resolve the flow by slug, joined to its published version.
+        const flowRows = await tx
+          .select({
+            id: flows.id,
+            slug: flows.slug,
+            name: flows.name,
+            versionId: flowVersions.id,
+          })
+          .from(flows)
+          .innerJoin(flowVersions, eq(flowVersions.id, flows.publishedVersionId))
+          .where(
+            and(
+              eq(flows.slug, args.flow_id),
+              isNull(flows.deletedAt),
+              eq(flowVersions.isPublished, true),
+            ),
+          )
+          .limit(1);
+
+        const flow = flowRows[0];
+        if (!flow) {
+          const message = `No published flow with slug '${args.flow_id}' in this workspace. Call list_flows to see available flows.`;
+          return {
+            content: `Error: ${message}`,
+            structuredContent: { error: 'flow_not_found', message },
+            isError: true,
+          };
+        }
+
+        // 2) Walk the graph topologically.
+        const dbNodes = await tx
+          .select({
+            client_node_id: flowNodes.clientNodeId,
+            kind: flowNodes.kind,
+            title: flowNodes.title,
+            position_x: flowNodes.positionX,
+            position_y: flowNodes.positionY,
+            data: flowNodes.data,
+          })
+          .from(flowNodes)
+          .where(eq(flowNodes.flowVersionId, flow.versionId));
+        const dbEdges = await tx
+          .select({
+            from_node_id: flowEdges.fromNodeId,
+            to_node_id: flowEdges.toNodeId,
+            from_socket: flowEdges.fromSocket,
+          })
+          .from(flowEdges)
+          .where(eq(flowEdges.flowVersionId, flow.versionId));
+
+        const ordered = topologicalWalk(dbNodes, dbEdges);
+
+        // 3) Bounds-check the requested step.
+        if (args.step_index > ordered.length) {
+          const message = `Flow '${args.flow_id}' has ${ordered.length} step${ordered.length === 1 ? '' : 's'}; step ${args.step_index} is past the end.`;
+          return {
+            content: `Error: ${message}`,
+            structuredContent: { error: 'step_out_of_range', message, total_steps: ordered.length },
+            isError: true,
+          };
+        }
+
+        const node = ordered[args.step_index - 1]!;
+        const rendered = await renderNodeContent(node, tx);
+
+        const hasMore = args.step_index < ordered.length;
+        const pauseForUserInput = node.kind === 'instruction';
+
+        // 4) Build nodeToIndex map for decision branch resolution.
+        const nodeToIndex = new Map<string, number>();
+        for (let i = 0; i < ordered.length; i++) {
+          nodeToIndex.set(ordered[i]!.client_node_id, i + 1); // 1-indexed
+        }
+
+        // 5) Compute decision branches if this is a decision node.
+        let decision: { question: string; branches: { label: string; target_step_index: number }[] } | null = null;
+        if (node.kind === 'decision') {
+          const outEdges = dbEdges.filter((e) => e.from_node_id === node.client_node_id);
+          const branches = outEdges
+            .map((e) => ({
+              label: e.from_socket === 'default' ? 'Continue' : e.from_socket,
+              target_step_index: nodeToIndex.get(e.to_node_id) ?? 0,
+            }))
+            .filter((b) => b.target_step_index > 0);
+          const question = (node.data as Record<string, unknown> | null)?.question as string | undefined ?? node.title;
+          decision = { question, branches };
+        }
+
+        // 6) Build structured content.
+        const structuredContent: Record<string, unknown> = {
+          flow: {
+            slug: flow.slug,
+            name: flow.name,
+            total_steps: ordered.length,
+          },
+          step: {
+            index: args.step_index,
+            kind: node.kind,
+            title: node.title,
+            instruction: rendered.instruction,
+            content: rendered.content,
+            source: rendered.source,
+            pause_for_user_input: pauseForUserInput,
+          },
+          decision,
+          progress: {
+            current: args.step_index,
+            total: ordered.length,
+          },
+          has_more: hasMore,
+        };
+
+        // 7) Build short one-liner content string for model orientation.
+        const prefix = `Step ${args.step_index} of ${ordered.length}: '${node.title}'`;
+        let content: string;
+        if (!hasMore) {
+          content = `${prefix} — flow complete.`;
+        } else if (node.kind === 'decision') {
+          content = `${prefix} (decision) — awaiting the user's branch choice in the panel.`;
+        } else if (node.kind === 'instruction') {
+          const snippet = rendered.instruction
+            ? rendered.instruction.slice(0, 100) + (rendered.instruction.length > 100 ? '…' : '')
+            : '';
+          content = `${prefix} (instruction) — ${snippet}`;
+        } else {
+          content = `${prefix} (${node.kind}) — reference material available in the walk panel.`;
+        }
+
+        return { content, structuredContent };
+      }),
+    (result) =>
+      result.isError
+        ? { isError: true }
+        : {
+            flow_id: (result.structuredContent as any)?.flow?.slug,
+            step_index: args.step_index,
+            isError: false,
           },
   );
 }

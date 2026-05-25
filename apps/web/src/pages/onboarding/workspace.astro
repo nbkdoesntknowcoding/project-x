@@ -33,6 +33,7 @@ const userEmail = auth.email;
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Create your workspace · Mnema</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preload" href="/fonts/GeistVF.woff2" as="font" type="font/woff2" crossorigin />
   <script is:inline>
     (function(){var t=localStorage.getItem('mnema-theme')||'dark';document.documentElement.setAttribute('data-theme',t);})();
@@ -71,11 +72,8 @@ const userEmail = auth.email;
     }
     .cw-glyph {
       width: 26px; height: 26px; border-radius: 7px;
-      background: var(--ink); color: var(--on-ink);
-      display: inline-flex; align-items: center; justify-content: center;
-      font: 500 17px/1 var(--sans); padding-bottom: 2px; position: relative;
+      overflow: hidden; display: inline-flex; flex-shrink: 0;
     }
-    .cw-glyph::after { content:""; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%); }
     .cw-top-right { display: flex; align-items: center; gap: 16px; color: var(--ink-muted); font: 500 12px/1 var(--sans); }
     .cw-signed-as { display: inline-flex; align-items: center; gap: 6px; }
     .cw-ya { width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, rgba(var(--accent-rgb),0.95), rgba(255,122,138,0.95)); color: var(--on-ink); font: 700 9px/1 var(--sans); display: inline-flex; align-items: center; justify-content: center; }
@@ -400,12 +398,9 @@ const userEmail = auth.email;
     .cw-done { text-align: center; padding: 8px 0 4px; }
     .cw-done-glyph {
       width: 64px; height: 64px; border-radius: 18px;
-      background: linear-gradient(135deg, rgba(var(--accent-rgb),1), rgba(255,122,138,0.95));
-      display: inline-flex; align-items: center; justify-content: center;
-      color: var(--on-ink); font: 500 38px/1 var(--sans); padding-bottom: 4px;
-      margin-bottom: 16px; position: relative;
+      overflow: hidden; display: inline-flex; flex-shrink: 0;
+      margin-bottom: 16px;
     }
-    .cw-done-glyph::after { content:""; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(135deg, rgba(255,255,255,0.22), transparent 50%); }
     .cw-done h2 { margin: 0 0 6px; font: 600 22px/1.2 var(--sans); letter-spacing: -0.02em; color: var(--ink); }
     .cw-done p { margin: 0 auto; font-size: 13px; color: var(--ink-muted); max-width: 380px; }
     .cw-next-actions { display: flex; flex-direction: column; gap: 6px; margin: 22px 0 4px; }
@@ -474,7 +469,7 @@ const userEmail = auth.email;
 
 <header class="cw-topbar">
   <a href="/" class="cw-brand">
-    <span class="cw-glyph">μ</span>
+    <span class="cw-glyph"><img src="/logo.svg" width="26" height="26" alt="Mnema" draggable="false"></span>
     <span>Mnema</span>
   </a>
   <div class="cw-top-right">
@@ -794,7 +789,7 @@ const userEmail = auth.email;
     <div class="cw-sc" data-sc="4">
       <div class="cw-eyebrow" style="text-align:center;">STEP 4 OF 4 · READY</div>
       <div class="cw-done">
-        <div class="cw-done-glyph">μ</div>
+        <div class="cw-done-glyph"><img src="/logo.svg" width="64" height="64" alt="Mnema" draggable="false"></div>
         <h2 id="cw-done-title">{suggestedSlug} is live</h2>
         <p>Your workspace is set up. Claude is connected. Edit docs and your team — and Claude — see them in real-time.</p>
       </div>

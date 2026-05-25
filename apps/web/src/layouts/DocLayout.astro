@@ -76,13 +76,7 @@ try {
     }
     .dl-glyph {
       width: 20px; height: 20px; border-radius: 5px;
-      background: var(--ink); color: var(--on-ink);
-      display: inline-flex; align-items: center; justify-content: center;
-      font: 500 13px/1 var(--sans); padding-bottom: 1px; position: relative;
-    }
-    .dl-glyph::after {
-      content: ""; position: absolute; inset: 0; border-radius: inherit;
-      background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%);
+      overflow: hidden; display: inline-flex; flex-shrink: 0;
     }
     .dl-tb-div { width: 1px; height: 14px; background: var(--line-strong); flex-shrink: 0; }
     .dl-ws-btn {
@@ -228,7 +222,7 @@ try {
     <header class="dl-topbar">
       <div class="dl-tb-left">
         <a href="/app/content" class="dl-brand">
-          <span class="dl-glyph">μ</span>
+          <span class="dl-glyph"><img src="/logo.svg" width="20" height="20" alt="Mnema" draggable="false"></span>
           <span>Mnema</span>
         </a>
         <span class="dl-tb-div"></span>

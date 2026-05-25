@@ -21,6 +21,7 @@ const error = Astro.url.searchParams.get('error');
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mnema · Check your inbox</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
   <link rel="preload" href="/fonts/geist/Geist-Regular.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/geist/Geist-Medium.woff2" as="font" type="font/woff2" crossorigin />
@@ -71,9 +72,7 @@ const error = Astro.url.searchParams.get('error');
     }
     .v-glyph {
       width: 30px; height: 30px; border-radius: 9px;
-      background: var(--ink); color: var(--on-ink);
-      display: inline-flex; align-items: center; justify-content: center;
-      font: 500 20px/1 var(--sans); padding-bottom: 3px;
+      overflow: hidden; display: inline-flex; flex-shrink: 0;
     }
     .v-main {
       display: flex; align-items: center; justify-content: center;
@@ -155,7 +154,7 @@ const error = Astro.url.searchParams.get('error');
 
 <header class="v-topbar">
   <a href="/" class="v-brand">
-    <span class="v-glyph">μ</span>
+    <span class="v-glyph"><img src="/logo.svg" width="30" height="30" alt="Mnema" draggable="false"></span>
     <span>Mnema</span>
   </a>
 </header>

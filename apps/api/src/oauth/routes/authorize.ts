@@ -31,8 +31,8 @@ import {
 import { withSystemPrivilege } from '../../db/with-system-privilege.js';
 import { JWT_COOKIE_NAME } from '../../plugins/auth.js';
 import { signJwt, verifyJwt } from '../../lib/jwt.js';
-import { renderConsentScreen, renderErrorPage } from '../consent.js';
-import { redirectToWorkOSLogin, completeWorkOSCallback } from '../workos-bridge.js';
+import { renderConsentScreen, renderErrorPage, renderLoginPage } from '../consent.js';
+import { getWorkOSLoginUrl, redirectToWorkOSLogin, completeWorkOSCallback } from '../workos-bridge.js';
 
 // 15-minute cookie lifetime — just long enough to survive the consent round-trip
 const CONSENT_COOKIE_MAX_AGE_SEC = 15 * 60;
@@ -100,8 +100,9 @@ export async function authorizeRoutes(app: FastifyInstance): Promise<void> {
         }
       }
 
-      // No valid session → redirect to WorkOS
-      return redirectToWorkOSLogin(reply, { requestId });
+      // No valid session → show Mnema-branded login page (links to WorkOS)
+      const workosLoginUrl = getWorkOSLoginUrl({ requestId });
+      return renderLoginPage(reply, { requestId, workosLoginUrl });
     },
   );
 

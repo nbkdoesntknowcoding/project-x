@@ -8,6 +8,10 @@ import { PRODUCTION_TOOLS } from './tools/index.js';
 import { callTestProbe, isTestProbeName, registerTestProbe } from './_test-probe.js';
 import { PROBE_HTML } from './apps/probe-html.js';
 import { getWritePreviewHtml } from './apps/write-preview-html.js';
+import { getFlowWalkHtml } from './apps/flow-walk-html.js';
+import { getFlowBuilderHtml } from './apps/flow-builder-html.js';
+import { GET_FLOW_STEP_TOOL, getFlowStepStructured } from './tools/get-flow-step.js';
+import { GET_FLOW_TOOL, getFlowStructured } from './tools/get-flow.js';
 import {
   PROPOSE_DOC_WRITE_TOOL_NAME,
   PROPOSE_DOC_WRITE_TOOL_SPEC,
@@ -55,6 +59,8 @@ import {
 
 const WRITE_PREVIEW_RESOURCE_URI = 'ui://mnema/write-preview.html';
 const PROBE_RESOURCE_URI = 'ui://mnema/probe.html';
+const FLOW_WALK_RESOURCE_URI = 'ui://mnema/flow-walk.html';
+const FLOW_BUILDER_RESOURCE_URI = 'ui://mnema/flow-builder.html';
 const API_ORIGIN = process.env.MCP_BASE_URL ?? 'https://api.theboringpeople.in';
 
 // ── JSON Schema → Zod raw shape converter ──────────────────────────────────
@@ -63,6 +69,11 @@ const API_ORIGIN = process.env.MCP_BASE_URL ?? 'https://api.theboringpeople.in';
 // This converter bridges the two so the SDK stays happy while tools/list
 // still returns a proper (though simplified) schema for Claude to read.
 // Real arg validation happens inside each handler via its own argsSchema.
+//
+// IMPORTANT: 'object' and 'array' types must map to permissive Zod types so
+// the SDK publishes them correctly in tools/list. Without this, the SDK falls
+// through to z.string() and Claude passes objects as JSON strings — the handler
+// then rejects with "expected object, received string".
 type JsonSchemaProp = { type?: string; description?: string };
 type JsonSchemaObj = { type?: string; properties?: Record<string, JsonSchemaProp>; required?: string[] };
 
@@ -77,8 +88,16 @@ function jsonSchemaToZodShape(schema: object): Record<string, z.ZodTypeAny> | un
   for (const [key, prop] of entries) {
     let field: z.ZodTypeAny;
     switch (prop.type) {
-      case 'number':  field = z.number(); break;
+      case 'number':
+      // Coerce for integer too: clients that serialise integers as strings still pass
+      case 'integer': field = z.coerce.number(); break;
       case 'boolean': field = z.boolean(); break;
+      // Object fields (e.g. `data`, `position`): use a permissive record so the
+      // SDK publishes type:object in tools/list and Claude sends a real object.
+      // The handler's own argsSchema does the precise structural validation.
+      case 'object':  field = z.record(z.unknown()); break;
+      // Array fields: use a permissive array for the same reason.
+      case 'array':   field = z.array(z.unknown()); break;
       default:        field = z.string(); break;
     }
     if (prop.description) field = field.describe(prop.description);
@@ -171,6 +190,8 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
           return {
             isError: true,
             content: [{ type: 'text' as const, text: result.message ?? result.error }],
+            // Always include structuredContent — Claude Desktop only opens the panel when present.
+            structuredContent: { error: result.error, message: result.message ?? result.error },
           };
         }
         return {
@@ -178,9 +199,18 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
           structuredContent: result.structuredContent,
         };
       } catch (err) {
-        if (err instanceof McpForbiddenError) throw err;
-        const message = err instanceof Error ? err.message : String(err);
-        return { isError: true, content: [{ type: 'text' as const, text: message }] };
+        // Never re-throw for propose tools — a thrown error produces a bare MCP error
+        // with no structuredContent, which means the panel never opens. Instead return
+        // isError:true with structuredContent so the panel opens and shows the error.
+        const isForbidden = err instanceof McpForbiddenError;
+        const message = isForbidden
+          ? `This MCP token lacks workspace:write scope.`
+          : (err instanceof Error ? err.message : String(err));
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: message }],
+          structuredContent: { error: isForbidden ? 'forbidden' : 'handler_error', message },
+        };
       }
     },
   );
@@ -217,6 +247,8 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
             return {
               isError: true,
               content: [{ type: 'text' as const, text: result.message ?? result.error }],
+              // Always include structuredContent — panel won't open without it.
+              structuredContent: { error: result.error, message: result.message ?? result.error },
             };
           }
           return {
@@ -224,9 +256,16 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
             structuredContent: result.structuredContent,
           };
         } catch (err) {
-          if (err instanceof McpForbiddenError) throw err;
-          const message = err instanceof Error ? err.message : String(err);
-          return { isError: true, content: [{ type: 'text' as const, text: message }] };
+          // Never re-throw for propose tools (see propose_doc_write handler above).
+          const isForbidden = err instanceof McpForbiddenError;
+          const message = isForbidden
+            ? `This MCP token lacks workspace:write scope.`
+            : (err instanceof Error ? err.message : String(err));
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: message }],
+            structuredContent: { error: isForbidden ? 'forbidden' : 'handler_error', message },
+          };
         }
       },
     );
@@ -364,6 +403,130 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
       }),
     );
   }
+
+  // ── Phase 11 Chunk A: get_flow_step as App tool (Walk Simulator UI) ─────────
+  registerAppTool(
+    mcpServer,
+    GET_FLOW_STEP_TOOL.name,
+    {
+      description: GET_FLOW_STEP_TOOL.description,
+      inputSchema: jsonSchemaToZodShape(GET_FLOW_STEP_TOOL.inputSchema),
+      annotations: GET_FLOW_STEP_TOOL.annotations,
+      _meta: {
+        ui: {
+          resourceUri: FLOW_WALK_RESOURCE_URI,
+          visibility: ['model'],
+        },
+      },
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async (args: any) => {
+      try {
+        const result = await getFlowStepStructured(ctx, args as Record<string, unknown>);
+        if (result.isError) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: result.content }],
+            structuredContent: result.structuredContent,
+          };
+        }
+        return {
+          content: [{ type: 'text' as const, text: result.content }],
+          structuredContent: result.structuredContent,
+        };
+      } catch (err) {
+        if (err instanceof McpForbiddenError) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        return { isError: true, content: [{ type: 'text' as const, text: message }] };
+      }
+    },
+  );
+
+  // ── Phase 11 Chunk A: Walk Simulator HTML resource ──────────────────────────
+  registerAppResource(
+    mcpServer,
+    'Flow Walk',
+    FLOW_WALK_RESOURCE_URI,
+    {
+      description: 'Mnema flow walk panel — interactive step-by-step flow walker with branch navigation.',
+    },
+    async () => ({
+      contents: [{
+        uri: FLOW_WALK_RESOURCE_URI,
+        mimeType: 'text/html;profile=mcp-app',
+        text: getFlowWalkHtml(),
+        _meta: {
+          ui: {
+            csp: {
+              connectDomains: [API_ORIGIN],
+            },
+          },
+        },
+      }],
+    }),
+  );
+
+  // ── Phase 12 Chunk A: get_flow as App tool (Flow Builder Canvas) ────────────
+  registerAppTool(
+    mcpServer,
+    GET_FLOW_TOOL.name,
+    {
+      description: GET_FLOW_TOOL.description,
+      inputSchema: jsonSchemaToZodShape(GET_FLOW_TOOL.inputSchema),
+      annotations: GET_FLOW_TOOL.annotations,
+      _meta: {
+        ui: {
+          resourceUri: FLOW_BUILDER_RESOURCE_URI,
+          visibility: ['model'],
+        },
+      },
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    async (args: any) => {
+      try {
+        const result = await getFlowStructured(ctx, args as Record<string, unknown>);
+        if (result.isError) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: result.content }],
+            structuredContent: result.structuredContent,
+          };
+        }
+        return {
+          content: [{ type: 'text' as const, text: result.content }],
+          structuredContent: result.structuredContent,
+        };
+      } catch (err) {
+        if (err instanceof McpForbiddenError) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        return { isError: true, content: [{ type: 'text' as const, text: message }] };
+      }
+    },
+  );
+
+  // ── Phase 12 Chunk A: Flow Builder HTML resource ────────────────────────────
+  registerAppResource(
+    mcpServer,
+    'Flow Builder',
+    FLOW_BUILDER_RESOURCE_URI,
+    {
+      description: 'Mnema flow builder canvas — visual graph of a flow draft with node detail drawer.',
+    },
+    async () => ({
+      contents: [{
+        uri: FLOW_BUILDER_RESOURCE_URI,
+        mimeType: 'text/html;profile=mcp-app',
+        text: getFlowBuilderHtml(),
+        _meta: {
+          ui: {
+            csp: {
+              connectDomains: [API_ORIGIN],
+            },
+          },
+        },
+      }],
+    }),
+  );
 
   return mcpServer;
 }

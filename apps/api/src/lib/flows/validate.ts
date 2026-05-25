@@ -256,12 +256,30 @@ function validateNodeData(node: FlowNode): FlowValidationError[] {
       break;
     }
     case 'decision': {
-      // Phase 6.4 will tighten — for 6.1, we accept the shape but require
-      // a `condition` string so the structure is forward-compat.
-      if (typeof data.condition !== 'string') {
+      // Phase 9.4 shape: { question: string, branches: Record<string,null>, default_branch: string }
+      if (typeof data.question !== 'string' || !(data.question as string).trim()) {
         errors.push({
           code: 'invalid_node_data',
-          message: `Node '${client_node_id}' of kind 'decision' requires a 'condition' string. (Decision routing semantics ship in Phase 6.4.)`,
+          message: `Node '${client_node_id}' of kind 'decision' requires a non-empty 'question' string in data.`,
+          node_id: client_node_id,
+        });
+      }
+      if (
+        !data.branches ||
+        typeof data.branches !== 'object' ||
+        Array.isArray(data.branches) ||
+        Object.keys(data.branches as object).length === 0
+      ) {
+        errors.push({
+          code: 'invalid_node_data',
+          message: `Node '${client_node_id}' of kind 'decision' requires a non-empty 'branches' object in data.`,
+          node_id: client_node_id,
+        });
+      }
+      if (typeof data.default_branch !== 'string') {
+        errors.push({
+          code: 'invalid_node_data',
+          message: `Node '${client_node_id}' of kind 'decision' requires a 'default_branch' string in data.`,
           node_id: client_node_id,
         });
       }

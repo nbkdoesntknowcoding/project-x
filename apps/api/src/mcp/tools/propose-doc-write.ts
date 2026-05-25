@@ -69,7 +69,8 @@ export const PROPOSE_DOC_WRITE_TOOL_SPEC = {
         description: 'For replace_section: the anchor id of the section to replace.',
       },
       expected_anchors: {
-        type: 'string',
+        type: 'array',
+        items: { type: 'string' },
         description: 'For replace_body: optional anchor list for optimistic-concurrency checking.',
       },
       title: {

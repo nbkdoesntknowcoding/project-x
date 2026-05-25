@@ -20,6 +20,7 @@ const errorMessage = errorParam ? (ERROR_MESSAGES[errorParam] ?? 'Something went
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mnema · Sign in</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
   <link rel="preload" href="/fonts/geist/Geist-Regular.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/geist/Geist-Medium.woff2" as="font" type="font/woff2" crossorigin />
@@ -181,14 +182,7 @@ const errorMessage = errorParam ? (ERROR_MESSAGES[errorParam] ?? 'Something went
     }
     .l-brand .l-glyph {
       width: 30px; height: 30px; border-radius: 9px;
-      background: var(--ink); color: var(--on-ink);
-      display: inline-flex; align-items: center; justify-content: center;
-      font: 500 20px/1 var(--sans); padding-bottom: 3px;
-      position: relative;
-    }
-    .l-brand .l-glyph::after {
-      content: ""; position: absolute; inset: 0; border-radius: inherit;
-      background: linear-gradient(135deg, rgba(255,255,255,0.16), transparent 50%);
+      overflow: hidden; display: inline-flex; flex-shrink: 0;
     }
     .l-top-link {
       font: 500 13.5px/1 var(--sans);
@@ -254,17 +248,9 @@ const errorMessage = errorParam ? (ERROR_MESSAGES[errorParam] ?? 'Something went
     }
     .l-glyph-lg {
       width: 56px; height: 56px;
-      background: var(--surface-2);
       border-radius: 16px;
-      display: inline-flex; align-items: center; justify-content: center;
-      font: 500 38px/1 var(--sans); color: var(--ink);
-      padding-bottom: 5px;
-      position: relative;
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.1),
-        inset 0 0 0 1px rgba(255,255,255,0.06);
+      overflow: hidden; display: inline-flex; flex-shrink: 0;
     }
-    [data-theme="light"] .l-glyph-lg { background: var(--ink); color: var(--on-ink); }
 
     .l-card h1 {
       margin: 0 0 8px;
@@ -535,7 +521,7 @@ const errorMessage = errorParam ? (ERROR_MESSAGES[errorParam] ?? 'Something went
 <!-- Topbar -->
 <header class="l-topbar">
   <a href="/" class="l-brand">
-    <span class="l-glyph">μ</span>
+    <span class="l-glyph"><img src="/logo.svg" width="30" height="30" alt="Mnema" draggable="false"></span>
     <span>Mnema</span>
   </a>
   <div class="l-top-link">New to Mnema? <a href="/signup">Create an account →</a></div>
@@ -547,7 +533,7 @@ const errorMessage = errorParam ? (ERROR_MESSAGES[errorParam] ?? 'Something went
 
     <div class="l-card" role="form" aria-label="Sign in">
       <div class="l-auth-mark">
-        <span class="l-glyph-lg">μ</span>
+        <span class="l-glyph-lg"><img src="/logo.svg" width="56" height="56" alt="Mnema" draggable="false"></span>
       </div>
 
       <h1>Welcome back</h1>

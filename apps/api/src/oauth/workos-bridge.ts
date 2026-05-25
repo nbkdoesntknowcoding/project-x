@@ -16,6 +16,20 @@ import { config } from '../config/env.js';
 import { workos } from '../plugins/workos.js';
 
 /**
+ * Build the WorkOS AuthKit login URL (does NOT redirect — caller decides).
+ */
+export function getWorkOSLoginUrl(opts: { requestId: string }): string {
+  return workos.userManagement.getAuthorizationUrl({
+    provider: 'authkit',
+    clientId: config.WORKOS_CLIENT_ID,
+    redirectUri: config.WORKOS_REDIRECT_URI_OAUTH,
+    // Carry the request_id through WorkOS's state param so the callback
+    // can resume the correct pending authorize request.
+    state: opts.requestId,
+  });
+}
+
+/**
  * Redirect an unauthenticated user to WorkOS AuthKit login.
  * The `state` param carries the OAuth request_id so the callback
  * knows which pending authorize request to resume.
@@ -24,15 +38,7 @@ export async function redirectToWorkOSLogin(
   reply: FastifyReply,
   opts: { requestId: string },
 ): Promise<void> {
-  const authUrl = workos.userManagement.getAuthorizationUrl({
-    provider: 'authkit',
-    clientId: config.WORKOS_CLIENT_ID,
-    redirectUri: config.WORKOS_REDIRECT_URI_OAUTH,
-    // Carry the request_id through WorkOS's state param so the callback
-    // can resume the correct pending authorize request.
-    state: opts.requestId,
-  });
-  reply.redirect(authUrl, 302);
+  reply.redirect(getWorkOSLoginUrl(opts), 302);
 }
 
 export interface WorkOSIdentity {

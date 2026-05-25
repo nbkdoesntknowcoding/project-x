@@ -1,32 +1,22 @@
 import type { McpAuthContext } from '../auth.js';
-import {
-  APPEND_BLOCKS_TO_DOC_TOOL,
-  appendBlocksToDoc,
-} from './append-blocks-to-doc.js';
 import { ADD_FLOW_NODE_TOOL, addFlowNode } from './add-flow-node.js';
 import { CONNECT_FLOW_NODES_TOOL, connectFlowNodes } from './connect-flow-nodes.js';
-import { CREATE_DOC_TOOL, createDoc } from './create-doc.js';
 import { CREATE_FLOW_TOOL, createFlow } from './create-flow.js';
 import { CREATE_FOLDER_TOOL, createFolder } from './create-folder.js';
 import { GET_DOC_SECTION_TOOL, getDocSection } from './get-doc-section.js';
 import { GET_DOC_TOOL, getDoc } from './get-doc.js';
-import { GET_FLOW_STEP_TOOL, getFlowStep } from './get-flow-step.js';
-import { GET_FLOW_TOOL, getFlow } from './get-flow.js';
+// get-flow-step is registered in server.ts as an App tool (Phase 11 Chunk A)
+// get-flow is registered in server.ts as an App tool (Phase 12 Chunk A)
 import { LIST_DOCS_TOOL, listDocs } from './list-docs.js';
 import { LIST_FLOWS_TOOL, listFlows } from './list-flows.js';
 import { LIST_FOLDERS_TOOL, listFolders } from './list-folders.js';
 import { MOVE_DOC_TOOL, moveDoc } from './move-doc.js';
 import { MOVE_FOLDER_TOOL, moveFolder } from './move-folder.js';
 import { NOTIFY_MEMBERS_TOOL, notifyMembers } from './notify-members.js';
-import { PUBLISH_FLOW_TOOL, publishFlow } from './publish-flow.js';
 import { REMOVE_FLOW_EDGE_TOOL, removeFlowEdge } from './remove-flow-edge.js';
 import { REMOVE_FLOW_NODE_TOOL, removeFlowNode } from './remove-flow-node.js';
 import { RENAME_FOLDER_TOOL, renameFolder } from './rename-folder.js';
-import { REPLACE_DOC_BODY_TOOL, replaceDocBody } from './replace-doc-body.js';
-import { REPLACE_DOC_SECTION_TOOL, replaceDocSection } from './replace-doc-section.js';
 import { SEARCH_DOCS_TOOL, searchDocs } from './search-docs.js';
-import { TRASH_DOC_TOOL, trashDoc } from './trash-doc.js';
-import { TRASH_FOLDER_TOOL, trashFolder } from './trash-folder.js';
 import { UPDATE_FLOW_NODE_TOOL, updateFlowNode } from './update-flow-node.js';
 
 /**
@@ -42,6 +32,20 @@ import { UPDATE_FLOW_NODE_TOOL, updateFlowNode } from './update-flow-node.js';
  * search_docs and list_docs would technically work. list_docs stays a
  * separate tool because "show me all my docs" is a different intent than
  * "find docs about X" — both are legitimate.
+ *
+ * Phase 11 changes:
+ *   - get_flow_step removed from here; re-registered in server.ts as an App
+ *     tool via registerAppTool (adds Walk Simulator UI panel). Chunk A.
+ *   - 7 direct-write tools removed from model visibility (Chunk B). They
+ *     bypass the propose/commit pattern and must no longer be model-callable.
+ *     Their handler functions remain importable for commit handlers:
+ *       appendBlocksToDoc, createDoc, replaceDocSection, replaceDocBody,
+ *       trashDoc, trashFolder, publishFlow.
+ *
+ * Phase 12 changes:
+ *   - get_flow removed from here; re-registered in server.ts as an App tool
+ *     via registerAppTool (adds Flow Builder Canvas UI panel). Chunk A.
+ *     getFlow handler stays importable (used by commit handlers if needed).
  */
 
 export interface McpToolSpec {
@@ -66,37 +70,27 @@ export const PRODUCTION_TOOLS: readonly ToolDescriptor[] = [
   { spec: LIST_DOCS_TOOL, handler: listDocs },
   { spec: GET_DOC_TOOL, handler: getDoc },
   { spec: GET_DOC_SECTION_TOOL, handler: getDocSection },
-  // Phase 6.1: real flow tools. list_flows returns published flows in the
-  // workspace; get_flow_step walks one step of a published flow per call.
-  // Drafts are deliberately invisible to MCP — only published versions are
-  // walkable.
+  // Phase 6.1: list_flows returns published flows in the workspace.
+  // get_flow_step is registered in server.ts as an App tool (Phase 11 Chunk A).
   { spec: LIST_FLOWS_TOOL, handler: listFlows },
-  { spec: GET_FLOW_STEP_TOOL, handler: getFlowStep },
-  // Phase 9.1: write tools. append_blocks_to_doc is the only write tool;
-  // it requires workspace:write scope + user confirmation + live role check.
-  { spec: APPEND_BLOCKS_TO_DOC_TOOL, handler: appendBlocksToDoc },
-  // Phase 9.2: additional write tools.
-  { spec: CREATE_DOC_TOOL, handler: createDoc },
-  { spec: REPLACE_DOC_SECTION_TOOL, handler: replaceDocSection },
-  { spec: REPLACE_DOC_BODY_TOOL, handler: replaceDocBody },
-  { spec: TRASH_DOC_TOOL, handler: trashDoc },
-  // Phase 9.3: folder organisation — 1 read + 5 write tools.
+  // Phase 9.3: folder organisation — 1 read + 3 non-destructive write tools.
+  // create_folder, move_doc, move_folder, rename_folder are safe direct writes.
+  // trash_folder is routed through propose/commit (removed from model here — Phase 11 Chunk B).
   { spec: LIST_FOLDERS_TOOL, handler: listFolders },
   { spec: CREATE_FOLDER_TOOL, handler: createFolder },
   { spec: MOVE_DOC_TOOL, handler: moveDoc },
   { spec: MOVE_FOLDER_TOOL, handler: moveFolder },
   { spec: RENAME_FOLDER_TOOL, handler: renameFolder },
-  { spec: TRASH_FOLDER_TOOL, handler: trashFolder },
-  // Phase 9.4: flow writes — 1 new read + 7 write tools.
-  // get_flow returns the DRAFT graph (for editing); get_flow_step serves PUBLISHED.
-  { spec: GET_FLOW_TOOL, handler: getFlow },
+  // Phase 9.4: flow writes — structural write tools.
+  // get_flow re-registered in server.ts as App tool (Phase 12 Chunk A).
+  // get_flow_step re-registered in server.ts as App tool (Phase 11 Chunk A).
+  // publish_flow routed through propose/commit (removed Phase 11 Chunk B).
   { spec: CREATE_FLOW_TOOL, handler: createFlow },
   { spec: ADD_FLOW_NODE_TOOL, handler: addFlowNode },
   { spec: UPDATE_FLOW_NODE_TOOL, handler: updateFlowNode },
   { spec: REMOVE_FLOW_NODE_TOOL, handler: removeFlowNode },
   { spec: CONNECT_FLOW_NODES_TOOL, handler: connectFlowNodes },
   { spec: REMOVE_FLOW_EDGE_TOOL, handler: removeFlowEdge },
-  { spec: PUBLISH_FLOW_TOOL, handler: publishFlow },
   // Phase 9.5: notify_members — sends in-app notifications to workspace members.
   { spec: NOTIFY_MEMBERS_TOOL, handler: notifyMembers },
 ];

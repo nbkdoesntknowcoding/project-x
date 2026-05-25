@@ -76,13 +76,7 @@ if (auth) {
     }
     .ap-glyph {
       width: 22px; height: 22px; border-radius: 6px;
-      background: var(--ink); color: var(--on-ink);
-      display: inline-flex; align-items: center; justify-content: center;
-      font: 500 14px/1 var(--sans); padding-bottom: 1px; position: relative;
-    }
-    .ap-glyph::after {
-      content: ""; position: absolute; inset: 0; border-radius: inherit;
-      background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%);
+      overflow: hidden; display: inline-flex; flex-shrink: 0;
     }
     .ap-tb-div { width: 1px; height: 16px; background: var(--line-strong); flex-shrink: 0; }
     .ap-ws-btn {
@@ -197,7 +191,7 @@ if (auth) {
     <header class="ap-topbar">
       <div class="ap-tb-left">
         <a href="/app/content" class="ap-brand">
-          <span class="ap-glyph">μ</span>
+          <span class="ap-glyph"><img src="/logo.svg" width="22" height="22" alt="Mnema" draggable="false"></span>
           <span>Mnema</span>
         </a>
         <span class="ap-tb-div"></span>

@@ -77,6 +77,13 @@ export const CONNECT_FLOW_NODES_TOOL = {
     'Returns { from_node_id, to_node_id, branch_label } on success.',
     'Errors: flow_not_found, node_not_found, too_many_outputs, unexpected_branch,',
     '        branch_required, unknown_branch, flow_cycle.',
+    '',
+    'SEQUENCING — add all nodes first, then connect them. Batch edge creation at',
+    'the end of the node phase. Adding edges incrementally (one per node) makes the',
+    'in-progress graph look incomplete and harder to review.',
+    'Exception: decision node outgoing edges — connect these immediately after',
+    'adding the decision node to avoid leaving dangling branches visible in the',
+    'canvas.',
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,
