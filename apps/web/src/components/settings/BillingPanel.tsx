@@ -38,18 +38,19 @@ interface Invoice {
 // Tier rank for upgrade / downgrade labelling
 const TIER_RANK: Record<string, number> = { free: 0, individual: 1, team: 2, business: 3 };
 
-/** Safely extract a human-readable message from whatever the API returns as `error`. */
+/** Safely extract a human-readable message from whatever the API returns. */
 function extractErrorMessage(body: Record<string, unknown>, fallback: string): string {
+  // Prefer detail (Razorpay description) over generic error code
+  if (typeof body.detail === 'string' && body.detail) return body.detail;
+  if (typeof body.message === 'string' && body.message) return body.message;
   const e = body.error;
-  if (typeof e === 'string') return e;
+  if (typeof e === 'string' && e) return e;
   if (e && typeof e === 'object') {
     const obj = e as Record<string, unknown>;
     if (typeof obj.description === 'string') return obj.description;
     if (typeof obj.message === 'string') return obj.message;
     return JSON.stringify(obj);
   }
-  if (typeof body.detail === 'string') return body.detail;
-  if (typeof body.message === 'string') return body.message;
   return fallback;
 }
 

@@ -50,9 +50,10 @@ const handler: APIRoute = async (context) => {
   let upstream: Response;
   try {
     upstream = await fetch(target, init);
-  } catch {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
     return new Response(
-      JSON.stringify({ error: 'Backend unreachable', target }),
+      JSON.stringify({ error: `Backend unreachable: ${msg}`, target }),
       { status: 502, headers: { 'content-type': 'application/json' } },
     );
   }

@@ -370,7 +370,6 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
         customer_id: customerId,
         quantity: billableSeats,
         total_count: 120,
-        callback_url: `${webBaseUrl}/app/settings/billing?checkout=success`,
         notes: {
           workspace_id: req.auth.tenant_id,
           plan_slug: plan,
@@ -475,9 +474,9 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
         customer_id: customerId,
         quantity: billableSeats,
         total_count: 120, // up to 10 years — effectively open-ended
-        // Razorpay hosted page redirects here after successful payment.
-        callback_url: `${webBaseUrl}/app/settings/billing?checkout=success`,
-        // Pass billing metadata in notes so webhook can reconstruct it
+        // NOTE: callback_url is NOT accepted by Razorpay subscriptions.create —
+        // the post-payment redirect URL must be set in the Razorpay Dashboard
+        // under Settings → Checkout Settings → Redirect URL.
         notes: {
           workspace_id: req.auth.tenant_id,
           plan_slug: plan,
