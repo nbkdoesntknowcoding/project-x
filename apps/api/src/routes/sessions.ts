@@ -13,7 +13,7 @@
  * GET /api/sessions/:id/export   — Markdown export (Content-Type: text/markdown)
  */
 
-import { and, asc, desc, eq, gte, isNotNull, lte, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, lte, sql, sum } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { db } from '../db/index.js';
 import { agentSessions, fileDiffs, tasks, toolCalls } from '../db/schema.js';
@@ -95,7 +95,7 @@ export const sessionsRoutes: FastifyPluginAsync = async (app) => {
         tx
           .select({ id: tasks.id, title: tasks.title })
           .from(tasks)
-          .where(sql`${tasks.id} = ANY(${taskIds})`),
+          .where(inArray(tasks.id, taskIds)),
       );
       for (const t of taskRows) taskTitleMap[t.id] = t.title;
     }

@@ -96,3 +96,21 @@ CREATE POLICY "tool_calls_superuser"    ON tool_calls    USING (current_user = '
 CREATE POLICY "file_diffs_superuser"    ON file_diffs    USING (current_user = 'boppl');
 CREATE POLICY "model_pricing_superuser" ON model_pricing USING (current_user = 'boppl');
 CREATE POLICY "budget_configs_superuser" ON budget_configs USING (current_user = 'boppl');
+
+-- Workspace isolation for app_user (tenant-scoped access via GUC)
+CREATE POLICY "tool_calls_workspace_isolation"
+  ON tool_calls
+  USING (workspace_id = (current_setting('app.tenant_id', true))::uuid);
+
+CREATE POLICY "file_diffs_workspace_isolation"
+  ON file_diffs
+  USING (workspace_id = (current_setting('app.tenant_id', true))::uuid);
+
+CREATE POLICY "model_pricing_read_all"
+  ON model_pricing
+  FOR SELECT
+  USING (is_active = true);
+
+CREATE POLICY "budget_configs_workspace_isolation"
+  ON budget_configs
+  USING (workspace_id = (current_setting('app.tenant_id', true))::uuid);
