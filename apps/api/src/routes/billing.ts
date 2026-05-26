@@ -230,6 +230,159 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
+  // -------------------------------------------------------------------------
+  // GET /api/billing/payments — payment / invoice history for this workspace.
+  // Fetches invoices live from Razorpay (no local mirror needed).
+  // -------------------------------------------------------------------------
+  app.get('/api/billing/payments', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    await requireRole(req, 'viewer');
+
+    // Find the most recent subscription that has a Razorpay ID
+    const subRows = await db.select({
+      razorpaySubscriptionId: subscriptions.razorpaySubscriptionId,
+    })
+      .from(subscriptions)
+      .where(eq(subscriptions.workspaceId, req.auth.tenant_id))
+      .orderBy(desc(subscriptions.createdAt))
+      .limit(1);
+
+    if (subRows.length === 0) {
+      return { invoices: [] };
+    }
+
+    const { razorpaySubscriptionId } = subRows[0]!;
+    const razorpay = (await import('../lib/razorpay/client.js')).razorpay;
+
+    // Razorpay generates invoices automatically for subscription charges.
+    interface RazorpayInvoice {
+      id: string;
+      date: number;          // Unix timestamp
+      description?: string;
+      amount_paid: number;   // in paise
+      amount_due: number;
+      currency: string;
+      status: string;        // 'paid' | 'issued' | 'draft' | 'cancelled' | 'expired'
+      short_url?: string;    // hosted invoice page (PDF download link)
+    }
+    interface InvoiceListResponse { items: RazorpayInvoice[]; count: number; }
+
+    let items: RazorpayInvoice[] = [];
+    try {
+      const result = await (razorpay.invoices.all({
+        subscription_id: razorpaySubscriptionId,
+        count: 12,
+      }) as Promise<InvoiceListResponse>);
+      items = result.items ?? [];
+    } catch (err) {
+      req.log.warn({ err }, 'Failed to fetch Razorpay invoices');
+      // Return empty list rather than 500 — UI shows "No payments yet"
+      return { invoices: [] };
+    }
+
+    const invoices = items.map((inv) => ({
+      id: inv.id,
+      date: inv.date ? new Date(inv.date * 1000).toISOString() : null,
+      description: inv.description ?? 'Subscription charge',
+      amount_paid: inv.amount_paid,   // paise — frontend divides by 100
+      amount_due: inv.amount_due,
+      currency: inv.currency ?? 'INR',
+      status: inv.status,
+      download_url: inv.short_url ?? null,
+    }));
+
+    return { invoices };
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/billing/change-plan — immediate plan change.
+  // Cancels current subscription right away, starts a new checkout.
+  // The user pays full price for the new plan from day one.
+  // -------------------------------------------------------------------------
+  app.post('/api/billing/change-plan', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    await requireRole(req, 'owner');
+
+    const parsed = subscribeSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'bad_request', details: parsed.error.flatten() });
+
+    const { plan, cycle } = parsed.data;
+    const currency = detectCurrency(req.headers as Record<string, string | string[] | undefined>);
+
+    // Resolve new Razorpay plan_id
+    let razorpayPlanId: string;
+    try {
+      razorpayPlanId = getPlanId(plan as PlanSlug, cycle as BillingCycle, currency);
+    } catch (err) {
+      req.log.warn({ err, plan, cycle, currency }, 'plan_not_configured');
+      return reply.code(400).send({ error: 'plan_not_configured', detail: (err as Error).message });
+    }
+
+    const razorpay = (await import('../lib/razorpay/client.js')).razorpay;
+
+    // Cancel current active subscription immediately (not at period end)
+    const activeSubs = await db.select({
+      razorpaySubscriptionId: subscriptions.razorpaySubscriptionId,
+    })
+      .from(subscriptions)
+      .where(and(
+        eq(subscriptions.workspaceId, req.auth.tenant_id),
+        inArray(subscriptions.status, ['active', 'trialing', 'created']),
+      ))
+      .orderBy(desc(subscriptions.createdAt))
+      .limit(1);
+
+    if (activeSubs.length > 0) {
+      const oldSubId = activeSubs[0]!.razorpaySubscriptionId;
+      try {
+        await razorpay.subscriptions.cancel(oldSubId, false); // false = immediate
+        await db.update(subscriptions)
+          .set({ status: 'cancelled', canceledAt: new Date(), updatedAt: new Date() })
+          .where(eq(subscriptions.razorpaySubscriptionId, oldSubId));
+      } catch (err) {
+        req.log.warn({ err, oldSubId }, 'Failed to cancel old subscription during plan change');
+        // Continue — create the new subscription anyway
+      }
+    }
+
+    // Count writer seats and ensure customer exists
+    const billableSeats = await countBillableSeats(req.auth.tenant_id);
+    let customerId = await getRazorpayCustomerForWorkspace(req.auth.tenant_id);
+    if (!customerId) {
+      const wsRows = await db.select({ slug: workspaces.slug, name: workspaces.name })
+        .from(workspaces)
+        .where(eq(workspaces.id, req.auth.tenant_id))
+        .limit(1);
+      if (wsRows.length === 0) return reply.code(404).send({ error: 'workspace_not_found' });
+      customerId = await createRazorpayCustomerForWorkspace({
+        workspaceId: req.auth.tenant_id,
+        workspaceSlug: wsRows[0]!.slug,
+        workspaceName: wsRows[0]!.name,
+        ownerEmail: req.auth.email,
+      });
+    }
+
+    const webBaseUrl = config.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in';
+    const subscription = await (razorpay.subscriptions.create({
+      plan_id: razorpayPlanId,
+      customer_id: customerId,
+      quantity: billableSeats,
+      total_count: 120,
+      callback_url: `${webBaseUrl}/app/settings/billing?checkout=success`,
+      notes: {
+        workspace_id: req.auth.tenant_id,
+        plan_slug: plan,
+        billing_cycle: cycle,
+        billing_currency: currency,
+      },
+    } as Parameters<typeof razorpay.subscriptions.create>[0]) as Promise<{ id: string; short_url: string }>);
+
+    return {
+      subscription_id: subscription.id,
+      short_url: subscription.short_url,
+    };
+  });
+
   // Lazy-create Razorpay customer (called from checkout flow in Phase 5)
   app.post('/api/billing/ensure-customer', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
