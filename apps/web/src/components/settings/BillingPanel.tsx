@@ -223,25 +223,33 @@ export function BillingPanel(): JSX.Element {
 
   // ── Checkout helpers ──────────────────────────────────────────────────────
 
+  async function callSubscribeAPI(endpoint: string, plan: PlanSlug, billingCycle: BillingCycle): Promise<string | null> {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan, cycle: billingCycle }),
+    });
+    // If the response isn't JSON (e.g. Vercel 504 HTML timeout page), surface
+    // the HTTP status instead of a generic "Network error" message.
+    const text = await res.text();
+    let body: Record<string, unknown>;
+    try {
+      body = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      throw new Error(`Server returned HTTP ${res.status}. The request may have timed out — please try again.`);
+    }
+    if (typeof body.short_url === 'string') return body.short_url;
+    throw new Error(extractErrorMessage(body, `Could not start checkout (HTTP ${res.status}). Please email support@theboringpeople.in.`));
+  }
+
   async function startNewSubscription(plan: PlanSlug, billingCycle: BillingCycle = 'monthly'): Promise<void> {
     setChangingPlan(plan);
     try {
-      const res = await fetch('/api/billing/subscribe', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan, cycle: billingCycle }),
-      });
-      const body = await res.json() as Record<string, unknown>;
-      const url = typeof body.short_url === 'string' ? body.short_url : null;
-      if (url) {
-        window.location.href = url;
-      } else {
-        alert(extractErrorMessage(body, 'Could not start checkout. Please email support@theboringpeople.in.'));
-        setChangingPlan(null);
-      }
-    } catch {
-      alert('Network error. Please check your connection and try again.');
+      const url = await callSubscribeAPI('/api/billing/subscribe', plan, billingCycle);
+      if (url) window.location.href = url;
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Could not start checkout. Please email support@theboringpeople.in.');
       setChangingPlan(null);
     }
   }
@@ -249,22 +257,10 @@ export function BillingPanel(): JSX.Element {
   async function changePlan(plan: PlanSlug, billingCycle: BillingCycle): Promise<void> {
     setChangingPlan(plan);
     try {
-      const res = await fetch('/api/billing/change-plan', {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan, cycle: billingCycle }),
-      });
-      const body = await res.json() as Record<string, unknown>;
-      const url = typeof body.short_url === 'string' ? body.short_url : null;
-      if (url) {
-        window.location.href = url;
-      } else {
-        alert(extractErrorMessage(body, 'Could not change plan. Please email support@theboringpeople.in.'));
-        setChangingPlan(null);
-      }
-    } catch {
-      alert('Network error. Please check your connection and try again.');
+      const url = await callSubscribeAPI('/api/billing/change-plan', plan, billingCycle);
+      if (url) window.location.href = url;
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Could not change plan. Please email support@theboringpeople.in.');
       setChangingPlan(null);
     }
   }

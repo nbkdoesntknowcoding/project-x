@@ -68,6 +68,11 @@ const handler: APIRoute = async (context) => {
   });
 };
 
+// Extend Vercel function timeout to 60s — billing routes make multiple
+// Razorpay API calls which can take 5-15s combined, easily hitting the
+// default 10s limit and returning an HTML 504 that breaks res.json().
+export const maxDuration = 60;
+
 export const GET = handler;
 export const POST = handler;
 export const PUT = handler;
