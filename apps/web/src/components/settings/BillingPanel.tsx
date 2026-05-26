@@ -333,7 +333,7 @@ export function BillingPanel(): JSX.Element {
     planName: string,
     onDismiss: () => void,
   ): void {
-    const keyId = (import.meta.env as Record<string, string>).PUBLIC_RAZORPAY_KEY_ID;
+    const keyId = ((import.meta.env as Record<string, string>).PUBLIC_RAZORPAY_KEY_ID ?? '').trim();
     if (!keyId) {
       alert('Payment system is not configured. Please contact support@theboringpeople.in.');
       onDismiss();
