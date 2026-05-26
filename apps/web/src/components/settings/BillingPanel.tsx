@@ -38,6 +38,21 @@ interface Invoice {
 // Tier rank for upgrade / downgrade labelling
 const TIER_RANK: Record<string, number> = { free: 0, individual: 1, team: 2, business: 3 };
 
+/** Safely extract a human-readable message from whatever the API returns as `error`. */
+function extractErrorMessage(body: Record<string, unknown>, fallback: string): string {
+  const e = body.error;
+  if (typeof e === 'string') return e;
+  if (e && typeof e === 'object') {
+    const obj = e as Record<string, unknown>;
+    if (typeof obj.description === 'string') return obj.description;
+    if (typeof obj.message === 'string') return obj.message;
+    return JSON.stringify(obj);
+  }
+  if (typeof body.detail === 'string') return body.detail;
+  if (typeof body.message === 'string') return body.message;
+  return fallback;
+}
+
 const PAID_PLAN_SLUGS: PlanSlug[] = ['individual', 'team', 'business'];
 
 function formatAmount(paise: number, currency: string): string {
@@ -217,11 +232,12 @@ export function BillingPanel(): JSX.Element {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan, cycle: billingCycle }),
       });
-      const body = await res.json() as { short_url?: string; error?: string; detail?: string };
-      if (body.short_url) {
-        window.location.href = body.short_url;
+      const body = await res.json() as Record<string, unknown>;
+      const url = typeof body.short_url === 'string' ? body.short_url : null;
+      if (url) {
+        window.location.href = url;
       } else {
-        alert(body.error ?? body.detail ?? 'Could not start checkout. Please email support@theboringpeople.in.');
+        alert(extractErrorMessage(body, 'Could not start checkout. Please email support@theboringpeople.in.'));
         setChangingPlan(null);
       }
     } catch {
@@ -239,11 +255,12 @@ export function BillingPanel(): JSX.Element {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan, cycle: billingCycle }),
       });
-      const body = await res.json() as { short_url?: string; error?: string; detail?: string };
-      if (body.short_url) {
-        window.location.href = body.short_url;
+      const body = await res.json() as Record<string, unknown>;
+      const url = typeof body.short_url === 'string' ? body.short_url : null;
+      if (url) {
+        window.location.href = url;
       } else {
-        alert(body.error ?? body.detail ?? 'Could not change plan. Please email support@theboringpeople.in.');
+        alert(extractErrorMessage(body, 'Could not change plan. Please email support@theboringpeople.in.'));
         setChangingPlan(null);
       }
     } catch {

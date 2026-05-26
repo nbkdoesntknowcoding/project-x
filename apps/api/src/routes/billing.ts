@@ -363,19 +363,31 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const webBaseUrl = config.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in';
-    const subscription = await (razorpay.subscriptions.create({
-      plan_id: razorpayPlanId,
-      customer_id: customerId,
-      quantity: billableSeats,
-      total_count: 120,
-      callback_url: `${webBaseUrl}/app/settings/billing?checkout=success`,
-      notes: {
-        workspace_id: req.auth.tenant_id,
-        plan_slug: plan,
-        billing_cycle: cycle,
-        billing_currency: currency,
-      },
-    } as Parameters<typeof razorpay.subscriptions.create>[0]) as Promise<{ id: string; short_url: string }>);
+    let subscription: { id: string; short_url: string };
+    try {
+      subscription = await (razorpay.subscriptions.create({
+        plan_id: razorpayPlanId,
+        customer_id: customerId,
+        quantity: billableSeats,
+        total_count: 120,
+        callback_url: `${webBaseUrl}/app/settings/billing?checkout=success`,
+        notes: {
+          workspace_id: req.auth.tenant_id,
+          plan_slug: plan,
+          billing_cycle: cycle,
+          billing_currency: currency,
+        },
+      } as Parameters<typeof razorpay.subscriptions.create>[0]) as Promise<{ id: string; short_url: string }>);
+    } catch (err: unknown) {
+      const rzErr = err as { error?: { description?: string; code?: string }; statusCode?: number };
+      const detail = rzErr?.error?.description ?? (err instanceof Error ? err.message : String(err));
+      req.log.error({ err, plan, cycle, currency }, 'razorpay_change_plan_create_failed');
+      return reply.code(502).send({ error: 'payment_provider_error', detail });
+    }
+
+    if (!subscription.short_url) {
+      return reply.code(502).send({ error: 'payment_provider_error', detail: 'No checkout URL returned. Please try again.' });
+    }
 
     return {
       subscription_id: subscription.id,
@@ -452,23 +464,38 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
 
     const razorpay = (await import('../lib/razorpay/client.js')).razorpay;
     const webBaseUrl = config.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in';
-    // The Razorpay SDK types are incomplete — customer_id and callback_url are
-    // valid fields per the API docs but missing from the TypeScript definitions.
-    const subscription = await (razorpay.subscriptions.create({
-      plan_id: razorpayPlanId,
-      customer_id: customerId,
-      quantity: billableSeats,
-      total_count: 120, // up to 10 years — effectively open-ended
-      // Razorpay hosted page redirects here after successful payment.
-      callback_url: `${webBaseUrl}/app/settings/billing?checkout=success`,
-      // Pass billing metadata in notes so webhook can reconstruct it
-      notes: {
-        workspace_id: req.auth.tenant_id,
-        plan_slug: plan,
-        billing_cycle: cycle,
-        billing_currency: currency,
-      },
-    } as Parameters<typeof razorpay.subscriptions.create>[0]) as Promise<{ id: string; short_url: string }>);
+
+    // The Razorpay SDK throws a plain object (not an Error) on API errors:
+    // { statusCode, error: { code, description, ... } }
+    // Wrap in try/catch to return a clean string error to the frontend.
+    let subscription: { id: string; short_url: string };
+    try {
+      subscription = await (razorpay.subscriptions.create({
+        plan_id: razorpayPlanId,
+        customer_id: customerId,
+        quantity: billableSeats,
+        total_count: 120, // up to 10 years — effectively open-ended
+        // Razorpay hosted page redirects here after successful payment.
+        callback_url: `${webBaseUrl}/app/settings/billing?checkout=success`,
+        // Pass billing metadata in notes so webhook can reconstruct it
+        notes: {
+          workspace_id: req.auth.tenant_id,
+          plan_slug: plan,
+          billing_cycle: cycle,
+          billing_currency: currency,
+        },
+      } as Parameters<typeof razorpay.subscriptions.create>[0]) as Promise<{ id: string; short_url: string }>);
+    } catch (err: unknown) {
+      const rzErr = err as { error?: { description?: string; code?: string }; statusCode?: number };
+      const detail = rzErr?.error?.description ?? (err instanceof Error ? err.message : String(err));
+      req.log.error({ err, plan, cycle, currency }, 'razorpay_subscription_create_failed');
+      return reply.code(502).send({ error: 'payment_provider_error', detail });
+    }
+
+    if (!subscription.short_url) {
+      req.log.error({ subscription }, 'razorpay_subscription_missing_short_url');
+      return reply.code(502).send({ error: 'payment_provider_error', detail: 'No checkout URL returned. Please try again.' });
+    }
 
     return {
       subscription_id: subscription.id,
