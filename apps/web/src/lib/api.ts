@@ -66,7 +66,11 @@ async function apiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
     signal: opts.signal,
   };
 
-  const res = await fetch(`${API_URL}${path}`, init);
+  // In the browser use relative paths so requests route through the Astro
+  // proxy (pages/api/[...path].ts) which injects the JWT from the sealed
+  // session cookie. On the server (SSR) hit API_URL directly.
+  const base = typeof window === 'undefined' ? API_URL : '';
+  const res = await fetch(`${base}${path}`, init);
   if (!res.ok) {
     const text = await res.text();
     throw new ApiError(res.status, text || res.statusText);
