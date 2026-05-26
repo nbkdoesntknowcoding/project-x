@@ -1,6 +1,7 @@
 ---
 import BaseLayout from './BaseLayout.astro';
 import { Sidebar } from '../components/app/Sidebar';
+import { WorkspaceSwitcher } from '../components/nav/WorkspaceSwitcher';
 
 interface Props {
   title: string;
@@ -226,11 +227,10 @@ try {
           <span>Mnema</span>
         </a>
         <span class="dl-tb-div"></span>
-        <button class="dl-ws-btn" type="button">
-          <span class="dl-ws-av">{workspaceName[0]?.toUpperCase() ?? 'W'}</span>
-          <span>{workspaceName}</span>
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--ink-muted)"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
+        <WorkspaceSwitcher
+          currentWorkspaceId={auth.tenant_id}
+          client:load
+        />
       </div>
       <div class="dl-crumbs">
         <a href={backUrl} style="color:var(--ink-muted);text-decoration:none;">

@@ -2,6 +2,7 @@
 import BaseLayout from './BaseLayout.astro';
 import { Sidebar } from '../components/app/Sidebar';
 import { NotificationBell } from '../components/app/NotificationBell';
+import { WorkspaceSwitcher } from '../components/nav/WorkspaceSwitcher';
 
 interface Props {
   title: string;
@@ -196,11 +197,10 @@ if (auth) {
           <span>Mnema</span>
         </a>
         <span class="ap-tb-div"></span>
-        <button class="ap-ws-btn" type="button">
-          <span class="ap-ws-av">{workspaceName[0]?.toUpperCase() ?? 'W'}</span>
-          <span>{workspaceName}</span>
-          <svg class="ap-ws-chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
+        <WorkspaceSwitcher
+          currentWorkspaceId={auth?.tenant_id ?? ''}
+          client:load
+        />
       </div>
 
       <div class="ap-search">

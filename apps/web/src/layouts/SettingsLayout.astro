@@ -1,5 +1,6 @@
 ---
 import BaseLayout from './BaseLayout.astro';
+import { WorkspaceSwitcher } from '../components/nav/WorkspaceSwitcher';
 
 interface Props {
   title: string;
@@ -176,10 +177,10 @@ const NAV_SECTIONS = [
           <span>Mnema</span>
         </a>
         <span class="st-tb-div"></span>
-        <button class="st-icon-btn" type="button" style="width:auto;padding:3px 7px;gap:6px;font:500 12px/1 var(--sans);color:var(--ink);">
-          <span style="width:14px;height:14px;border-radius:3px;background:linear-gradient(135deg,#7C9CFF,#C8A2FF);color:white;font:700 8.5px/1 var(--sans);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">{workspaceName[0]?.toUpperCase() ?? 'W'}</span>
-          {workspaceName}
-        </button>
+        <WorkspaceSwitcher
+          currentWorkspaceId={auth.tenant_id}
+          client:load
+        />
       </div>
       <div class="st-crumbs">
         <span>Settings</span>
