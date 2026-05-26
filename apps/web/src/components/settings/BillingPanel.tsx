@@ -1,6 +1,7 @@
 import { type JSX, useEffect, useRef, useState } from 'react';
 import { TIERS } from '../../lib/pricing';
 import type { BillingCycle, Currency } from '../../lib/pricing';
+import { ToastContainer, useToast } from '../ui/Toast';
 
 type PlanSlug = 'individual' | 'team' | 'business';
 
@@ -156,6 +157,10 @@ export function BillingPanel(): JSX.Element {
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollAttemptsRef = useRef(0);
   const autoTriggered = useRef(false);
+  // In-app toasts (replaces browser alert/confirm)
+  const { toasts, dismiss, toast } = useToast();
+  // Inline cancel confirmation state (replaces browser confirm())
+  const [cancelConfirmPending, setCancelConfirmPending] = useState(false);
 
   // Detect return from Razorpay Checkout.js (callback_url redirect after payment)
   const checkoutSuccess =
@@ -325,7 +330,7 @@ export function BillingPanel(): JSX.Element {
    * requires a separately-activated Razorpay product ("Subscription Links") and
    * shows "Hosted page is not available" if that product isn't enabled.
    *
-   * After successful payment Razorpay redirects the browser to callback_url.
+   * After successful payment the handler navigates client-side to ?checkout=success.
    * If the user dismisses without paying, onDismiss() is called.
    */
   function openRazorpayCheckout(
@@ -335,7 +340,7 @@ export function BillingPanel(): JSX.Element {
   ): void {
     const keyId = ((import.meta.env as Record<string, string>).PUBLIC_RAZORPAY_KEY_ID ?? '').trim();
     if (!keyId) {
-      alert('Payment system is not configured. Please contact support@theboringpeople.in.');
+      toast('error', 'Payment system is not configured. Please contact support@theboringpeople.in.');
       onDismiss();
       return;
     }
@@ -344,8 +349,8 @@ export function BillingPanel(): JSX.Element {
       subscription_id: subscriptionId,
       name: 'Mnema',
       description: `${planName} subscription`,
-      // Use handler (client-side callback) instead of callback_url.
-      // callback_url triggers a cross-site POST which Astro's CSRF protection blocks.
+      // handler fires on successful payment — navigate client-side to avoid
+      // the cross-site POST that callback_url triggers (blocked by Astro CSRF).
       handler: () => {
         window.location.href = `${window.location.origin}/app/settings/billing?checkout=success`;
       },
@@ -366,7 +371,7 @@ export function BillingPanel(): JSX.Element {
       s.onload = doOpen;
       s.onerror = () => {
         onDismiss();
-        alert('Failed to load the payment form. Please check your connection and try again.');
+        toast('error', 'Failed to load the payment form. Please check your connection and try again.');
       };
       document.body.appendChild(s);
     }
@@ -378,12 +383,10 @@ export function BillingPanel(): JSX.Element {
       const result = await callSubscribeAPI('/api/billing/subscribe', plan, billingCycle);
       if (result) {
         const planName = TIERS.find((t) => t.slug === plan)?.name ?? plan;
-        // Opens the Razorpay modal inline — changingPlan stays set until
-        // the user dismisses or the callback_url redirect reloads the page.
         openRazorpayCheckout(result.subscriptionId, planName, () => setChangingPlan(null));
       }
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Could not start checkout. Please email support@theboringpeople.in.');
+      toast('error', err instanceof Error ? err.message : 'Could not start checkout. Please email support@theboringpeople.in.');
       setChangingPlan(null);
     }
   }
@@ -397,13 +400,18 @@ export function BillingPanel(): JSX.Element {
         openRazorpayCheckout(result.subscriptionId, planName, () => setChangingPlan(null));
       }
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Could not change plan. Please email support@theboringpeople.in.');
+      toast('error', err instanceof Error ? err.message : 'Could not change plan. Please email support@theboringpeople.in.');
       setChangingPlan(null);
     }
   }
 
   async function cancelSubscription(): Promise<void> {
-    if (!confirm('Cancel your subscription at the end of the current billing period?\n\nYou will keep access until then.')) return;
+    // First click arms the confirmation; second click confirms.
+    if (!cancelConfirmPending) {
+      setCancelConfirmPending(true);
+      return;
+    }
+    setCancelConfirmPending(false);
     setCancelling(true);
     try {
       const res = await fetch('/api/billing/cancel', {
@@ -412,12 +420,18 @@ export function BillingPanel(): JSX.Element {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cancelAtPeriodEnd: true }),
       });
-      const body = await res.json() as { cancelled?: boolean; error?: string };
+      const body = await res.json() as { cancelled?: boolean; error?: string; cancel_at_period_end?: boolean };
       if (body.cancelled) {
         setStatus((prev) => prev ? { ...prev, cancel_at_period_end: true } : prev);
+        const until = status?.current_period_end
+          ? new Date(status.current_period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+          : 'end of billing period';
+        toast('info', `Subscription cancelled. You keep access until ${until}.`, { duration: 6000 });
       } else {
-        alert(body.error ?? 'Could not cancel. Please email support@theboringpeople.in.');
+        toast('error', body.error ?? 'Could not cancel. Please email support@theboringpeople.in.');
       }
+    } catch {
+      toast('error', 'Network error. Please check your connection and try again.');
     } finally {
       setCancelling(false);
     }
@@ -433,11 +447,12 @@ export function BillingPanel(): JSX.Element {
       const body = await res.json() as { manage_url?: string; error?: string };
       if (body.manage_url) {
         window.open(body.manage_url, '_blank', 'noopener,noreferrer');
+        toast('info', 'Payment management page opened in a new tab.');
       } else {
-        alert(body.error ?? 'Could not open payment management page. Please email support@theboringpeople.in.');
+        toast('error', body.error ?? 'Could not open payment management page. Please email support@theboringpeople.in.');
       }
     } catch {
-      alert('Network error. Please check your connection and try again.');
+      toast('error', 'Network error. Please check your connection and try again.');
     } finally {
       setUpdatingPayment(false);
     }
@@ -935,24 +950,76 @@ export function BillingPanel(): JSX.Element {
             Cancelling ends your subscription at the close of the current billing period.
             You will keep access until then.
           </p>
-          <button
-            type="button"
-            onClick={() => void cancelSubscription()}
-            disabled={cancelling}
-            style={{
-              padding: '0.5rem 1rem',
+
+          {cancelConfirmPending ? (
+            /* Inline confirm row — replaces browser confirm() dialog */
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              padding: '0.75rem 1rem',
               borderRadius: '0.375rem',
-              border: '1px solid rgba(248,113,113,0.40)',
-              background: 'transparent',
-              color: '#f87171',
-              fontSize: '0.875rem',
-              fontWeight: 500,
-              cursor: cancelling ? 'wait' : 'pointer',
-              opacity: cancelling ? 0.5 : 1,
-            }}
-          >
-            {cancelling ? 'Cancelling…' : 'Cancel subscription'}
-          </button>
+              background: 'rgba(248,113,113,0.06)',
+              border: '1px solid rgba(248,113,113,0.25)',
+            }}>
+              <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', flex: 1 }}>
+                Are you sure? This cannot be undone.
+              </span>
+              <button
+                type="button"
+                onClick={() => void cancelSubscription()}
+                disabled={cancelling}
+                style={{
+                  padding: '0.375rem 0.875rem',
+                  borderRadius: '0.375rem',
+                  border: 'none',
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontSize: '0.8125rem',
+                  fontWeight: 500,
+                  cursor: cancelling ? 'wait' : 'pointer',
+                  opacity: cancelling ? 0.5 : 1,
+                }}
+              >
+                {cancelling ? 'Cancelling…' : 'Yes, cancel'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setCancelConfirmPending(false)}
+                style={{
+                  padding: '0.375rem 0.875rem',
+                  borderRadius: '0.375rem',
+                  border: '1px solid var(--border-default)',
+                  background: 'transparent',
+                  color: 'var(--text-secondary)',
+                  fontSize: '0.8125rem',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                Keep it
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void cancelSubscription()}
+              disabled={cancelling}
+              style={{
+                padding: '0.5rem 1rem',
+                borderRadius: '0.375rem',
+                border: '1px solid rgba(248,113,113,0.40)',
+                background: 'transparent',
+                color: '#f87171',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                cursor: cancelling ? 'wait' : 'pointer',
+                opacity: cancelling ? 0.5 : 1,
+              }}
+            >
+              Cancel subscription
+            </button>
+          )}
         </section>
       )}
 
@@ -968,6 +1035,9 @@ export function BillingPanel(): JSX.Element {
           </p>
         </section>
       )}
+
+      {/* Toast notifications — self-hosted so no layout changes needed */}
+      <ToastContainer toasts={toasts} onDismiss={dismiss} />
 
     </div>
   );
