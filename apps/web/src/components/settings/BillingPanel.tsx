@@ -150,12 +150,12 @@ export function BillingPanel(): JSX.Element {
   const [cancelling, setCancelling] = useState(false);
   const [changingPlan, setChangingPlan] = useState<PlanSlug | null>(null);
   const [updatingPayment, setUpdatingPayment] = useState(false);
+  // Activation polling (Razorpay subscriptions don't support callback_url redirect)
+  const [activationPolling, setActivationPolling] = useState(false);
+  const [justActivated, setJustActivated] = useState(false);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollAttemptsRef = useRef(0);
   const autoTriggered = useRef(false);
-
-  // Detect return from Razorpay hosted checkout
-  const checkoutSuccess =
-    typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).get('checkout') === 'success';
 
   // Read ?upgrade=PLAN&cycle=CYCLE — set by pricing page CTA after post-login redirect
   const upgradeParam =
@@ -172,21 +172,20 @@ export function BillingPanel(): JSX.Element {
       : null;
   const validCycle: BillingCycle = cycleParam === 'annual' ? 'annual' : 'monthly';
 
-  // Load billing status
+  // ── Load billing status ───────────────────────────────────────────────────
   useEffect(() => {
     void (async () => {
       const res = await fetch('/api/billing/status', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json() as BillingStatus;
         setStatus(data);
-        // Default cycle/currency to what the active subscription uses
         setCycle(data.cycle ?? 'monthly');
         setCurrency(data.detected_currency ?? 'INR');
       }
     })();
   }, []);
 
-  // Load payment history
+  // ── Load payment history ──────────────────────────────────────────────────
   useEffect(() => {
     setInvoicesLoading(true);
     void fetch('/api/billing/payments', { credentials: 'include' })
@@ -196,16 +195,71 @@ export function BillingPanel(): JSX.Element {
       .finally(() => setInvoicesLoading(false));
   }, []);
 
-  // Clean up ?checkout=success from URL
+  // ── Activation polling ────────────────────────────────────────────────────
+  // Razorpay subscriptions don't support callback_url, so there's no redirect
+  // back from checkout. Instead, poll for status change when in created/authenticated
+  // state (meaning the user just paid and we're waiting for the webhook to fire).
   useEffect(() => {
-    if (checkoutSuccess && typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      url.searchParams.delete('checkout');
-      window.history.replaceState({}, '', url.toString());
-    }
-  }, [checkoutSuccess]);
+    const isPending =
+      status?.subscription_status === 'created' ||
+      status?.subscription_status === 'authenticated';
 
-  // Auto-trigger checkout when ?upgrade= is present and billing status is loaded
+    if (!isPending) {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+        setActivationPolling(false);
+      }
+      return;
+    }
+
+    setActivationPolling(true);
+    pollAttemptsRef.current = 0;
+
+    pollTimerRef.current = setInterval(() => {
+      void (async () => {
+        pollAttemptsRef.current += 1;
+        // Give up after ~2 min (24 × 5s)
+        if (pollAttemptsRef.current > 24) {
+          if (pollTimerRef.current) {
+            clearInterval(pollTimerRef.current);
+            pollTimerRef.current = null;
+          }
+          setActivationPolling(false);
+          return;
+        }
+        try {
+          const res = await fetch('/api/billing/status', { credentials: 'include' });
+          if (!res.ok) return;
+          const data = await res.json() as BillingStatus;
+          if (['active', 'trialing'].includes(data.subscription_status ?? '')) {
+            if (pollTimerRef.current) {
+              clearInterval(pollTimerRef.current);
+              pollTimerRef.current = null;
+            }
+            setStatus(data);
+            setActivationPolling(false);
+            setJustActivated(true);
+            // Refresh invoices too — first payment invoice should now exist
+            void fetch('/api/billing/payments', { credentials: 'include' })
+              .then((r) => r.json() as Promise<{ invoices: Invoice[] }>)
+              .then((d) => setInvoices(d.invoices ?? []))
+              .catch(() => null);
+          }
+        } catch { /* ignore transient errors */ }
+      })();
+    }, 5000);
+
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.subscription_status]);
+
+  // ── Auto-trigger checkout when ?upgrade= is present ───────────────────────
   useEffect(() => {
     if (!status || !validUpgrade || autoTriggered.current) return;
     const isAlreadySubscribed =
@@ -379,8 +433,26 @@ export function BillingPanel(): JSX.Element {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', maxWidth: 720 }}>
 
-      {/* ── Checkout success banner ── */}
-      {checkoutSuccess && (
+      {/* ── Activation pending banner (polling) ── */}
+      {activationPolling && (
+        <div style={{
+          padding: '0.875rem 1rem',
+          borderRadius: '0.5rem',
+          background: 'rgba(96,165,250,0.08)',
+          border: '1px solid rgba(96,165,250,0.20)',
+          fontSize: '0.875rem',
+          color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.625rem',
+        }}>
+          <span style={{ fontSize: '1rem' }}>⏳</span>
+          Waiting for payment confirmation — this page will update automatically once your subscription is active.
+        </div>
+      )}
+
+      {/* ── Just activated success banner ── */}
+      {justActivated && (
         <div style={{
           padding: '0.875rem 1rem',
           borderRadius: '0.5rem',
@@ -389,7 +461,7 @@ export function BillingPanel(): JSX.Element {
           fontSize: '0.875rem',
           color: 'var(--text-primary)',
         }}>
-          🎉 Payment received — your subscription is activating. It may take a moment to reflect below.
+          🎉 Payment confirmed — your subscription is now active!
         </div>
       )}
 
