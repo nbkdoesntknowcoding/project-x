@@ -69,8 +69,15 @@ function PricingCard({
 
   // Build CTA href
   let ctaHref = tier.cta.href;
-  if (isLoggedIn && !isFree && !isEnterprise) {
-    ctaHref = `/app/settings/billing?upgrade=${tier.slug}&cycle=${cycle}`;
+  if (!isFree && !isEnterprise) {
+    const billingDest = `/app/settings/billing?upgrade=${tier.slug}&cycle=${cycle}`;
+    if (isLoggedIn) {
+      // Already signed in → go straight to billing settings
+      ctaHref = billingDest;
+    } else {
+      // Not signed in → /login with next= so post-auth lands on billing
+      ctaHref = `/login?next=${encodeURIComponent(billingDest)}`;
+    }
   }
 
   const cardStyle: React.CSSProperties = isHighlighted

@@ -89,5 +89,13 @@ if (oauthRequestId) {
   return Astro.redirect(resumeUrl);
 }
 
+// If the user arrived from a ?next= link (e.g. pricing page CTA), send
+// them to the intended destination instead of /app.
+const loginNext = Astro.cookies.get('login_next')?.value;
+if (loginNext && loginNext.startsWith('/')) {
+  Astro.cookies.delete('login_next', { path: '/' });
+  return Astro.redirect(loginNext);
+}
+
 return Astro.redirect('/app');
 ---

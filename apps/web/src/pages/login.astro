@@ -7,6 +7,11 @@ import '../styles/global.css';
 const oauthRequestId = Astro.url.searchParams.get('oauth_request_id');
 const auth = Astro.locals.auth;
 
+// ?next= allows any internal page (must start with /) to be the post-login
+// destination — used by the pricing page CTAs to send users straight to billing.
+const nextParam = Astro.url.searchParams.get('next');
+const safeNext = nextParam && nextParam.startsWith('/') ? nextParam : null;
+
 if (auth) {
   if (oauthRequestId && /^[0-9a-f-]{36}$/.test(oauthRequestId)) {
     // Already authenticated + OAuth reconnect → skip the login form entirely.
@@ -14,7 +19,8 @@ if (auth) {
     const resumeUrl = `${apiUrl}/oauth/resume?request_id=${encodeURIComponent(oauthRequestId)}&proof=${encodeURIComponent(auth.jwt)}`;
     return Astro.redirect(resumeUrl);
   }
-  return Astro.redirect('/app');
+  // Already logged in — honour ?next or fall back to /app.
+  return Astro.redirect(safeNext ?? '/app');
 }
 
 // If arriving from the MCP OAuth flow (unauthenticated), persist the request_id
@@ -26,6 +32,17 @@ if (oauthRequestId && /^[0-9a-f-]{36}$/.test(oauthRequestId)) {
     sameSite: 'lax',
     path: '/',
     maxAge: 15 * 60, // 15 min — same window as the pending OAuth request
+  });
+}
+
+// Persist ?next so it survives the WorkOS SSO round-trip.
+if (safeNext) {
+  Astro.cookies.set('login_next', safeNext, {
+    httpOnly: true,
+    secure: false,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 15 * 60,
   });
 }
 

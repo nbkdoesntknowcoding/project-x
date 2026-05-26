@@ -13,6 +13,12 @@ const userInitial = (pending.email[0] || 'U').toUpperCase();
 const cookiePassword = import.meta.env.WORKOS_COOKIE_PASSWORD as string;
 const apiUrl = (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
 
+// Read and consume the login_next cookie so the post-auth redirect works
+// even when the user goes through the join-or-create workspace picker.
+const loginNextRaw = Astro.cookies.get('login_next')?.value ?? null;
+const loginNext = loginNextRaw && loginNextRaw.startsWith('/') ? loginNextRaw : null;
+if (loginNext) Astro.cookies.delete('login_next', { path: '/' });
+
 // Serialize safe props for the client-side script (no secrets)
 const pendingJson = JSON.stringify({
   user_id: pending.user_id,
@@ -235,7 +241,7 @@ const pendingJson = JSON.stringify({
   </div>
 </main>
 
-<script define:vars={{ pendingJson, cookiePassword, apiUrl }}>
+<script define:vars={{ pendingJson, cookiePassword, apiUrl, loginNext }}>
 (function() {
   const pending = JSON.parse(pendingJson);
   const loading = document.getElementById('jc-loading');
@@ -293,7 +299,7 @@ const pendingJson = JSON.stringify({
         }
         const { user_id, tenant_id, jwt } = await res.json();
         await finaliseSession(user_id, tenant_id, jwt);
-        window.location.href = '/app';
+        window.location.href = loginNext || '/app';
       } catch (e) {
         showError('Could not join workspace. Please try again.');
         document.querySelectorAll('.jc-join-btn').forEach(function(b) { b.disabled = false; });
