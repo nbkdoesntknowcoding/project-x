@@ -1,155 +1,139 @@
 /**
- * Hook receiver routes — Phase 1 AgentLens Task Layer.
+ * Hook receiver routes — Phase 2 AgentLens Execution Tracking.
  *
  * POST /api/hooks/claude-code — receives events from Claude Code hooks.
  *   Auth: Bearer token validated against workspaces.hook_token (SHA-256 hash).
  *   Fail-open: ALWAYS returns 202 so the agent is never blocked.
+ *   202-first: reply sent BEFORE token validation — token validation runs in
+ *     setImmediate (fire-and-forget) to guarantee < 50ms response time.
  *   Rate limit: 120 req/min per IP.
+ *   Payload limit: 10MB (413 if exceeded — only non-202 besides 429).
  *
  * POST /api/hooks/aider, /cursor, /generic — Phase 2 stubs (always 202).
  *
  * GET /install/claude-hooks.sh — installer shell script.
- *
- * Phase 2 will: parse full HookEvent, enqueue to BullMQ, process tool_calls,
- * cost_events, file_diffs. Route signatures won't change.
  */
 
 import type { FastifyPluginAsync } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { agentSessions, workspaces } from '../db/schema.js';
+import { workspaces } from '../db/schema.js';
 import { withSystemPrivilege } from '../db/with-system-privilege.js';
 import { verifyHookToken } from '../lib/dev/hook-token.js';
-import { withTenant } from '../db/with-tenant.js';
+import { enqueueHookEvent } from '../queue/hook-events.js';
 
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX = 120;
+const PAYLOAD_LIMIT_BYTES = 10 * 1024 * 1024; // 10MB
 
-// Simple in-memory rate limiter (per-IP). Phase 2 swaps to Redis.
+// Simple in-memory rate limiter (per-IP). Phase 3 can swap to Redis if needed.
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
   const entry = rateLimitMap.get(ip);
   if (!entry || now > entry.resetAt) {
     rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return true; // OK
+    return true;
   }
   entry.count++;
   return entry.count <= RATE_LIMIT_MAX;
+}
+
+/**
+ * Resolves a plaintext hook token to a workspace ID.
+ * Scans dev_project workspaces and compares SHA-256 hashes.
+ * Returns null if no matching workspace found (fail-open at call site).
+ */
+async function resolveHookToken(token: string): Promise<string | null> {
+  const wsRows = await withSystemPrivilege((tx) =>
+    tx
+      .select({ id: workspaces.id, hookToken: workspaces.hookToken })
+      .from(workspaces)
+      .where(eq(workspaces.mode, 'dev_project'))
+      .limit(200), // bounded scan — dev workspaces are rare
+  );
+
+  for (const ws of wsRows) {
+    if (ws.hookToken && verifyHookToken(token, ws.hookToken)) {
+      return ws.id;
+    }
+  }
+
+  return null;
 }
 
 export const hooksRoutes: FastifyPluginAsync = async (app) => {
   // ──────────────────────────────────────────────────────────────────────────
   // POST /api/hooks/claude-code
   // ──────────────────────────────────────────────────────────────────────────
-  app.post('/api/hooks/claude-code', async (req, reply) => {
-    const ip = req.ip;
+  app.post(
+    '/api/hooks/claude-code',
+    {
+      // 10MB payload limit — returns 413 if exceeded (only non-202 response)
+      bodyLimit: PAYLOAD_LIMIT_BYTES,
+    },
+    async (req, reply) => {
+      const ip = req.ip;
 
-    // Rate limit — 429 is the only non-202 response; still fail-open for the agent
-    if (!checkRateLimit(ip)) {
-      return reply.code(429).send({ message: 'Rate limit exceeded. The agent is still working.' });
-    }
-
-    // Extract Bearer token from Authorization header
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-
-    if (!token) {
-      // Fail-open: no token → 202 with a warning (agent misconfigured, not blocked)
-      req.log.warn({ ip }, 'hooks/claude-code: missing Bearer token — failing open');
-      return reply.code(202).send({ ok: true });
-    }
-
-    // Find workspace where hash(token) === hookToken.
-    // We must scan under system privilege since hook_token isn't tenant-scoped.
-    let workspaceId: string | null = null;
-    try {
-      const wsRows = await withSystemPrivilege(async (tx) =>
-        tx
-          .select({ id: workspaces.id, hookToken: workspaces.hookToken })
-          .from(workspaces)
-          .where(eq(workspaces.mode, 'dev_project'))
-          .limit(200), // bounded scan — dev workspaces are rare
-      );
-
-      for (const ws of wsRows) {
-        if (ws.hookToken && verifyHookToken(token, ws.hookToken)) {
-          workspaceId = ws.id;
-          break;
-        }
+      // Rate limit — 429 is the only non-202 response besides 413
+      if (!checkRateLimit(ip)) {
+        return reply.code(429).send({ message: 'Rate limit exceeded. The agent is still working.' });
       }
-    } catch (err) {
-      req.log.warn({ err }, 'hooks/claude-code: DB error during token validation — failing open');
-      return reply.code(202).send({ ok: true });
-    }
 
-    if (!workspaceId) {
-      req.log.warn({ ip }, 'hooks/claude-code: no matching workspace for token — failing open');
-      return reply.code(202).send({ ok: true });
-    }
+      // ── 202-FIRST pattern ──────────────────────────────────────────────────
+      // Send 202 IMMEDIATELY — before any async work.
+      // This guarantees the agent never waits for our processing.
+      reply.code(202).send({ ok: true });
 
-    // Extract session id + developer id from body (Phase 1: minimal processing)
-    const body = (req.body as Record<string, unknown>) ?? {};
-    const rawSessionId = typeof body.session_id === 'string' ? body.session_id : null;
-    const developerId = typeof body.developer_id === 'string' ? body.developer_id : 'unknown';
+      // Everything below runs after the response is flushed.
+      setImmediate(async () => {
+        try {
+          // 1. Extract Bearer token
+          const authHeader = req.headers.authorization;
+          const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+          if (!token) {
+            req.log.warn({ ip }, 'hooks/claude-code: missing Bearer token');
+            return;
+          }
 
-    // Upsert agent session (Phase 1: create if missing)
-    try {
-      if (rawSessionId) {
-        // Try to update existing session by matching developer_id + workspace
-        const existing = await withTenant(workspaceId, async (tx) =>
-          tx
-            .select({ id: agentSessions.id })
-            .from(agentSessions)
-            .where(eq(agentSessions.id, rawSessionId))
-            .limit(1),
-        );
-        if (existing[0]) {
-          // Session exists — keep it alive (Phase 2 will update last_event_at)
-        } else {
-          // Create new session with the given id hint (best-effort)
-          await withTenant(workspaceId, async (tx) =>
-            tx.insert(agentSessions).values({
-              workspaceId,
-              developerId,
-              agent: 'claude_code',
-              status: 'active',
-            }).onConflictDoNothing(),
-          );
-        }
-      } else {
-        // No session id — create a new session
-        await withTenant(workspaceId, async (tx) =>
-          tx.insert(agentSessions).values({
+          // 2. Resolve workspace from token
+          const workspaceId = await resolveHookToken(token);
+          if (!workspaceId) {
+            req.log.warn(
+              { ip, tokenPrefix: token.slice(0, 12) },
+              'hooks/claude-code: no matching workspace for token',
+            );
+            return;
+          }
+
+          // 3. Enqueue for async processing (BullMQ)
+          await enqueueHookEvent({
             workspaceId,
-            developerId,
-            agent: 'claude_code',
-            status: 'active',
-          }),
-        );
-      }
-    } catch (err) {
-      // Fail-open: session upsert error never blocks the agent
-      req.log.warn({ err, workspaceId }, 'hooks/claude-code: session upsert failed — failing open');
-    }
-
-    // Always 202 — never block the agent
-    return reply.code(202).send({ ok: true });
-  });
+            adapter:    'claude-code',
+            payload:    req.body,
+            receivedAt: new Date().toISOString(),
+          });
+        } catch (err) {
+          // Swallow all errors — never propagate back to the agent
+          req.log.error({ err }, 'hooks/claude-code: enqueue failed (swallowed)');
+        }
+      });
+    },
+  );
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Stub adapters for Phase 2
+  // Stub adapters
   // ──────────────────────────────────────────────────────────────────────────
   app.post('/api/hooks/aider', async (_req, reply) => {
-    return reply.code(202).send({ message: 'Adapter coming in Phase 2' });
+    return reply.code(202).send({ message: 'Aider adapter coming in Phase 3' });
   });
 
   app.post('/api/hooks/cursor', async (_req, reply) => {
-    return reply.code(202).send({ message: 'Adapter coming in Phase 2' });
+    return reply.code(202).send({ message: 'Cursor adapter coming in Phase 3' });
   });
 
   app.post('/api/hooks/generic', async (_req, reply) => {
-    return reply.code(202).send({ message: 'Generic adapter coming in Phase 2' });
+    return reply.code(202).send({ message: 'Generic adapter coming in Phase 3' });
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -175,10 +159,10 @@ curl -sf -X POST "https://mnema.theboringpeople.in/api/hooks/claude-code" \\
   -H "Authorization: Bearer $MNEMA_HOOK_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d "{
-    \\"event\\": \\"tool_call\\",
+    \\"hook_event_name\\": \\"PostToolUse\\",
     \\"session_id\\": \\"$CLAUDE_SESSION_ID\\",
     \\"developer_id\\": \\"$MNEMA_DEVELOPER_ID\\",
-    \\"tool\\": \\"$CLAUDE_TOOL_NAME\\",
+    \\"tool_name\\": \\"$CLAUDE_TOOL_NAME\\",
     \\"workspace_id\\": \\"$MNEMA_WORKSPACE_ID\\"
   }" > /dev/null 2>&1 &
 # Background fork — never block Claude Code

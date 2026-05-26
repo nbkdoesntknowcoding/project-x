@@ -120,6 +120,13 @@
       "when": 1748649600000,
       "tag": "0016_agentlens_phase1_tasks",
       "breakpoints": false
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1748736000000,
+      "tag": "0017_agentlens_phase2_execution",
+      "breakpoints": false
     }
   ]
 }

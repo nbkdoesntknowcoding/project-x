@@ -1,6 +1,7 @@
 ---
-// Phase 2 stub — agent session history
+// Phase 2 AgentLens — Sessions list page
 import AppLayout from '../../layouts/AppLayout.astro';
+import { SessionsList } from '../../components/dev/SessionsList';
 
 const auth = Astro.locals.auth;
 if (!auth) {
@@ -9,12 +10,11 @@ if (!auth) {
 ---
 
 <AppLayout title="Sessions">
-  <div style="padding: 40px; color: var(--ink-muted); font-family: var(--mono);">
+  <div>
     <!-- TODO: Claude Design — apply Mnema glassmorphism design system -->
     <!-- Background: var(--bg) #0a0a0a -->
     <!-- Cards: rgba(255,255,255,0.04) + backdrop-filter: blur(24px) -->
     <!-- See BOPPL_Context_Engine_Prompt_UI_Redesign_All_MCP_Panels for token system -->
-    <h1 style="font-size: 18px; font-weight: 600; color: var(--ink);">Sessions</h1>
-    <p style="margin-top: 8px; font-size: 13px;">Agent session history — available in Phase 2.</p>
+    <SessionsList workspaceId={auth.tenant_id} client:load />
   </div>
 </AppLayout>

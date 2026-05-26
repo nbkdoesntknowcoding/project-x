@@ -11,6 +11,7 @@
  */
 import { startEmbeddingsWorker } from './embeddings/worker.js';
 import { startEmailWorker } from './email/worker.js';
+import { startHookEventsWorker } from './hook-events/worker.js';
 
 const embeddings = startEmbeddingsWorker();
 // eslint-disable-next-line no-console
@@ -20,11 +21,16 @@ const emailWorker = startEmailWorker();
 // eslint-disable-next-line no-console
 console.log('[workers] email worker started');
 
+const hookEventsWorker = startHookEventsWorker();
+// eslint-disable-next-line no-console
+console.log('[workers] hook-events worker started');
+
 const shutdown = async (signal: string): Promise<void> => {
   // eslint-disable-next-line no-console
   console.log(`[workers] ${signal} received, draining and shutting down`);
   await embeddings.close();
   await emailWorker.close();
+  await hookEventsWorker.close();
   process.exit(0);
 };
 

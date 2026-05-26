@@ -150,6 +150,13 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
           send('notification', event.data);
         } else if (event.type === 'task_updated') {
           send('task_updated', event.data);
+        } else if (event.type === 'session_cost_updated') {
+          // Phase 2 AgentLens: real-time cost updates
+          send('session_cost_updated', event.data);
+        } else if (event.type === 'session_started') {
+          send('session_started', event.data);
+        } else if (event.type === 'session_ended') {
+          send('session_ended', event.data);
         }
       } catch {
         // Client disconnected mid-write — safe to ignore

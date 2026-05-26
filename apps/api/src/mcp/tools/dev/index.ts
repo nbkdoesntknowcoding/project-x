@@ -7,10 +7,10 @@
  * Reference: /Users/nischaybk/Projects/project-x/devmanager/agentlens/daemon/mcp/
  */
 
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, sql, sum } from 'drizzle-orm';
 import { z } from 'zod';
 import type { McpAuthContext } from '../../auth.js';
-import { agentSessions, docs, folders, tasks } from '../../../db/schema.js';
+import { agentSessions, docs, folders, tasks, toolCalls } from '../../../db/schema.js';
 import { db } from '../../../db/index.js';
 import { withTenant } from '../../../db/with-tenant.js';
 import { emitWorkspaceEvent } from '../../../lib/events.js';
@@ -249,6 +249,9 @@ export async function getNextTask(ctx: McpAuthContext, rawArgs: Record<string, u
   if (linkedDoc) content += `Linked doc: ${linkedDoc.title} — ${linkedDoc.contentPreview}...\n`;
   if (task.status === 'audit_fix' && task.blockerDescription) {
     content += `Blocker: ${task.blockerDescription}\nRetry count: ${task.retryCount}\n`;
+  }
+  if (task.retryFixHint) {
+    content += `Fix hint from last attempt: ${task.retryFixHint}\n`;
   }
   content += `Task ID: ${task.id} — use this in claim_task.`;
 
@@ -583,13 +586,317 @@ export async function getSkillFiles(ctx: McpAuthContext, rawArgs: Record<string,
   };
 }
 
+// ── Phase 2 Tool specs ────────────────────────────────────────────────────────
+
+export const GET_CURRENT_SESSION_TOOL = {
+  name: 'get_current_session',
+  description: [
+    'Returns the most recent active session for this workspace.',
+    'Optionally filter by developerId to find your own session.',
+    'Shows current cost, tool call count, and last tool used.',
+  ].join('\n'),
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      developerId: { type: 'string', description: 'Optional developer identifier to filter by.' },
+    },
+    additionalProperties: false,
+  },
+  annotations: { readOnlyHint: true, title: 'Get current session' },
+};
+
+export const GET_COST_SUMMARY_TOOL = {
+  name: 'get_cost_summary',
+  description: [
+    'Returns a cost breakdown for the workspace.',
+    'Aggregates by developer, agent, and model.',
+    'Periods: today (default), week, month, all.',
+  ].join('\n'),
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      period: {
+        type: 'string',
+        description: 'Time period: "today" (default), "week", "month", "all".',
+      },
+    },
+    additionalProperties: false,
+  },
+  annotations: { readOnlyHint: true, title: 'Get cost summary' },
+};
+
+export const LOG_MILESTONE_TOOL = {
+  name: 'log_milestone',
+  description: [
+    'Logs a milestone event in the current session timeline.',
+    'Milestones are lightweight markers (not tool calls) shown as dividers in the session detail view.',
+    'Use to mark important checkpoints: "Tests passing", "PR opened", "Feature complete".',
+  ].join('\n'),
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      sessionId: { type: 'string', description: 'Session ID to log the milestone in.' },
+      message:   { type: 'string', description: 'Milestone description (max 500 chars).' },
+    },
+    required: ['sessionId', 'message'],
+    additionalProperties: false,
+  },
+  annotations: { title: 'Log milestone' },
+};
+
+// ── Phase 2 Argument schemas ──────────────────────────────────────────────────
+
+const getCurrentSessionArgs = z.object({
+  developerId: z.string().optional(),
+});
+
+const getCostSummaryArgs = z.object({
+  period: z.enum(['today', 'week', 'month', 'all']).optional().default('today'),
+});
+
+const logMilestoneArgs = z.object({
+  sessionId: z.string().min(1),
+  message:   z.string().min(1).max(500),
+});
+
+// ── Phase 2 Handlers ──────────────────────────────────────────────────────────
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Phase 2 D.1: get_current_session
+// ──────────────────────────────────────────────────────────────────────────────
+export async function getCurrentSession(ctx: McpAuthContext, rawArgs: Record<string, unknown>) {
+  if (ctx.workspaceMode !== 'dev_project') return devModeError();
+
+  const args = getCurrentSessionArgs.safeParse(rawArgs);
+  if (!args.success) {
+    return { content: `Invalid arguments: ${args.error.message}`, structuredContent: { session: null } };
+  }
+
+  const filters: ReturnType<typeof eq>[] = [
+    eq(agentSessions.workspaceId, ctx.tenant_id),
+    eq(agentSessions.status, 'active'),
+  ];
+  if (args.data.developerId) {
+    filters.push(eq(agentSessions.developerId, args.data.developerId));
+  }
+
+  const rows = await withTenant(ctx.tenant_id, (tx) =>
+    tx
+      .select()
+      .from(agentSessions)
+      .where(and(...filters))
+      .orderBy(desc(agentSessions.startedAt))
+      .limit(1),
+  );
+
+  const session = rows[0];
+  if (!session) {
+    return {
+      content: 'No active session found.',
+      structuredContent: { session: null },
+    };
+  }
+
+  // Get the last tool call for "last tool" display
+  const lastToolRows = await withTenant(ctx.tenant_id, (tx) =>
+    tx
+      .select({ toolName: toolCalls.toolName, timestamp: toolCalls.timestamp })
+      .from(toolCalls)
+      .where(eq(toolCalls.sessionId, session.id))
+      .orderBy(desc(toolCalls.timestamp))
+      .limit(1),
+  );
+  const lastTool = lastToolRows[0];
+
+  const startedMinsAgo = Math.round((Date.now() - session.startedAt.getTime()) / 60_000);
+  const lastToolInfo = lastTool
+    ? ` | Last tool: ${lastTool.toolName} (${Math.round((Date.now() - lastTool.timestamp.getTime()) / 60_000)} min ago)`
+    : '';
+
+  const content = [
+    `Active session ${session.id} (${session.agent})`,
+    `Started: ${startedMinsAgo} min ago | Cost so far: $${session.totalCostUsd.toFixed(6)} | Tool calls: ${session.totalToolCalls}${lastToolInfo}`,
+    session.gitBranch ? `Branch: ${session.gitBranch}` : '',
+  ].filter(Boolean).join('\n');
+
+  return {
+    content,
+    structuredContent: { session },
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Phase 2 D.2: get_cost_summary
+// ──────────────────────────────────────────────────────────────────────────────
+export async function getCostSummary(ctx: McpAuthContext, rawArgs: Record<string, unknown>) {
+  if (ctx.workspaceMode !== 'dev_project') return devModeError();
+
+  const args = getCostSummaryArgs.safeParse(rawArgs);
+  if (!args.success) {
+    return { content: `Invalid arguments: ${args.error.message}`, structuredContent: { error: 'invalid_args' } };
+  }
+
+  const period = args.data.period ?? 'today';
+
+  // Calculate period start date
+  let periodStart: Date | null = null;
+  const now = new Date();
+  if (period === 'today') {
+    periodStart = new Date(now);
+    periodStart.setHours(0, 0, 0, 0);
+  } else if (period === 'week') {
+    periodStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  } else if (period === 'month') {
+    periodStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  }
+  // 'all' → no date filter
+
+  const baseFilter = periodStart
+    ? and(
+        eq(agentSessions.workspaceId, ctx.tenant_id),
+        gte(agentSessions.startedAt, periodStart),
+      )
+    : eq(agentSessions.workspaceId, ctx.tenant_id);
+
+  // Total cost + session counts
+  const [totals] = await withTenant(ctx.tenant_id, (tx) =>
+    tx
+      .select({
+        totalCostUsd:    sum(agentSessions.totalCostUsd),
+        totalSessions:   sql<number>`count(*)::int`,
+        activeSessions:  sql<number>`count(*) FILTER (WHERE status = 'active')::int`,
+      })
+      .from(agentSessions)
+      .where(baseFilter),
+  );
+
+  // By developer
+  const byDeveloper = await withTenant(ctx.tenant_id, (tx) =>
+    tx
+      .select({
+        developerId:  agentSessions.developerId,
+        costUsd:      sum(agentSessions.totalCostUsd),
+        sessionCount: sql<number>`count(*)::int`,
+      })
+      .from(agentSessions)
+      .where(baseFilter)
+      .groupBy(agentSessions.developerId)
+      .orderBy(desc(sum(agentSessions.totalCostUsd))),
+  );
+
+  // By agent
+  const byAgent = await withTenant(ctx.tenant_id, (tx) =>
+    tx
+      .select({
+        agent:        agentSessions.agent,
+        costUsd:      sum(agentSessions.totalCostUsd),
+        sessionCount: sql<number>`count(*)::int`,
+      })
+      .from(agentSessions)
+      .where(baseFilter)
+      .groupBy(agentSessions.agent)
+      .orderBy(desc(sum(agentSessions.totalCostUsd))),
+  );
+
+  const totalCost = Number(totals?.totalCostUsd ?? 0);
+  const devSummary = byDeveloper.map((d) => `${d.developerId} $${Number(d.costUsd ?? 0).toFixed(4)}`).join(' · ');
+  const agentSummary = byAgent.map((a) => `${a.agent} $${Number(a.costUsd ?? 0).toFixed(4)}`).join(' · ');
+
+  const content = [
+    `Cost summary (${period}):`,
+    `Total: $${totalCost.toFixed(6)}`,
+    byDeveloper.length > 0 ? `By developer: ${devSummary}` : '',
+    byAgent.length > 0 ? `By agent: ${agentSummary}` : '',
+    `Sessions: ${totals?.totalSessions ?? 0} total, ${totals?.activeSessions ?? 0} active`,
+  ].filter(Boolean).join('\n');
+
+  return {
+    content,
+    structuredContent: {
+      period,
+      totalCostUsd: totalCost,
+      byDeveloper:  byDeveloper.map((d) => ({ ...d, costUsd: Number(d.costUsd ?? 0) })),
+      byAgent:      byAgent.map((a) => ({ ...a, costUsd: Number(a.costUsd ?? 0) })),
+      activeSessions: totals?.activeSessions ?? 0,
+    },
+  };
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Phase 2 D.3: log_milestone
+// ──────────────────────────────────────────────────────────────────────────────
+export async function logMilestone(ctx: McpAuthContext, rawArgs: Record<string, unknown>) {
+  if (ctx.workspaceMode !== 'dev_project') return devModeError();
+
+  const args = logMilestoneArgs.safeParse(rawArgs);
+  if (!args.success) {
+    return { content: `Invalid arguments: ${args.error.message}`, structuredContent: { error: 'invalid_args' } };
+  }
+
+  // Validate session exists and belongs to workspace
+  const sessionRows = await withTenant(ctx.tenant_id, (tx) =>
+    tx
+      .select({ id: agentSessions.id, workspaceId: agentSessions.workspaceId })
+      .from(agentSessions)
+      .where(and(
+        eq(agentSessions.id, args.data.sessionId),
+        eq(agentSessions.workspaceId, ctx.tenant_id),
+      ))
+      .limit(1),
+  );
+
+  const session = sessionRows[0];
+  if (!session) {
+    return { content: 'Session not found.', structuredContent: { error: 'session_not_found' } };
+  }
+
+  // Insert as a special tool_calls row with toolName = '_milestone'
+  const [milestone] = await withTenant(ctx.tenant_id, (tx) =>
+    tx
+      .insert(toolCalls)
+      .values({
+        sessionId:   args.data.sessionId,
+        workspaceId: ctx.tenant_id,
+        toolName:    '_milestone',
+        inputJson:   { message: args.data.message },
+        isError:     false,
+      })
+      .returning({ id: toolCalls.id, timestamp: toolCalls.timestamp }),
+  );
+
+  // Emit SSE event
+  emitWorkspaceEvent(ctx.tenant_id, {
+    type: 'session_cost_updated',
+    data: {
+      sessionId:      args.data.sessionId,
+      developerId:    ctx.user_id,
+      totalCostUsd:   0, // milestone doesn't change cost
+      totalToolCalls: 0,
+      latestToolName: '_milestone',
+    },
+  });
+
+  return {
+    content: `Milestone logged: '${args.data.message}'`,
+    structuredContent: {
+      milestoneId: milestone!.id,
+      sessionId:   args.data.sessionId,
+      timestamp:   milestone!.timestamp.toISOString(),
+    },
+  };
+}
+
 // ── Dev tool registry ─────────────────────────────────────────────────────────
 
 export const DEV_TOOLS = [
-  { spec: GET_NEXT_TASK_TOOL,       handler: getNextTask },
-  { spec: CLAIM_TASK_TOOL,          handler: claimTask },
-  { spec: COMPLETE_TASK_TOOL,       handler: completeTask },
-  { spec: LOG_BLOCKER_TOOL,         handler: logBlocker },
-  { spec: LIST_PROJECT_TASKS_TOOL,  handler: listProjectTasks },
-  { spec: GET_SKILL_FILES_TOOL,     handler: getSkillFiles },
+  { spec: GET_NEXT_TASK_TOOL,        handler: getNextTask },
+  { spec: CLAIM_TASK_TOOL,           handler: claimTask },
+  { spec: COMPLETE_TASK_TOOL,        handler: completeTask },
+  { spec: LOG_BLOCKER_TOOL,          handler: logBlocker },
+  { spec: LIST_PROJECT_TASKS_TOOL,   handler: listProjectTasks },
+  { spec: GET_SKILL_FILES_TOOL,      handler: getSkillFiles },
+  // Phase 2 tools
+  { spec: GET_CURRENT_SESSION_TOOL,  handler: getCurrentSession },
+  { spec: GET_COST_SUMMARY_TOOL,     handler: getCostSummary },
+  { spec: LOG_MILESTONE_TOOL,        handler: logMilestone },
 ] as const;

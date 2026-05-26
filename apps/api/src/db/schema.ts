@@ -785,8 +785,97 @@ export const agentSessions = pgTable('agent_sessions', {
   // Values: 'active' | 'completed' | 'failed' | 'stalled'
   startedAt:    timestamp('started_at').notNull().defaultNow(),
   endedAt:      timestamp('ended_at'),
-  // Phase 2 columns added later via migration — cost/token columns not yet
   createdAt:    timestamp('created_at').notNull().defaultNow(),
+  // ── Phase 2: execution tracking columns ──────────────────────────────────
+  totalInputTokens:     integer('total_input_tokens').notNull().default(0),
+  totalOutputTokens:    integer('total_output_tokens').notNull().default(0),
+  totalCacheReadTokens: integer('total_cache_read_tokens').notNull().default(0),
+  totalCostUsd:         doublePrecision('total_cost_usd').notNull().default(0),
+  totalToolCalls:       integer('total_tool_calls').notNull().default(0),
+  model:                text('model'),
+  gitBranch:            text('git_branch'),
+  gitCommitBefore:      text('git_commit_before'),
+  gitCommitAfter:       text('git_commit_after'),
+  filesModifiedCount:   integer('files_modified_count').notNull().default(0),
+});
+
+// ── Phase 2: tool_calls ───────────────────────────────────────────────────────
+export const toolCalls = pgTable(
+  'tool_calls',
+  {
+    id:           uuid('id').primaryKey().defaultRandom(),
+    sessionId:    uuid('session_id').notNull().references(() => agentSessions.id, { onDelete: 'cascade' }),
+    workspaceId:  uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    toolName:     text('tool_name').notNull(),
+    inputJson:    jsonb('input_json'),
+    outputJson:   jsonb('output_json'),
+    truncated:    boolean('truncated').notNull().default(false),
+    filePath:     text('file_path'),
+    durationMs:   integer('duration_ms'),
+    exitCode:     integer('exit_code'),
+    isError:      boolean('is_error').notNull().default(false),
+    errorMessage: text('error_message'),
+    inputTokens:       integer('input_tokens').default(0),
+    outputTokens:      integer('output_tokens').default(0),
+    cacheReadTokens:   integer('cache_read_tokens').default(0),
+    cacheWriteTokens:  integer('cache_write_tokens').default(0),
+    costUsd:           doublePrecision('cost_usd').default(0),
+    timestamp:    timestamp('timestamp').notNull().defaultNow(),
+  },
+  (table) => ({
+    sessionIdx:      index('tool_calls_session_idx').on(table.sessionId),
+    workspaceIdx:    index('tool_calls_workspace_idx').on(table.workspaceId),
+    timestampIdx:    index('tool_calls_timestamp_idx').on(table.timestamp),
+    filePathIdx:     index('tool_calls_file_path_idx').on(table.filePath),
+    sessionTimeIdx:  index('tool_calls_session_time_idx').on(table.sessionId, table.timestamp),
+  }),
+);
+
+// ── Phase 2: file_diffs ───────────────────────────────────────────────────────
+export const fileDiffs = pgTable(
+  'file_diffs',
+  {
+    id:           uuid('id').primaryKey().defaultRandom(),
+    sessionId:    uuid('session_id').notNull().references(() => agentSessions.id, { onDelete: 'cascade' }),
+    workspaceId:  uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    toolCallId:   uuid('tool_call_id').references(() => toolCalls.id, { onDelete: 'set null' }),
+    filePath:     text('file_path').notNull(),
+    diffContent:  text('diff_content'),
+    truncated:    boolean('truncated').notNull().default(false),
+    linesAdded:   integer('lines_added').default(0),
+    linesRemoved: integer('lines_removed').default(0),
+    timestamp:    timestamp('timestamp').notNull().defaultNow(),
+  },
+  (table) => ({
+    sessionIdx: index('file_diffs_session_idx').on(table.sessionId),
+  }),
+);
+
+// ── Phase 2: model_pricing ────────────────────────────────────────────────────
+export const modelPricing = pgTable('model_pricing', {
+  id:                        uuid('id').primaryKey().defaultRandom(),
+  modelId:                   text('model_id').notNull().unique(),
+  provider:                  text('provider').notNull(),
+  inputPricePerMillion:      doublePrecision('input_price_per_million').notNull(),
+  outputPricePerMillion:     doublePrecision('output_price_per_million').notNull(),
+  cacheReadPricePerMillion:  doublePrecision('cache_read_price_per_million').default(0),
+  cacheWritePricePerMillion: doublePrecision('cache_write_price_per_million').default(0),
+  isActive:                  boolean('is_active').notNull().default(true),
+  updatedAt:                 timestamp('updated_at').notNull().defaultNow(),
+});
+
+// ── Phase 2: budget_configs ───────────────────────────────────────────────────
+export const budgetConfigs = pgTable('budget_configs', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  workspaceId:       uuid('workspace_id').notNull().unique().references(() => workspaces.id, { onDelete: 'cascade' }),
+  dailyBudgetUsd:    doublePrecision('daily_budget_usd'),
+  monthlyBudgetUsd:  doublePrecision('monthly_budget_usd'),
+  alertThresholdPct: integer('alert_threshold_pct').notNull().default(80),
+  slackWebhookUrl:   text('slack_webhook_url'),
+  discordWebhookUrl: text('discord_webhook_url'),
+  lastAlertSentAt:   timestamp('last_alert_sent_at'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
 
 // ── Phase 9.5: Notification Center ───────────────────────────────────────────

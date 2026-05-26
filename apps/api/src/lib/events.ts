@@ -42,9 +42,35 @@ export interface NotificationPayload {
   createdAt: Date;
 }
 
+// ── Phase 2: AgentLens session event payloads ─────────────────────────────────
+
+export interface SessionCostUpdatedPayload {
+  sessionId:       string;
+  developerId:     string;
+  totalCostUsd:    number;
+  totalToolCalls:  number;
+  latestToolName:  string;
+}
+
+export interface SessionStartedPayload {
+  sessionId:   string;
+  developerId: string;
+  agent:       string;
+  taskId?:     string;
+}
+
+export interface SessionEndedPayload {
+  sessionId:    string;
+  totalCostUsd: number;
+  status:       string;
+}
+
 export type WorkspaceEvent =
   | { type: 'notification'; data: NotificationPayload }
-  | { type: 'task_updated'; data: TaskUpdatedPayload };
+  | { type: 'task_updated'; data: TaskUpdatedPayload }
+  | { type: 'session_cost_updated'; data: SessionCostUpdatedPayload }
+  | { type: 'session_started';      data: SessionStartedPayload }
+  | { type: 'session_ended';        data: SessionEndedPayload };
 
 type WorkspaceEventListener = (event: WorkspaceEvent) => void;
 
