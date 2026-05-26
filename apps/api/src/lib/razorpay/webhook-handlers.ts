@@ -1,16 +1,19 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { subscriptions, users, workspaceMembers, workspaces } from '../../db/schema.js';
 import { planKeyFromRazorpayPlanId } from './plan-state.js';
 import { emailQueue } from '../../queue/email.js';
 
-/** Look up the owner email for a workspace — used to send billing emails. */
+/** Look up the workspace owner's email — filtered by role='owner'. */
 async function getWorkspaceOwnerEmail(workspaceId: string): Promise<string | null> {
   const rows = await db
     .select({ email: users.email })
     .from(workspaceMembers)
     .innerJoin(users, eq(users.id, workspaceMembers.userId))
-    .where(eq(workspaceMembers.workspaceId, workspaceId))
+    .where(and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.role, 'owner'),
+    ))
     .limit(1);
   return rows[0]?.email ?? null;
 }
@@ -35,6 +38,15 @@ export interface RazorpayWebhookEvent {
   payload: {
     subscription: {
       entity: RazorpaySubscriptionEntity;
+    };
+    /** Present on subscription.charged events alongside the subscription entity. */
+    payment?: {
+      entity: {
+        id: string;
+        amount: number; // in paise (divide by 100 for rupees)
+        currency: string;
+        status: string;
+      };
     };
   };
   created_at: number;
@@ -144,15 +156,37 @@ export async function handleSubscriptionHalted(event: RazorpayWebhookEvent): Pro
   await db.update(subscriptions)
     .set({ status: 'halted', updatedAt: new Date() })
     .where(eq(subscriptions.razorpaySubscriptionId, sub.id));
-  // subscriptionStatus doesn't exist on workspaces — status lives in subscriptions table
 
   console.log(`[razorpay-webhook] subscription.halted → workspace ${wsId} (payment failed)`);
+
+  // Send payment_failed email to workspace owner (fire-and-forget)
+  void getWorkspaceOwnerEmail(wsId).then((email) => {
+    if (!email) return;
+    // Razorpay gives 7 days grace period before halting — access ends at period end
+    const gracePeriodEnd = sub.current_end
+      ? new Date(sub.current_end * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'end of billing period';
+    return emailQueue.add('payment_failed', {
+      type: 'payment_failed',
+      to: email,
+      params: {
+        planName: sub.plan_id ? 'Pro' : 'Pro', // plan name resolved from planKey if needed
+        amount: '—',
+        date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        gracePeriodEnd,
+        updateUrl: `${process.env.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in'}/app/settings/billing`,
+      },
+    });
+  }).catch((err) => console.error('[razorpay-webhook] failed to send payment_failed email', err));
 }
 
 export async function handleSubscriptionCancelled(event: RazorpayWebhookEvent): Promise<void> {
   const sub = event.payload.subscription.entity;
   const wsId = await findWorkspaceBySubscription(sub.id);
   if (!wsId) return;
+
+  // Look up planKey before updating so we can use it in the email
+  const planKey = await planKeyFromRazorpayPlanId(sub.plan_id);
 
   await db.update(subscriptions).set({
     status: 'cancelled',
@@ -173,11 +207,14 @@ export async function handleSubscriptionCancelled(event: RazorpayWebhookEvent): 
     const accessEnd = sub.ended_at
       ? new Date(sub.ended_at * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
       : 'end of billing period';
+    const planName = planKey
+      ? planKey.charAt(0).toUpperCase() + planKey.slice(1)
+      : 'Pro';
     return emailQueue.add('subscription_cancelled', {
       type: 'subscription_cancelled',
       to: email,
       params: {
-        planName: 'Pro',
+        planName,
         accessEndDate: accessEnd,
         reactivateUrl: `${process.env.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in'}/app/settings/billing`,
       },
@@ -193,9 +230,57 @@ export async function handleSubscriptionPaused(event: RazorpayWebhookEvent): Pro
   await db.update(subscriptions)
     .set({ status: 'paused', updatedAt: new Date() })
     .where(eq(subscriptions.razorpaySubscriptionId, sub.id));
-  // subscriptionStatus doesn't exist on workspaces — status lives in subscriptions table
 
   console.log(`[razorpay-webhook] subscription.paused → workspace ${wsId}`);
+}
+
+/**
+ * subscription.charged fires on every successful renewal charge.
+ * We update currentPeriodStart/End so the billing page always shows the
+ * correct next-renewal date, and fire a payment_successful email.
+ */
+export async function handleSubscriptionCharged(event: RazorpayWebhookEvent): Promise<void> {
+  const sub = event.payload.subscription.entity;
+  const wsId = await findWorkspaceBySubscription(sub.id);
+  if (!wsId) return;
+
+  const periodStart = sub.current_start != null ? new Date(sub.current_start * 1000) : null;
+  const periodEnd = sub.current_end != null ? new Date(sub.current_end * 1000) : null;
+
+  await db.update(subscriptions).set({
+    status: sub.status,
+    currentPeriodStart: periodStart,
+    currentPeriodEnd: periodEnd,
+    updatedAt: new Date(),
+  }).where(eq(subscriptions.razorpaySubscriptionId, sub.id));
+
+  console.log(`[razorpay-webhook] subscription.charged → workspace ${wsId} period updated`);
+
+  // Send payment_successful email (fire-and-forget)
+  void getWorkspaceOwnerEmail(wsId).then(async (email) => {
+    if (!email) return;
+    const planKey = await planKeyFromRazorpayPlanId(sub.plan_id);
+    const planName = planKey ? planKey.charAt(0).toUpperCase() + planKey.slice(1) : 'Pro';
+    const nextBillingDate = periodEnd
+      ? periodEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'next billing cycle';
+    // Payment amount from the payment entity (paise → rupees)
+    const payment = event.payload.payment?.entity;
+    const amount = payment
+      ? `₹${(payment.amount / 100).toLocaleString('en-IN')}`
+      : '—';
+    return emailQueue.add('payment_successful', {
+      type: 'payment_successful',
+      to: email,
+      params: {
+        planName,
+        amount,
+        date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+        nextBillingDate,
+        billingUrl: `${process.env.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in'}/app/settings/billing`,
+      },
+    });
+  }).catch((err) => console.error('[razorpay-webhook] failed to send charged email', err));
 }
 
 // STRIPE: ENABLE WHEN APPROVED

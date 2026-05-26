@@ -7,6 +7,7 @@ import {
   computeEventId,
   handleSubscriptionActivated,
   handleSubscriptionCancelled,
+  handleSubscriptionCharged,
   handleSubscriptionHalted,
   handleSubscriptionPaused,
   type RazorpayWebhookEvent,
@@ -81,6 +82,9 @@ export const razorpayRoutes: FastifyPluginAsync = async (app) => {
       switch (event.event) {
         case 'subscription.activated':
           await handleSubscriptionActivated(event);
+          break;
+        case 'subscription.charged':
+          await handleSubscriptionCharged(event);
           break;
         case 'subscription.halted':
           await handleSubscriptionHalted(event);

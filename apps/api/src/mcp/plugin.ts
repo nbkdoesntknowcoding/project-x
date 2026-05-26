@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import { requireOAuthBearer } from '../oauth/middleware/require-bearer.js';
+import { checkSubscriptionGate } from '../plugins/subscription.js';
 import { mcpConfig } from './config.js';
 // protectedResourceRoutes removed — well-known routes now live in oauth/routes/well-known.ts
 import { McpForbiddenError } from './scope.js';
@@ -71,7 +72,25 @@ export const mcpPlugin: FastifyPluginAsync = fp(async (app) => {
 
       const oauthCtx = req.oauth!;
 
-      // 3. Record last-used for legacy mcp_tokens (fire-and-forget).
+      // 3. Subscription gate — blocks halted/cancelled/paused workspaces.
+      //    Free-plan workspaces (no subscription row) are allowed through.
+      const gate = await checkSubscriptionGate(oauthCtx.workspaceId);
+      if (!gate.allowed) {
+        return reply.code(402).send({
+          jsonrpc: '2.0',
+          error: {
+            code: -32004,
+            message: gate.message,
+            data: {
+              subscription_status: gate.status,
+              billing_url: `${process.env.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in'}/app/settings/billing`,
+            },
+          },
+          id: null,
+        });
+      }
+
+      // 4. Record last-used for legacy mcp_tokens (fire-and-forget).
       if (oauthCtx.tokenType === 'legacy' && oauthCtx.jti) {
         db.update(mcpTokens)
           .set({ lastUsedAt: new Date() })
@@ -80,7 +99,7 @@ export const mcpPlugin: FastifyPluginAsync = fp(async (app) => {
           .catch(() => { /* non-critical */ });
       }
 
-      // 4. Build per-request auth context for tool handlers.
+      // 5. Build per-request auth context for tool handlers.
       const authCtx = {
         user_id: oauthCtx.userId,
         tenant_id: oauthCtx.workspaceId,
@@ -89,7 +108,7 @@ export const mcpPlugin: FastifyPluginAsync = fp(async (app) => {
         jwt_id: oauthCtx.jti,
       };
 
-      // 5. Build per-request server with the verified context captured in
+      // 6. Build per-request server with the verified context captured in
       //    its handler closures. This is the only safe place to bind ctx.
       const server = createMcpServer(authCtx);
 

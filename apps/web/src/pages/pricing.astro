@@ -126,6 +126,7 @@ import { StatusPill } from '../components/ui/StatusPill';
         </ul>
 
         <a
+          id="pro-cta"
           href="/signup?plan=pro"
           class="flex items-center justify-center w-full h-8 font-medium transition-[background] rounded select-none"
           style="font-size: 13px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border-radius: var(--radius-md);"
@@ -134,6 +135,13 @@ import { StatusPill } from '../components/ui/StatusPill';
         >
           Start Pro
         </a>
+        <script>
+          // If the user is already logged in, send them directly to billing
+          // rather than re-running the auth flow.
+          fetch('/api/billing/current', { credentials: 'include' })
+            .then(r => { if (r.ok) { const el = document.getElementById('pro-cta'); if (el) el.setAttribute('href', '/app/settings/billing?upgrade=pro'); } })
+            .catch(() => {});
+        </script>
         </div>
       </article>
 

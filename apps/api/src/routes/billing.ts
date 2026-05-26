@@ -33,6 +33,7 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
     const subRows = await db.select({
       status: subscriptions.status,
       currentPeriodEnd: subscriptions.currentPeriodEnd,
+      cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd,
       razorpayCustomerId: subscriptions.razorpayCustomerId,
     })
       .from(subscriptions)
@@ -45,6 +46,7 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
       plan: wsRows[0]!.plan,
       subscription_status: sub?.status ?? null,
       current_period_end: sub?.currentPeriodEnd?.toISOString() ?? null,
+      cancel_at_period_end: sub?.cancelAtPeriodEnd ?? false,
       has_razorpay_customer: Boolean(sub?.razorpayCustomerId),
       // STRIPE: ENABLE WHEN APPROVED
       // has_stripe_customer: Boolean(rows[0]!.stripeCustomerId),
@@ -163,13 +165,16 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const razorpay = (await import('../lib/razorpay/client.js')).razorpay;
-    // The Razorpay SDK types are incomplete — customer_id is a valid field per
-    // the API docs but missing from the TypeScript definitions.
+    const webBaseUrl = config.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in';
+    // The Razorpay SDK types are incomplete — customer_id and callback_url are
+    // valid fields per the API docs but missing from the TypeScript definitions.
     const subscription = await (razorpay.subscriptions.create({
       plan_id: razorpayPlanId,
       customer_id: customerId,
       quantity: 1,
       total_count: 120, // up to 10 years — effectively open-ended
+      // Razorpay hosted page redirects here after successful payment.
+      callback_url: `${webBaseUrl}/app/settings/billing?checkout=success`,
       notes: { workspace_id: req.auth.tenant_id },
     } as Parameters<typeof razorpay.subscriptions.create>[0]) as Promise<{ id: string; short_url: string }>);
 
