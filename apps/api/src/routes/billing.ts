@@ -388,6 +388,28 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(502).send({ error: 'payment_provider_error', detail: 'No checkout URL returned. Please try again.' });
     }
 
+    // Persist the new pending subscription so the webhook handler can find it
+    try {
+      await db.insert(subscriptions).values({
+        workspaceId: req.auth.tenant_id,
+        razorpaySubscriptionId: subscription.id,
+        razorpayCustomerId: customerId,
+        status: 'created',
+        planId: razorpayPlanId,
+        planKey: plan,
+        quantity: billableSeats,
+        currency,
+        cycle,
+        billableSeats,
+        updatedAt: new Date(),
+      }).onConflictDoUpdate({
+        target: subscriptions.razorpaySubscriptionId,
+        set: { status: 'created', updatedAt: new Date() },
+      });
+    } catch (err) {
+      req.log.warn({ err, subscriptionId: subscription.id }, 'Failed to persist pending subscription row (change-plan)');
+    }
+
     return {
       subscription_id: subscription.id,
       short_url: subscription.short_url,
@@ -494,6 +516,31 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
     if (!subscription.short_url) {
       req.log.error({ subscription }, 'razorpay_subscription_missing_short_url');
       return reply.code(502).send({ error: 'payment_provider_error', detail: 'No checkout URL returned. Please try again.' });
+    }
+
+    // Persist a pending subscription row immediately so the webhook handler
+    // can look it up by razorpaySubscriptionId when subscription.activated fires.
+    // Without this, findWorkspaceBySubscription() returns null and the handler exits.
+    try {
+      await db.insert(subscriptions).values({
+        workspaceId: req.auth.tenant_id,
+        razorpaySubscriptionId: subscription.id,
+        razorpayCustomerId: customerId,
+        status: 'created',
+        planId: razorpayPlanId,
+        planKey: plan,
+        quantity: billableSeats,
+        currency,
+        cycle,
+        billableSeats,
+        updatedAt: new Date(),
+      }).onConflictDoUpdate({
+        target: subscriptions.razorpaySubscriptionId,
+        set: { status: 'created', updatedAt: new Date() },
+      });
+    } catch (err) {
+      // Non-fatal — webhook fallback (notes.workspace_id) handles it if this fails
+      req.log.warn({ err, subscriptionId: subscription.id }, 'Failed to persist pending subscription row');
     }
 
     return {

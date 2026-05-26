@@ -344,7 +344,11 @@ export function BillingPanel(): JSX.Element {
       subscription_id: subscriptionId,
       name: 'Mnema',
       description: `${planName} subscription`,
-      callback_url: `${window.location.origin}/app/settings/billing?checkout=success`,
+      // Use handler (client-side callback) instead of callback_url.
+      // callback_url triggers a cross-site POST which Astro's CSRF protection blocks.
+      handler: () => {
+        window.location.href = `${window.location.origin}/app/settings/billing?checkout=success`;
+      },
       theme: { color: '#6366f1' },
       modal: { ondismiss: onDismiss },
     };

@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { subscriptions, users, workspaceMembers, workspaces } from '../../db/schema.js';
 import { planKeyFromRazorpayPlanId } from './plan-state.js';
+import { planSlugFromPlanId } from './plans.js';
 import { emailQueue } from '../../queue/email.js';
 
 /** Look up the workspace owner's email — filtered by role='owner'. */
@@ -124,15 +125,27 @@ async function findWorkspaceBySubscription(subscriptionId: string): Promise<stri
 
 export async function handleSubscriptionActivated(event: RazorpayWebhookEvent): Promise<void> {
   const sub = event.payload.subscription.entity;
-  const planKey = await planKeyFromRazorpayPlanId(sub.plan_id);
+
+  // Resolve plan key: try env-var map first (new system), fall back to DB table
+  // (old system), then fall back to the plan_slug stored in subscription notes.
+  const planKey =
+    planSlugFromPlanId(sub.plan_id) ??
+    (await planKeyFromRazorpayPlanId(sub.plan_id)) ??
+    sub.notes?.plan_slug ??
+    null;
   if (!planKey) {
     console.warn('[razorpay-webhook] plan_id not mapped to a plan key', { plan_id: sub.plan_id });
     return;
   }
 
-  const wsId = await findWorkspaceBySubscription(sub.id);
+  // Resolve workspace: check our subscriptions table first; fall back to
+  // notes.workspace_id (set when the subscription was created via our API).
+  const wsId =
+    (await findWorkspaceBySubscription(sub.id)) ??
+    sub.notes?.workspace_id ??
+    null;
   if (!wsId) {
-    console.warn('[razorpay-webhook] no workspace found for subscription', { id: sub.id });
+    console.warn('[razorpay-webhook] no workspace_id for subscription', { id: sub.id });
     return;
   }
 
