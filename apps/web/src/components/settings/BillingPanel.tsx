@@ -157,6 +157,11 @@ export function BillingPanel(): JSX.Element {
   const pollAttemptsRef = useRef(0);
   const autoTriggered = useRef(false);
 
+  // Detect return from Razorpay Checkout.js (callback_url redirect after payment)
+  const checkoutSuccess =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('checkout') === 'success';
+
   // Read ?upgrade=PLAN&cycle=CYCLE — set by pricing page CTA after post-login redirect
   const upgradeParam =
     typeof window !== 'undefined'
@@ -194,6 +199,18 @@ export function BillingPanel(): JSX.Element {
       .catch(() => setInvoices([]))
       .finally(() => setInvoicesLoading(false));
   }, []);
+
+  // ── Strip ?checkout=success from URL after Razorpay redirect ─────────────
+  useEffect(() => {
+    if (!checkoutSuccess) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('checkout');
+    // Also strip Razorpay's appended payment params (razorpay_payment_id etc.)
+    url.searchParams.delete('razorpay_payment_id');
+    url.searchParams.delete('razorpay_subscription_id');
+    url.searchParams.delete('razorpay_signature');
+    window.history.replaceState({}, '', url.toString());
+  }, [checkoutSuccess]);
 
   // ── Activation polling ────────────────────────────────────────────────────
   // Razorpay subscriptions don't support callback_url, so there's no redirect
@@ -278,7 +295,11 @@ export function BillingPanel(): JSX.Element {
 
   // ── Checkout helpers ──────────────────────────────────────────────────────
 
-  async function callSubscribeAPI(endpoint: string, plan: PlanSlug, billingCycle: BillingCycle): Promise<string | null> {
+  async function callSubscribeAPI(
+    endpoint: string,
+    plan: PlanSlug,
+    billingCycle: BillingCycle,
+  ): Promise<{ subscriptionId: string } | null> {
     const res = await fetch(endpoint, {
       method: 'POST',
       credentials: 'include',
@@ -294,15 +315,69 @@ export function BillingPanel(): JSX.Element {
     } catch {
       throw new Error(`Server returned HTTP ${res.status}. The request may have timed out — please try again.`);
     }
-    if (typeof body.short_url === 'string') return body.short_url;
+    if (typeof body.subscription_id === 'string') return { subscriptionId: body.subscription_id };
     throw new Error(extractErrorMessage(body, `Could not start checkout (HTTP ${res.status}). Please email support@theboringpeople.in.`));
+  }
+
+  /**
+   * Open the Razorpay checkout modal (Checkout.js) with a subscription_id.
+   * This is the correct integration for web apps — the hosted short_url approach
+   * requires a separately-activated Razorpay product ("Subscription Links") and
+   * shows "Hosted page is not available" if that product isn't enabled.
+   *
+   * After successful payment Razorpay redirects the browser to callback_url.
+   * If the user dismisses without paying, onDismiss() is called.
+   */
+  function openRazorpayCheckout(
+    subscriptionId: string,
+    planName: string,
+    onDismiss: () => void,
+  ): void {
+    const keyId = (import.meta.env as Record<string, string>).PUBLIC_RAZORPAY_KEY_ID;
+    if (!keyId) {
+      alert('Payment system is not configured. Please contact support@theboringpeople.in.');
+      onDismiss();
+      return;
+    }
+    const options = {
+      key: keyId,
+      subscription_id: subscriptionId,
+      name: 'Mnema',
+      description: `${planName} subscription`,
+      callback_url: `${window.location.origin}/app/settings/billing?checkout=success`,
+      theme: { color: '#6366f1' },
+      modal: { ondismiss: onDismiss },
+    };
+    const doOpen = () => {
+      const rzp = new (window as unknown as {
+        Razorpay: new (o: unknown) => { open(): void };
+      }).Razorpay(options);
+      rzp.open();
+    };
+    if (typeof (window as unknown as Record<string, unknown>).Razorpay !== 'undefined') {
+      doOpen();
+    } else {
+      const s = document.createElement('script');
+      s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      s.onload = doOpen;
+      s.onerror = () => {
+        onDismiss();
+        alert('Failed to load the payment form. Please check your connection and try again.');
+      };
+      document.body.appendChild(s);
+    }
   }
 
   async function startNewSubscription(plan: PlanSlug, billingCycle: BillingCycle = 'monthly'): Promise<void> {
     setChangingPlan(plan);
     try {
-      const url = await callSubscribeAPI('/api/billing/subscribe', plan, billingCycle);
-      if (url) window.location.href = url;
+      const result = await callSubscribeAPI('/api/billing/subscribe', plan, billingCycle);
+      if (result) {
+        const planName = TIERS.find((t) => t.slug === plan)?.name ?? plan;
+        // Opens the Razorpay modal inline — changingPlan stays set until
+        // the user dismisses or the callback_url redirect reloads the page.
+        openRazorpayCheckout(result.subscriptionId, planName, () => setChangingPlan(null));
+      }
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Could not start checkout. Please email support@theboringpeople.in.');
       setChangingPlan(null);
@@ -312,8 +387,11 @@ export function BillingPanel(): JSX.Element {
   async function changePlan(plan: PlanSlug, billingCycle: BillingCycle): Promise<void> {
     setChangingPlan(plan);
     try {
-      const url = await callSubscribeAPI('/api/billing/change-plan', plan, billingCycle);
-      if (url) window.location.href = url;
+      const result = await callSubscribeAPI('/api/billing/change-plan', plan, billingCycle);
+      if (result) {
+        const planName = TIERS.find((t) => t.slug === plan)?.name ?? plan;
+        openRazorpayCheckout(result.subscriptionId, planName, () => setChangingPlan(null));
+      }
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Could not change plan. Please email support@theboringpeople.in.');
       setChangingPlan(null);
@@ -369,7 +447,7 @@ export function BillingPanel(): JSX.Element {
       : null;
     return (
       <div style={{ color: 'var(--text-tertiary)', fontSize: '0.875rem' }}>
-        {tierLabel ? `Preparing ${tierLabel} checkout…` : 'Loading…'}
+        {tierLabel ? `Opening ${tierLabel} checkout…` : 'Loading…'}
       </div>
     );
   }
@@ -410,7 +488,7 @@ export function BillingPanel(): JSX.Element {
   }
 
   function getPlanButtonLabel(slug: PlanSlug): string {
-    if (changingPlan === slug) return 'Redirecting…';
+    if (changingPlan === slug) return 'Opening checkout…';
     if (slug === currentPlanSlug) return 'Current plan';
     const currentRank = TIER_RANK[currentPlanSlug] ?? 0;
     const targetRank = TIER_RANK[slug] ?? 0;
@@ -433,8 +511,22 @@ export function BillingPanel(): JSX.Element {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', maxWidth: 720 }}>
 
+      {/* ── Payment received banner (Checkout.js callback_url redirect) ── */}
+      {checkoutSuccess && !justActivated && (
+        <div style={{
+          padding: '0.875rem 1rem',
+          borderRadius: '0.5rem',
+          background: 'rgba(74,222,128,0.08)',
+          border: '1px solid rgba(74,222,128,0.20)',
+          fontSize: '0.875rem',
+          color: 'var(--text-primary)',
+        }}>
+          🎉 Payment received — your subscription is activating. This page will update automatically.
+        </div>
+      )}
+
       {/* ── Activation pending banner (polling) ── */}
-      {activationPolling && (
+      {activationPolling && !checkoutSuccess && (
         <div style={{
           padding: '0.875rem 1rem',
           borderRadius: '0.5rem',
@@ -697,7 +789,7 @@ export function BillingPanel(): JSX.Element {
                     transition: 'opacity 0.15s',
                   }}
                 >
-                  {isRedirecting ? 'Redirecting…' : buttonLabel}
+                  {isRedirecting ? 'Opening checkout…' : buttonLabel}
                 </button>
               </div>
             );
