@@ -161,7 +161,7 @@ export function InviteAcceptCard({
             <span style={{ color: 'var(--text-primary)' }}>{signedInEmail}</span>.
           </p>
           <a
-            href="/auth/logout"
+            href={`/auth/logout?next=${encodeURIComponent(`/invite/${token}`)}`}
             className="block text-center text-sm underline transition-colors"
             style={{ color: 'var(--text-secondary)' }}
           >
