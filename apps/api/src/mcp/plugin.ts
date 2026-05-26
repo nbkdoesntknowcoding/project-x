@@ -9,7 +9,7 @@ import { McpForbiddenError } from './scope.js';
 import { createMcpServer } from './server.js';
 import { handleStreamableHttp } from './transport.js';
 import { db } from '../db/index.js';
-import { mcpTokens } from '../db/schema.js';
+import { mcpTokens, workspaces } from '../db/schema.js';
 
 declare module 'fastify' {
   interface FastifyContextConfig {
@@ -100,12 +100,28 @@ export const mcpPlugin: FastifyPluginAsync = fp(async (app) => {
       }
 
       // 5. Build per-request auth context for tool handlers.
+      // Phase 1 AgentLens: fetch workspace mode so dev tools can be conditionally
+      // registered. Fire-and-forget approach: fetch with a short-circuit default.
+      let workspaceMode: string | undefined;
+      try {
+        const wsRows = await db
+          .select({ mode: workspaces.mode })
+          .from(workspaces)
+          .where(eq(workspaces.id, oauthCtx.workspaceId))
+          .limit(1);
+        workspaceMode = wsRows[0]?.mode;
+      } catch {
+        // Non-critical — dev tools will just not be registered
+        workspaceMode = undefined;
+      }
+
       const authCtx = {
         user_id: oauthCtx.userId,
         tenant_id: oauthCtx.workspaceId,
         email: '',  // not available on OAuth tokens; tools don't use it
         scopes: oauthCtx.scope,
         jwt_id: oauthCtx.jti,
+        workspaceMode,
       };
 
       // 6. Build per-request server with the verified context captured in

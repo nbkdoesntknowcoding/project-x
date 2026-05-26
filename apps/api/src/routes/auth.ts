@@ -6,10 +6,12 @@ import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/index.js';
-import { docs, workspaceMembers, workspaces } from '../db/schema.js';
+import { docs, folders, workspaceMembers, workspaces } from '../db/schema.js';
 import { withSystemPrivilege } from '../db/with-system-privilege.js';
 import { seedExampleFlow } from '../services/flow-seed.js';
+import { seedBuildFlow } from '../services/dev-flow-seed.js';
 import { withTenant } from '../db/with-tenant.js';
+import { generateHookToken } from '../lib/dev/hook-token.js';
 import { emailQueue } from '../queue/email.js';
 import { enforceRateLimit } from '../lib/auth-rate-limit.js';
 import { signJwt } from '../lib/jwt.js';
@@ -40,6 +42,8 @@ const createWorkspaceSchema = z.object({
     .min(2)
     .max(40)
     .optional(),
+  // Phase 1 AgentLens: 'dev_project' creates dev template with 6 folders + Build Flow
+  mode: z.enum(['knowledge', 'dev_project']).optional().default('knowledge'),
 });
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
@@ -182,6 +186,11 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const slug = parsed.data.slug ?? slugify(parsed.data.name);
 
     // Stage 1: workspace + owner membership under system privilege.
+    const mode = parsed.data.mode ?? 'knowledge';
+    // Generate hook token for dev_project workspaces before the DB write
+    // so we can store the hash atomically with the workspace row.
+    const hookTokenData = mode === 'dev_project' ? generateHookToken() : null;
+
     const setupResult = await withSystemPrivilege(async (tx) => {
       const existing = await tx
         .select({ id: workspaces.id })
@@ -194,7 +203,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
       const [ws] = await tx
         .insert(workspaces)
-        .values({ slug, name: parsed.data.name })
+        .values({
+          slug,
+          name: parsed.data.name,
+          mode,
+          // Store hash only — plaintext is returned once and never persisted
+          hookToken: hookTokenData?.hash ?? null,
+        })
         .returning();
       if (!ws) {
         throw new Error('workspace_insert_failed');
@@ -244,6 +259,38 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       req.log.warn({ err, workspace_id: setupResult.workspace.id }, 'example_flow_seed_failed');
     }
 
+    // Stage 2c (Phase 1 AgentLens): for dev_project workspaces, seed the
+    // 6-folder template and Build Flow. Failure is non-fatal.
+    if (mode === 'dev_project') {
+      try {
+        const DEV_FOLDERS = [
+          { name: 'Architecture' },
+          { name: 'PRD' },
+          { name: 'Tasks' },
+          { name: 'Build Prompts' },
+          { name: 'Skills' },
+          { name: 'Decisions' },
+        ];
+        await withTenant(setupResult.workspace.id, async (tx) => {
+          await tx.insert(folders).values(
+            DEV_FOLDERS.map((f) => ({
+              workspaceId: setupResult.workspace.id,
+              name: f.name,
+              createdBy: req.auth!.sub,
+            })),
+          );
+        });
+      } catch (err) {
+        req.log.warn({ err, workspace_id: setupResult.workspace.id }, 'dev_folders_seed_failed');
+      }
+
+      try {
+        await seedBuildFlow(setupResult.workspace.id, req.auth!.sub);
+      } catch (err) {
+        req.log.warn({ err, workspace_id: setupResult.workspace.id }, 'build_flow_seed_failed');
+      }
+    }
+
     // Stage 3: re-mint JWT scoped to the new workspace + set cookie.
     // Creator is always owner — they just inserted the membership above.
     const jwt = await signJwt({
@@ -277,7 +324,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     // See switch-workspace: the JWT is returned in the body so the web tier
     // can refresh its sealed session cookie alongside the JWT cookie.
-    return { workspace: setupResult.workspace, jwt };
+    // hookToken is the plaintext — returned ONCE for dev_project workspaces.
+    // After this response it's gone; only the hash is in the DB.
+    return {
+      workspace: setupResult.workspace,
+      jwt,
+      ...(hookTokenData ? { hookToken: hookTokenData.plaintext } : {}),
+    };
   });
 };
 

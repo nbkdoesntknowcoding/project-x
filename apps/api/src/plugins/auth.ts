@@ -41,6 +41,8 @@ export const authPlugin: FastifyPluginAsync = fp(async (app) => {
     // app-login cookie/JWT path here would 401 before the MCP plugin sees
     // the request — bail out for any route flagged mcpRoute.
     if (req.routeOptions?.config?.mcpRoute) return;
+    // Hook routes have their own Bearer token auth (hook_token, not JWT).
+    if (url.startsWith('/api/hooks/') || url === '/install/claude-hooks.sh') return;
 
     const token = req.cookies[JWT_COOKIE_NAME] ?? extractBearer(req.headers.authorization);
     if (!token) {

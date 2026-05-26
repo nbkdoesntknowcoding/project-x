@@ -5,6 +5,7 @@ import type { McpAuthContext } from './auth.js';
 import { mcpConfig } from './config.js';
 import { McpForbiddenError } from './scope.js';
 import { PRODUCTION_TOOLS } from './tools/index.js';
+import { DEV_TOOLS } from './tools/dev/index.js';
 import { callTestProbe, isTestProbeName, registerTestProbe } from './_test-probe.js';
 import { PROBE_HTML } from './apps/probe-html.js';
 import { getWritePreviewHtml } from './apps/write-preview-html.js';
@@ -152,6 +153,35 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
         }
       },
     );
+  }
+
+  // ── Phase 1 AgentLens: dev MCP tools (dev_project workspaces only) ──────────
+  // Dev tools are INVISIBLE in tools/list for knowledge-mode workspaces.
+  // They are only registered when workspace.mode === 'dev_project'.
+  if (ctx.workspaceMode === 'dev_project') {
+    for (const { spec, handler } of DEV_TOOLS) {
+      mcpServer.registerTool(
+        spec.name,
+        {
+          description: spec.description,
+          inputSchema: jsonSchemaToZodShape(spec.inputSchema),
+          annotations: spec.annotations as { readOnlyHint?: boolean; destructiveHint?: boolean; title?: string } | undefined,
+        },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        async (args: any) => {
+          try {
+            const result = await handler(ctx, args as Record<string, unknown>);
+            return {
+              content: [{ type: 'text' as const, text: result.content }],
+              ...(result.structuredContent ? { structuredContent: result.structuredContent } : {}),
+            };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            return { isError: true, content: [{ type: 'text' as const, text: message }] };
+          }
+        },
+      );
+    }
   }
 
   // ── Test-only probe tool ────────────────────────────────────────────────────

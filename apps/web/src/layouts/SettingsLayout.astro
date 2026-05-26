@@ -22,12 +22,29 @@ const userInitial = (auth.email[0] ?? 'U').toUpperCase();
 
 const currentPath = Astro.url.pathname;
 
+const apiUrl2 =
+  (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+let workspaceMode2 = 'knowledge';
+try {
+  const devRes = await fetch(`${apiUrl2}/api/workspaces/${auth.tenant_id}/dev-config`, {
+    headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+  });
+  if (devRes.ok) {
+    const body = (await devRes.json()) as { mode: string };
+    workspaceMode2 = body.mode ?? 'knowledge';
+  }
+} catch {
+  /* API offline */
+}
+const isDevProject = workspaceMode2 === 'dev_project';
+
 const NAV_SECTIONS = [
   {
     label: 'Workspace',
     items: [
       { href: '/app/settings/workspace', label: 'Workspace' },
       { href: '/app/settings/members', label: 'Members' },
+      ...(isDevProject ? [{ href: '/app/settings/dev', label: 'Dev / AgentLens' }] : []),
     ],
   },
   {

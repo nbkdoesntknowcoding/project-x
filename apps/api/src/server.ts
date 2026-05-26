@@ -29,6 +29,8 @@ import { invitationsRoutes } from './routes/invitations.js';
 import { membersRoutes } from './routes/members.js';
 import { notificationsRoutes } from './routes/notifications.js';
 import { workspacesRoutes } from './routes/workspaces.js';
+import { tasksRoutes } from './routes/tasks.js';
+import { hooksRoutes } from './routes/hooks.js';
 import { setSessionRoutes } from './routes/_internal/set-session.js';
 import { joinWorkspaceRoutes } from './routes/_internal/join-workspace.js';
 
@@ -55,6 +57,8 @@ await app.register(invitationsRoutes);
 await app.register(membersRoutes);
 await app.register(notificationsRoutes);
 await app.register(workspacesRoutes);
+await app.register(tasksRoutes);
+await app.register(hooksRoutes);
 await app.register(commentsRoutes);
 await app.register(docVersionsRoutes);
 await app.register(docReadStateRoutes);

@@ -5,6 +5,7 @@ import { workspaces } from '../db/schema.js';
 import { withSystemPrivilege } from '../db/with-system-privilege.js';
 import { withTenant } from '../db/with-tenant.js';
 import { requireRole, RoleError } from '../lib/role.js';
+import { generateHookToken } from '../lib/dev/hook-token.js';
 
 const updateSchema = z.object({
   name: z.string().min(1).max(80).optional(),
@@ -115,6 +116,128 @@ export const workspacesRoutes: FastifyPluginAsync = async (app) => {
     );
 
     return { workspace: updated[0] };
+  });
+
+  // ------------------------------------------------------------------------
+  // GET /api/workspaces/:id/dev-config
+  // Returns dev project configuration for the workspace.
+  // Never returns hook token plaintext — only whether a hash is stored.
+  // Viewer+ (member check via withTenant).
+  // ------------------------------------------------------------------------
+  app.get('/api/workspaces/:id/dev-config', async (req, reply) => {
+    if (!req.auth) {
+      return reply.code(401).send({ error: 'unauthorized' });
+    }
+    const { id } = req.params as { id: string };
+
+    // Only allow access to the workspace the JWT is scoped to
+    if (id !== req.auth.tenant_id) {
+      return reply.code(403).send({ error: 'forbidden' });
+    }
+
+    try {
+      await requireRole(req, 'viewer');
+    } catch (err) {
+      if (err instanceof RoleError) {
+        return reply.code(err.status).send({ error: err.reason });
+      }
+      throw err;
+    }
+
+    const row = await withTenant(req.auth.tenant_id, async (tx) => {
+      const rows = await tx
+        .select({ mode: workspaces.mode, hookToken: workspaces.hookToken })
+        .from(workspaces)
+        .where(eq(workspaces.id, req.auth!.tenant_id))
+        .limit(1);
+      return rows[0];
+    });
+
+    if (!row) {
+      return reply.code(404).send({ error: 'workspace_not_found' });
+    }
+
+    const webBase =
+      (process.env.WEB_BASE_URL as string | undefined) ?? 'https://mnema.theboringpeople.in';
+
+    return {
+      mode: row.mode,
+      hookTokenSet: row.hookToken !== null,
+      hookReceiverUrl: `${webBase}/api/hooks/claude-code`,
+      mcpConfigSnippet: JSON.stringify(
+        {
+          mcpServers: {
+            mnema: {
+              url: `${webBase}/mcp`,
+              headers: { Authorization: 'Bearer <YOUR_MCP_TOKEN>' },
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      installCommand: `MNEMA_HOOK_TOKEN=<YOUR_HOOK_TOKEN> MNEMA_WORKSPACE_ID=${id} bash <(curl -sf ${webBase}/install/claude-hooks.sh)`,
+    };
+  });
+
+  // ------------------------------------------------------------------------
+  // POST /api/workspaces/:id/regenerate-hook-token
+  // Invalidates the old hook token hash and generates a fresh one.
+  // Returns the plaintext ONCE — store it, it won't be shown again.
+  // Owner-only.
+  // ------------------------------------------------------------------------
+  app.post('/api/workspaces/:id/regenerate-hook-token', async (req, reply) => {
+    if (!req.auth) {
+      return reply.code(401).send({ error: 'unauthorized' });
+    }
+    const { id } = req.params as { id: string };
+
+    if (id !== req.auth.tenant_id) {
+      return reply.code(403).send({ error: 'forbidden' });
+    }
+
+    try {
+      await requireRole(req, 'owner');
+    } catch (err) {
+      if (err instanceof RoleError) {
+        return reply.code(err.status).send({ error: err.reason });
+      }
+      throw err;
+    }
+
+    // Verify workspace is actually a dev_project before regenerating
+    const row = await withTenant(req.auth.tenant_id, async (tx) => {
+      const rows = await tx
+        .select({ mode: workspaces.mode })
+        .from(workspaces)
+        .where(eq(workspaces.id, req.auth!.tenant_id))
+        .limit(1);
+      return rows[0];
+    });
+
+    if (!row) {
+      return reply.code(404).send({ error: 'workspace_not_found' });
+    }
+    if (row.mode !== 'dev_project') {
+      return reply.code(400).send({
+        error: 'not_dev_project',
+        message: 'Hook tokens are only available for Dev Project workspaces.',
+      });
+    }
+
+    const { plaintext, hash } = generateHookToken();
+
+    // Use system privilege because withTenant SET LOCAL doesn't bypass the
+    // unique constraint check — we just need to update our own row.
+    await withSystemPrivilege(async (tx) => {
+      await tx
+        .update(workspaces)
+        .set({ hookToken: hash, updatedAt: new Date() })
+        .where(eq(workspaces.id, req.auth!.tenant_id));
+    });
+
+    // Plaintext returned ONCE — never shown again after this response.
+    return { hookToken: plaintext };
   });
 };
 

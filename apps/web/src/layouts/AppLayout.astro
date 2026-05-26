@@ -19,14 +19,24 @@ const userInitial = (email?.[0] ?? auth?.email?.[0] ?? 'U').toUpperCase();
 const apiUrl =
   (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
 let typeCounts: Record<string, number> = {};
+let workspaceMode: string | undefined = undefined;
 if (auth) {
   try {
-    const res = await fetch(`${apiUrl}/api/content/type-counts`, {
-      headers: { Cookie: `boppl_jwt=${auth.jwt}` },
-    });
-    if (res.ok) {
-      const body = (await res.json()) as { counts: Record<string, number> };
+    const [countsRes, devRes] = await Promise.allSettled([
+      fetch(`${apiUrl}/api/content/type-counts`, {
+        headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+      }),
+      fetch(`${apiUrl}/api/workspaces/${auth.tenant_id}/dev-config`, {
+        headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+      }),
+    ]);
+    if (countsRes.status === 'fulfilled' && countsRes.value.ok) {
+      const body = (await countsRes.value.json()) as { counts: Record<string, number> };
       typeCounts = body.counts ?? {};
+    }
+    if (devRes.status === 'fulfilled' && devRes.value.ok) {
+      const body = (await devRes.value.json()) as { mode: string };
+      workspaceMode = body.mode;
     }
   } catch {
     /* API offline */
@@ -228,6 +238,7 @@ if (auth) {
       <Sidebar
         workspaceName={workspaceName}
         currentPath={pathname}
+        workspaceMode={workspaceMode}
         typeCounts={typeCounts}
         client:load
       />

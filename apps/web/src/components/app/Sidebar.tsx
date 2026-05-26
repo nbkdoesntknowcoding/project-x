@@ -3,6 +3,7 @@ import './sidebar.css';
 interface Props {
   workspaceName: string;
   currentPath: string;
+  workspaceMode?: string;
   typeCounts?: {
     doc?: number;
     engineering?: number;
@@ -11,7 +12,7 @@ interface Props {
   };
 }
 
-export function Sidebar({ currentPath, typeCounts = {} }: Props) {
+export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) {
   const typeParam = currentPath.includes('?')
     ? new URLSearchParams(currentPath.split('?')[1]).get('type')
     : null;
@@ -21,6 +22,9 @@ export function Sidebar({ currentPath, typeCounts = {} }: Props) {
   const isOnFlows = currentPath.startsWith('/app/flows');
   const isOnClaude = currentPath === '/app/connections/claude';
   const isOnDrive = currentPath === '/app/connections/drive';
+  const isOnKanban = currentPath.startsWith('/app/kanban');
+
+  const isDevProject = workspaceMode === 'dev_project';
 
   const showEng = (typeCounts.engineering ?? 0) > 0;
   const showInst = (typeCounts.instruction ?? 0) > 0;
@@ -125,6 +129,29 @@ export function Sidebar({ currentPath, typeCounts = {} }: Props) {
           </span>
         </a>
       </div>
+
+      {/* ── DEV (dev_project workspaces only) ───── */}
+      {isDevProject && (
+        <div className="sb-section">
+          <div className="sb-section-head"><span>Dev</span></div>
+
+          <a
+            href="/app/kanban"
+            className={`sb-row${isOnKanban ? ' active' : ''}`}
+          >
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="5" height="18" rx="1"/>
+                  <rect x="10" y="3" width="5" height="13" rx="1"/>
+                  <rect x="17" y="3" width="5" height="9" rx="1"/>
+                </svg>
+              </span>
+              <span className="sb-label">Kanban</span>
+            </span>
+          </a>
+        </div>
+      )}
 
       {/* ── CONNECTIONS ──────────────────────────── */}
       <div className="sb-section">

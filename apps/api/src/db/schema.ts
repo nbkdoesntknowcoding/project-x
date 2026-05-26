@@ -3,6 +3,7 @@ import {
   bigserial,
   boolean,
   customType,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -70,6 +71,12 @@ export const workspaces = pgTable('workspaces', {
   name: text('name').notNull(),
   plan: text('plan').notNull().default('free'),
   settings: jsonb('settings').notNull().default(sql`'{}'::jsonb`),
+  // Phase 1 — AgentLens Task Layer
+  // 'knowledge' = existing Mnema behaviour
+  // 'dev_project' = knowledge + AgentLens task layer + dev MCP tools
+  mode: text('mode').notNull().default('knowledge'),
+  // SHA-256 hash of the hook token. Plaintext never stored.
+  hookToken: text('hook_token').unique(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -709,6 +716,78 @@ export const razorpayPlanIds = pgTable(
     pk: primaryKey({ columns: [table.planKey, table.environment] }),
   }),
 );
+
+// ============================================================================
+// Phase 1 — AgentLens Task Layer
+// ============================================================================
+
+// Tasks: the core Kanban unit. Each task belongs to a dev_project workspace
+// and may optionally be linked to a Mnema doc (e.g. a spec in the PRD folder).
+export const tasks = pgTable(
+  'tasks',
+  {
+    id:                 uuid('id').primaryKey().defaultRandom(),
+    workspaceId:        uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    docId:              uuid('doc_id').references(() => docs.id, { onDelete: 'set null' }),
+    // Nullable — task can exist as a standalone Kanban card OR linked to a Mnema doc
+
+    title:              text('title').notNull(),
+    description:        text('description'),
+    status:             text('status').notNull().default('backlog'),
+    // Values: 'backlog' | 'in_progress' | 'review' | 'audit_fix' | 'done'
+
+    priority:           text('priority').notNull().default('medium'),
+    // Values: 'low' | 'medium' | 'high' | 'critical'
+
+    estimatedCostUsd:   doublePrecision('estimated_cost_usd'),
+    // assignedMemberId references users.id (a workspace member user)
+    assignedMemberId:   uuid('assigned_member_id').references(() => users.id, { onDelete: 'set null' }),
+
+    githubPrUrl:        text('github_pr_url'),
+    githubPrStatus:     text('github_pr_status'),
+    // Values: 'open' | 'merged' | 'closed' | null
+
+    blockerDescription: text('blocker_description'),
+    // Set by log_blocker MCP tool, cleared on re-claim
+
+    retryCount:         integer('retry_count').notNull().default(0),
+    retryFixHint:       text('retry_fix_hint'),
+    // AI-generated fix hint stored by retry engine (Phase 2)
+
+    boardOrder:         integer('board_order').notNull().default(0),
+    // Sort order within the status column. Lower = higher on the board.
+
+    tags:               text('tags').array(),
+    // Simple string array, no separate tags table for Phase 1
+
+    createdAt:          timestamp('created_at').notNull().defaultNow(),
+    updatedAt:          timestamp('updated_at').notNull().defaultNow(),
+    completedAt:        timestamp('completed_at'),
+  },
+  (table) => ({
+    workspaceIdx: index('tasks_workspace_id_idx').on(table.workspaceId),
+    statusIdx:    index('tasks_status_idx').on(table.status),
+    orderIdx:     index('tasks_board_order_idx').on(table.boardOrder),
+  }),
+);
+
+// Agent sessions: created when an agent claims a task. Phase 1 stub —
+// Phase 2 adds cost, token, and event columns via additive migration.
+export const agentSessions = pgTable('agent_sessions', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  workspaceId:  uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  taskId:       uuid('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  developerId:  text('developer_id').notNull(),
+  // String matching MNEMA_DEVELOPER_ID env var on the agent's machine
+  agent:        text('agent').notNull().default('claude_code'),
+  // Values: 'claude_code' | 'cursor' | 'aider' | 'cline' | 'generic'
+  status:       text('status').notNull().default('active'),
+  // Values: 'active' | 'completed' | 'failed' | 'stalled'
+  startedAt:    timestamp('started_at').notNull().defaultNow(),
+  endedAt:      timestamp('ended_at'),
+  // Phase 2 columns added later via migration — cost/token columns not yet
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+});
 
 // ── Phase 9.5: Notification Center ───────────────────────────────────────────
 export const notifications = pgTable(

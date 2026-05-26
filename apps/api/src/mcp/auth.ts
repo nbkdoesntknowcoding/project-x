@@ -14,6 +14,8 @@ export interface McpAuthContext {
   email: string;
   scopes: string[];
   jwt_id: string | null;
+  /** Phase 1 AgentLens: workspace mode. 'dev_project' enables dev MCP tools. */
+  workspaceMode?: string;
 }
 
 /**

@@ -13,6 +13,7 @@ import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { db } from '../db/index.js';
 import { notifications } from '../db/schema.js';
+import { subscribeWorkspace } from '../lib/events.js';
 
 export const notificationsRoutes: FastifyPluginAsync = async (app) => {
   // ──────────────────────────────────────────────────────────────────────────
@@ -141,6 +142,20 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
     let since = new Date();
     send('connected', { ok: true });
 
+    // Phase 1 AgentLens: subscribe to in-process task_updated events so the
+    // Kanban board gets real-time updates without a separate SSE endpoint.
+    const unsubscribeEvents = subscribeWorkspace(tenant_id, (event) => {
+      try {
+        if (event.type === 'notification') {
+          send('notification', event.data);
+        } else if (event.type === 'task_updated') {
+          send('task_updated', event.data);
+        }
+      } catch {
+        // Client disconnected mid-write — safe to ignore
+      }
+    });
+
     // Poll for new notifications every 10s
     const pollInterval = setInterval(async () => {
       try {
@@ -183,6 +198,7 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
     req.raw.on('close', () => {
       clearInterval(pollInterval);
       clearInterval(pingInterval);
+      unsubscribeEvents();
     });
 
     // Keep Fastify from auto-sending a reply
