@@ -36,14 +36,15 @@ const handler: APIRoute = async (context) => {
 
   const isBodyMethod = !['GET', 'HEAD'].includes(request.method.toUpperCase());
 
-  const init: RequestInit & { duplex?: string } = {
+  const init: RequestInit = {
     method: request.method,
     headers: forwardHeaders,
   };
 
-  if (isBodyMethod && request.body) {
-    init.body = request.body;
-    init.duplex = 'half'; // required when streaming a ReadableStream body
+  if (isBodyMethod) {
+    // Read body as text first — forwarding the raw ReadableStream with
+    // duplex:'half' throws on Vercel's Node.js runtime for POST requests.
+    init.body = await request.text();
   }
 
   let upstream: Response;
