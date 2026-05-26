@@ -2,232 +2,152 @@
 import PublicLayout from '../layouts/PublicLayout.astro';
 import { RadialGlow } from '../components/ui/RadialGlow';
 import { NoiseOverlay } from '../components/ui/NoiseOverlay';
-import { StatusPill } from '../components/ui/StatusPill';
+import { PricingCards } from '../components/pricing/PricingCards';
+
+// Server-side currency detection from Cloudflare CF-IPCountry header.
+// Falls back to INR (most of our users are India-based).
+const cfCountry = Astro.request.headers.get('cf-ipcountry') ?? 'IN';
+const defaultCurrency: 'INR' | 'USD' = cfCountry.toUpperCase() === 'IN' ? 'INR' : 'USD';
 ---
 
 <PublicLayout
   title="Pricing — Mnema"
-  description="Simple plans, honest pricing. Free forever for personal use."
+  description="Simple plans, honest pricing. Free forever for personal use. Writer seats only — readers always free."
   pathname="/pricing"
 >
 
   <!-- ===== HEADING ===== -->
-  <section class="relative pt-32 pb-20" style="background: var(--surface-base);">
-    <RadialGlow cx={50} cy={30} radius={45} tone="soft" intensity={0.8} />
+  <section
+    class="relative pt-32 pb-16"
+    style="background: var(--surface-base);"
+  >
+    <RadialGlow cx={50} cy={30} radius={50} tone="soft" intensity={0.7} />
     <NoiseOverlay opacity={0.03} />
     <div
-      class="relative max-w-3xl mx-auto px-6 text-center"
+      class="relative max-w-2xl mx-auto px-6 text-center"
       style="z-index: 2;"
     >
       <span
         class="font-mono uppercase block mb-4"
-        style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+        style="font-size: 11px; letter-spacing: 0.10em; color: var(--text-tertiary);"
       >
         Pricing
       </span>
-      <h1 class="font-sans font-medium" style="font-size: var(--display-sm); line-height: 1.05; letter-spacing: -0.02em; color: var(--text-primary); margin-bottom: 16px;">
-        Simple plans. Honest pricing.
+      <h1
+        class="font-sans font-medium"
+        style="font-size: var(--display-sm); line-height: 1.06; letter-spacing: -0.025em; color: var(--text-primary); margin-bottom: 16px;"
+      >
+        Pay for writers.<br />Readers are always free.
       </h1>
       <p
-        class="max-w-lg mx-auto"
-        style="font-size: 16px; line-height: 1.6; color: var(--text-secondary);"
+        class="max-w-md mx-auto"
+        style="font-size: 15px; line-height: 1.65; color: var(--text-secondary);"
       >
-        Start free. Upgrade when your team grows past three teammates. No annual contracts.
+        Only teammates who create and edit docs count as billable seats.
+        Reviewers and stakeholders read for free.
       </p>
     </div>
   </section>
 
-  <!-- ===== PLAN CARDS ===== -->
-  <section class="pb-24" style="background: var(--surface-base);">
-    <div class="max-w-5xl mx-auto px-6 grid md:grid-cols-3 gap-4">
+  <!-- ===== PLAN CARDS (glass, dark strip) ===== -->
+  <section
+    style="
+      background: #080808;
+      padding: 60px 0 80px;
+      position: relative;
+      overflow: hidden;
+    "
+  >
+    <!-- Ambient glow behind cards -->
+    <div
+      aria-hidden="true"
+      style="
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(255,255,255,0.04) 0%, transparent 70%);
+        pointer-events: none;
+      "
+    ></div>
+    <!-- Noise texture -->
+    <NoiseOverlay opacity={0.025} />
 
-      <!-- Free -->
-      <article
-        style="position: relative; background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 32px;"
-      >
-        <h3 style="font-size: 16px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Free</h3>
-        <p style="font-size: 13px; color: var(--text-tertiary); margin-bottom: 24px;">For trying it out.</p>
+    <div class="relative max-w-6xl mx-auto px-6" style="z-index: 2;">
+      <!-- React island: toggles + cards -->
+      <PricingCards defaultCurrency={defaultCurrency} client:load />
+    </div>
+  </section>
 
-        <div class="flex items-baseline gap-2 mb-1">
-          <span class="font-sans font-medium" style="font-size: 44px; line-height: 1; color: var(--text-primary); letter-spacing: -0.02em;">$0</span>
-          <span style="font-size: 13px; color: var(--text-tertiary);">forever</span>
+  <!-- ===== GUARANTEE ROW ===== -->
+  <section
+    style="background: var(--surface-base); padding: 48px 24px;"
+  >
+    <div
+      class="max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-8 sm:gap-12 text-center"
+    >
+      {[
+        { icon: '🔓', title: 'No annual lock-in', body: 'Cancel any time. We prorate the unused days.' },
+        { icon: '🪑', title: 'Only writers pay', body: 'Readers (viewers) join for free, always.' },
+        { icon: '🌐', title: 'INR or USD', body: 'We auto-detect your region. Change any time.' },
+      ].map(item => (
+        <div style="max-width: 200px;">
+          <div style="font-size: 22px; margin-bottom: 8px;">{item.icon}</div>
+          <p style="font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">{item.title}</p>
+          <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">{item.body}</p>
         </div>
-
-        <hr style="border: 0; border-top: 1px solid var(--border-subtle); margin: 24px 0;" />
-
-        <ul style="list-style: none; padding: 0; margin: 0 0 32px;" class="space-y-2.5">
-          {[
-            'Up to 3 teammates',
-            '100 docs',
-            '500 MCP calls / month',
-            'Real-time collaboration',
-            'Hybrid search',
-          ].map(feat => (
-            <li class="flex items-center gap-2" style="font-size: 13px; color: var(--text-primary);">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M20 6L9 17l-5-5"/>
-              </svg>
-              {feat}
-            </li>
-          ))}
-        </ul>
-
-        <a
-          href="/signup?plan=free"
-          class="flex items-center justify-center w-full h-8 font-medium transition-[background] rounded select-none"
-          style="font-size: 13px; background: var(--interactive-secondary); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md);"
-          onmouseover="this.style.background='var(--interactive-secondary-hover)'"
-          onmouseout="this.style.background='var(--interactive-secondary)'"
-        >
-          Get started
-        </a>
-      </article>
-
-      <!-- Pro — recommended: elevated surface + soft glow + primary CTA -->
-      <article
-        class="overflow-hidden"
-        style="position: relative; background: var(--surface-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); padding: 32px;"
-      >
-        <!-- Soft RadialGlow scoped to this card -->
-        <RadialGlow cx={50} cy={20} radius={70} tone="soft" intensity={0.6} />
-
-        <!-- RECOMMENDED StatusPill — inside the card, top-right -->
-        <div style="position: absolute; top: 16px; right: 16px; z-index: 2;">
-          <StatusPill tone="neutral">RECOMMENDED</StatusPill>
-        </div>
-
-        <div style="position: relative; z-index: 2;">
-        <h3 style="font-size: 16px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Pro</h3>
-        <p style="font-size: 13px; color: var(--text-tertiary); margin-bottom: 24px;">For small teams.</p>
-
-        <div class="flex items-baseline gap-2 mb-1">
-          <span class="font-sans font-medium" style="font-size: 44px; line-height: 1; color: var(--text-primary); letter-spacing: -0.02em;">$15</span>
-          <span style="font-size: 13px; color: var(--text-tertiary);">per seat / month</span>
-        </div>
-
-        <hr style="border: 0; border-top: 1px solid var(--border-subtle); margin: 24px 0;" />
-
-        <ul style="list-style: none; padding: 0; margin: 0 0 32px;" class="space-y-2.5">
-          {[
-            'Up to 5 teammates',
-            'Unlimited docs',
-            '5,000 MCP calls / month',
-            'AI autocomplete',
-            'Version history',
-            'Email support',
-          ].map(feat => (
-            <li class="flex items-center gap-2" style="font-size: 13px; color: var(--text-primary);">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M20 6L9 17l-5-5"/>
-              </svg>
-              {feat}
-            </li>
-          ))}
-        </ul>
-
-        <a
-          id="pro-cta"
-          href="/signup?plan=pro"
-          class="flex items-center justify-center w-full h-8 font-medium transition-[background] rounded select-none"
-          style="font-size: 13px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border-radius: var(--radius-md);"
-          onmouseover="this.style.background='var(--interactive-primary-hover)'"
-          onmouseout="this.style.background='var(--interactive-primary)'"
-        >
-          Start Pro
-        </a>
-        <script>
-          // If the user is already logged in, send them directly to billing
-          // rather than re-running the auth flow.
-          fetch('/api/billing/current', { credentials: 'include' })
-            .then(r => { if (r.ok) { const el = document.getElementById('pro-cta'); if (el) el.setAttribute('href', '/app/settings/billing?upgrade=pro'); } })
-            .catch(() => {});
-        </script>
-        </div>
-      </article>
-
-      <!-- Team -->
-      <article
-        style="position: relative; background: var(--surface-overlay); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 32px;"
-      >
-        <h3 style="font-size: 16px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px;">Team</h3>
-        <p style="font-size: 13px; color: var(--text-tertiary); margin-bottom: 24px;">For growing companies.</p>
-
-        <div class="flex items-baseline gap-2 mb-1">
-          <span class="font-sans font-medium" style="font-size: 44px; line-height: 1; color: var(--text-primary); letter-spacing: -0.02em;">$25</span>
-          <span style="font-size: 13px; color: var(--text-tertiary);">per seat / month</span>
-        </div>
-
-        <hr style="border: 0; border-top: 1px solid var(--border-subtle); margin: 24px 0;" />
-
-        <ul style="list-style: none; padding: 0; margin: 0 0 32px;" class="space-y-2.5">
-          {[
-            'Unlimited teammates',
-            'Unlimited docs',
-            'Unlimited MCP calls',
-            'AI autocomplete',
-            'Priority support',
-            'SSO (coming soon)',
-          ].map(feat => (
-            <li class="flex items-center gap-2" style="font-size: 13px; color: var(--text-primary);">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M20 6L9 17l-5-5"/>
-              </svg>
-              {feat}
-            </li>
-          ))}
-        </ul>
-
-        <a
-          href="mailto:hello@theboringpeople.in"
-          class="flex items-center justify-center w-full h-8 font-medium transition-[background] rounded select-none"
-          style="font-size: 13px; background: var(--interactive-secondary); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-md);"
-          onmouseover="this.style.background='var(--interactive-secondary-hover)'"
-          onmouseout="this.style.background='var(--interactive-secondary)'"
-        >
-          Contact sales
-        </a>
-      </article>
-
+      ))}
     </div>
   </section>
 
   <!-- ===== FAQ ===== -->
-  <section class="max-w-3xl mx-auto px-6 pb-24" style="background: var(--surface-base);">
-    <h2 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 40px;">
+  <section
+    class="max-w-3xl mx-auto px-6 pb-28"
+    style="background: var(--surface-base);"
+  >
+    <h2
+      style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 40px;"
+    >
       Frequently asked questions
     </h2>
 
     {[
       {
+        q: "What's a writer seat?",
+        a: "Any workspace member with the Owner, Admin, or Editor role counts as a writer seat. Viewers (read-only members) are always free — you can add as many as you like.",
+      },
+      {
         q: "What's an MCP call?",
-        a: "Every time Claude searches, reads a doc, or pulls a flow step through Mnema, it counts as one call. A normal hour of conversation typically uses 10–30 calls. Flow-heavy workflows use more — each step in a flow is one call.",
+        a: "Every time Claude searches, reads a doc, or pulls a flow step through Mnema's MCP connector, it counts as one call. A normal hour of conversation typically uses 10–30 calls.",
       },
       {
-        q: "What are flows?",
-        a: "A flow is a sequence of content steps Claude reads in order, with your instructions between them. Flows let you control how Claude consumes your workspace — instead of dumping everything at once, you sequence the context step by step. The flow editor is in our next release; all plans will include flows.",
-      },
-      {
-        q: "Do I need a paid Claude account?",
-        a: "You need Claude Pro or higher to use MCP connectors. Mnema connects to your existing Claude account.",
+        q: "What's the difference between Individual and Team?",
+        a: "Individual is a flat per-workspace plan — ideal for solo builders. Team is per-writer-seat, so it scales with your team size. Team includes unlimited teammates.",
       },
       {
         q: "Can I switch plans later?",
-        a: "Yes. Upgrade or downgrade any time from your workspace settings. Changes prorate within the billing cycle.",
+        a: "Yes. Upgrade or downgrade any time from your workspace settings. Changes take effect immediately; billing adjusts at the next cycle.",
+      },
+      {
+        q: "Is there a free trial?",
+        a: "The Free plan is free forever — no trial period needed. Paid plans bill from day one but you can cancel at any time.",
       },
       {
         q: "Where is my data stored?",
-        a: "On Neon Postgres in ap-south-1 (Mumbai). We're working on additional regions for teams that need EU or US residency.",
+        a: "On Neon Postgres in ap-south-1 (Mumbai). We're working on additional regions for teams that need EU or US data residency.",
       },
       {
         q: "Is there an annual discount?",
-        a: "Yes. Annual plans are billed once with a 15% discount. Contact us when you're ready to switch.",
+        a: "Yes. Annual plans give you ~20% off versus monthly. The toggle on this page shows exact pricing for both cycles.",
       },
     ].map((item, i) => (
       <div style={i > 0 ? 'border-top: 1px solid var(--border-subtle);' : ''}>
-        <p style="font-size: 14px; font-weight: 500; color: var(--text-primary); padding-top: 24px; padding-bottom: 8px;">
+        <p
+          style="font-size: 14px; font-weight: 500; color: var(--text-primary); padding-top: 24px; padding-bottom: 8px;"
+        >
           {item.q}
         </p>
-        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65; padding-bottom: 24px;">
+        <p
+          style="font-size: 14px; color: var(--text-secondary); line-height: 1.65; padding-bottom: 24px;"
+        >
           {item.a}
         </p>
       </div>

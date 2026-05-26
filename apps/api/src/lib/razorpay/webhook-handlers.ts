@@ -28,6 +28,13 @@ export interface RazorpaySubscriptionEntity {
   current_end?: number;
   charge_at?: number;
   ended_at?: number;
+  notes?: {
+    workspace_id?: string;
+    plan_slug?: string;
+    billing_cycle?: string;
+    billing_currency?: string;
+    [key: string]: string | undefined;
+  };
 }
 
 export interface RazorpayWebhookEvent {
@@ -69,6 +76,10 @@ async function upsertSubscription(
   const periodEnd = sub.current_end != null ? new Date(sub.current_end * 1000) : null;
   const canceledAt = sub.ended_at != null ? new Date(sub.ended_at * 1000) : null;
 
+  const currency = (sub.notes?.billing_currency ?? 'INR') as 'INR' | 'USD';
+  const cycle = (sub.notes?.billing_cycle ?? 'monthly') as 'monthly' | 'annual';
+  const billableSeats = sub.quantity ?? 1;
+
   await db.insert(subscriptions).values({
     workspaceId,
     razorpaySubscriptionId: sub.id,
@@ -76,7 +87,10 @@ async function upsertSubscription(
     status: sub.status,
     planId: sub.plan_id,
     planKey,
-    quantity: sub.quantity ?? 1,
+    quantity: billableSeats,
+    currency,
+    cycle,
+    billableSeats,
     currentPeriodStart: periodStart,
     currentPeriodEnd: periodEnd,
     cancelAtPeriodEnd: false,
@@ -88,7 +102,10 @@ async function upsertSubscription(
       status: sub.status,
       planId: sub.plan_id,
       planKey,
-      quantity: sub.quantity ?? 1,
+      quantity: billableSeats,
+      currency,
+      cycle,
+      billableSeats,
       currentPeriodStart: periodStart,
       currentPeriodEnd: periodEnd,
       canceledAt,

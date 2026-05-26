@@ -11,6 +11,7 @@ import { emailQueue } from '../queue/email.js';
 import { signInvitationToken, verifyInvitationToken } from '../lib/invitation-token.js';
 import { signJwt } from '../lib/jwt.js';
 import { requireRole, RoleError } from '../lib/role.js';
+import { syncSubscriptionSeats } from '../lib/billing/sync-seats.js';
 
 const JWT_COOKIE = 'boppl_jwt';
 const COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 30;
@@ -415,6 +416,11 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
       sameSite: 'lax',
       maxAge: COOKIE_MAX_AGE_SEC,
     });
+
+    // Sync billable seat count with Razorpay (fire-and-forget).
+    void syncSubscriptionSeats(result.workspace_id).catch((err) =>
+      req.log.warn({ err }, 'syncSubscriptionSeats failed after invitation accept'),
+    );
 
     // Notify the inviter that their invitation was accepted. Look up inviter
     // email + workspace name for the template. Fire-and-forget.

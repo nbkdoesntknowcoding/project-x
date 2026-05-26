@@ -6,6 +6,7 @@ import { writeMarkdownIntoLiveDoc } from '../collab/writeback.js';
 import { docs } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { contentHash, emptyYjsState } from '../lib/yjs.js';
+import { enforceFreeDocLimit } from '../plugins/free-limits.js';
 
 const UUID_RE_DOCS = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -135,6 +136,10 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
 
   app.post('/api/docs', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+
+    // Enforce free plan doc limit (no-op for paid workspaces).
+    if (await enforceFreeDocLimit(req, reply, req.auth.tenant_id)) return;
+
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'bad_request', issues: parsed.error.issues });

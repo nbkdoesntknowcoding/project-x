@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { flows, flowVersions, flowNodes, flowEdges } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { renderNodeContent, topologicalWalk } from '../lib/flows/walk.js';
+import { enforceFreeFlowLimit } from '../plugins/free-limits.js';
 import {
   validateFlow,
   type FlowEdge as ValidFlowEdge,
@@ -131,6 +132,10 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
   // -------------------------------------------------------------------
   app.post('/api/flows', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+
+    // Enforce free plan flow limit (no-op for paid workspaces).
+    if (await enforceFreeFlowLimit(req, reply, req.auth.tenant_id)) return;
+
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'bad_request', issues: parsed.error.issues });

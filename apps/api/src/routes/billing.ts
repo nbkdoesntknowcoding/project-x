@@ -1,15 +1,23 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config/env.js';
 import { db } from '../db/index.js';
-import { razorpayPlanIds, subscriptions, workspaces } from '../db/schema.js';
+import { subscriptions, workspaceMembers, workspaces } from '../db/schema.js';
 import { createRazorpayCustomerForWorkspace, getRazorpayCustomerForWorkspace } from '../lib/razorpay/customer.js';
 import { requireRole } from '../lib/role.js';
+import { countBillableSeats, WRITER_ROLES } from '../lib/billing/seats.js';
+import { detectCurrency } from '../lib/billing/currency.js';
+import { getPlanId, PLAN_PRICING } from '../lib/razorpay/plans.js';
+import type { PlanSlug, BillingCycle } from '../lib/razorpay/plans.js';
 
 const subscribeSchema = z.object({
-  plan_key: z.enum(['pro', 'team']),
-  customer_id: z.string().optional(),
+  plan: z.enum(['individual', 'team', 'business']),
+  cycle: z.enum(['monthly', 'annual']).default('monthly'),
+});
+
+const cancelSchema = z.object({
+  cancelAtPeriodEnd: z.boolean().default(true),
 });
 
 // STRIPE: ENABLE WHEN APPROVED
@@ -53,9 +61,99 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
+  // -------------------------------------------------------------------------
+  // GET /api/billing/status — richer billing status for the pricing page and
+  // settings panel. Includes plan, seats, prices, and upgrade URL.
+  // -------------------------------------------------------------------------
+  app.get('/api/billing/status', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    await requireRole(req, 'viewer');
+
+    const workspaceId = req.auth.tenant_id;
+    const currency = detectCurrency(req.headers as Record<string, string | string[] | undefined>);
+
+    // Workspace plan
+    const wsRows = await db.select({ plan: workspaces.plan })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .limit(1);
+    if (wsRows.length === 0) return reply.code(404).send({ error: 'workspace_not_found' });
+
+    // Most recent subscription
+    const subRows = await db.select({
+      status: subscriptions.status,
+      planKey: subscriptions.planKey,
+      cycle: subscriptions.cycle,
+      currency: subscriptions.currency,
+      billableSeats: subscriptions.billableSeats,
+      currentPeriodEnd: subscriptions.currentPeriodEnd,
+      cancelAtPeriodEnd: subscriptions.cancelAtPeriodEnd,
+    })
+      .from(subscriptions)
+      .where(eq(subscriptions.workspaceId, workspaceId))
+      .orderBy(desc(subscriptions.createdAt))
+      .limit(1);
+    const sub = subRows[0];
+
+    // Count current seats
+    const writerCountRows = await db
+      .select({ c: count() })
+      .from(workspaceMembers)
+      .where(and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        inArray(workspaceMembers.role, [...WRITER_ROLES]),
+      ));
+    const readerCountRows = await db
+      .select({ c: count() })
+      .from(workspaceMembers)
+      .where(and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.role, 'viewer'),
+      ));
+
+    const writerSeats = Number(writerCountRows[0]?.c ?? 0);
+    const readerSeats = Number(readerCountRows[0]?.c ?? 0);
+
+    // Resolved plan slug — use subscription planKey or default to workspace plan
+    const planSlug = (sub?.planKey as PlanSlug | undefined) ?? null;
+    const billingCurrency = (sub?.currency as 'INR' | 'USD' | undefined) ?? currency;
+    const billingCycle = (sub?.cycle as BillingCycle | undefined) ?? 'monthly';
+
+    // Price lookup
+    const prices = planSlug && planSlug in PLAN_PRICING
+      ? {
+          monthly_usd: PLAN_PRICING[planSlug].usd_monthly,
+          annual_usd: PLAN_PRICING[planSlug].usd_annual,
+          monthly_inr: PLAN_PRICING[planSlug].inr_monthly,
+          annual_inr: PLAN_PRICING[planSlug].inr_annual,
+        }
+      : null;
+
+    const webBaseUrl = config.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in';
+
+    return {
+      plan: wsRows[0]!.plan,
+      subscription_status: sub?.status ?? null,
+      plan_slug: planSlug,
+      cycle: billingCycle,
+      currency: billingCurrency,
+      billable_seats: sub?.billableSeats ?? writerSeats,
+      writer_seats: writerSeats,
+      reader_seats: readerSeats,
+      current_period_end: sub?.currentPeriodEnd?.toISOString() ?? null,
+      cancel_at_period_end: sub?.cancelAtPeriodEnd ?? false,
+      prices,
+      upgrade_url: `${webBaseUrl}/app/settings/billing`,
+      detected_currency: currency,
+    };
+  });
+
   app.post('/api/billing/cancel', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
     await requireRole(req, 'owner');
+
+    const parsed = cancelSchema.safeParse(req.body ?? {});
+    const cancelAtPeriodEnd = parsed.success ? parsed.data.cancelAtPeriodEnd : true;
 
     // Get the active subscription for this workspace from the subscriptions table
     const subRows = await db.select({
@@ -76,15 +174,15 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
 
     const { razorpaySubscriptionId } = subRows[0]!;
 
-    // Cancel at period end via Razorpay API
+    // Cancel at period end (or immediately) via Razorpay API
     const razorpay = (await import('../lib/razorpay/client.js')).razorpay;
-    await razorpay.subscriptions.cancel(razorpaySubscriptionId, true);
+    await razorpay.subscriptions.cancel(razorpaySubscriptionId, cancelAtPeriodEnd);
 
     await db.update(subscriptions)
-      .set({ cancelAtPeriodEnd: true, updatedAt: new Date() })
+      .set({ cancelAtPeriodEnd, updatedAt: new Date() })
       .where(eq(subscriptions.razorpaySubscriptionId, razorpaySubscriptionId));
 
-    return { cancelled: true };
+    return { cancelled: true, cancel_at_period_end: cancelAtPeriodEnd };
 
     // STRIPE: ENABLE WHEN APPROVED
     // app.post('/api/billing/portal', async (req, reply) => {
@@ -94,6 +192,42 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
     //   });
     //   return { url: session.url };
     // });
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/billing/update-payment-method — generate a Razorpay hosted
+  // page where the customer can update their saved payment method.
+  // -------------------------------------------------------------------------
+  app.post('/api/billing/update-payment-method', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    await requireRole(req, 'owner');
+
+    const subRows = await db.select({
+      razorpaySubscriptionId: subscriptions.razorpaySubscriptionId,
+      razorpayCustomerId: subscriptions.razorpayCustomerId,
+    })
+      .from(subscriptions)
+      .where(and(
+        eq(subscriptions.workspaceId, req.auth.tenant_id),
+        inArray(subscriptions.status, ['active', 'trialing', 'created', 'halted']),
+      ))
+      .orderBy(desc(subscriptions.createdAt))
+      .limit(1);
+
+    if (subRows.length === 0) {
+      return reply.code(400).send({ error: 'no_subscription_found' });
+    }
+
+    // Razorpay's "update payment" flow uses a short_url generated via
+    // the subscriptions update endpoint with the manage token.
+    // The simplest approach: redirect to the Razorpay subscription management page.
+    const { razorpaySubscriptionId } = subRows[0]!;
+    const razorpay = (await import('../lib/razorpay/client.js')).razorpay;
+    const sub = await (razorpay.subscriptions.fetch(razorpaySubscriptionId) as Promise<{ short_url: string }>);
+
+    return {
+      manage_url: sub.short_url,
+    };
   });
 
   // Lazy-create Razorpay customer (called from checkout flow in Phase 5)
@@ -123,33 +257,32 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // Create a new Razorpay subscription and return the hosted payment link.
-  // The caller passes the plan_key; we look up the Razorpay plan_id from the
-  // razorpay_plan_ids table (seeded per environment).
+  // Detects currency from CF-IPCountry, counts writer seats, resolves plan ID
+  // from env vars (populated by create-razorpay-plans.ts).
   app.post('/api/billing/subscribe', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
     await requireRole(req, 'owner');
 
     const parsed = subscribeSchema.safeParse(req.body);
-    if (!parsed.success) return reply.code(400).send({ error: 'bad_request' });
+    if (!parsed.success) return reply.code(400).send({ error: 'bad_request', details: parsed.error.flatten() });
 
-    const { plan_key, customer_id } = parsed.data;
+    const { plan, cycle } = parsed.data;
+    const currency = detectCurrency(req.headers as Record<string, string | string[] | undefined>);
 
-    // Resolve Razorpay plan_id for this plan_key + environment
-    const planRows = await db.select({ razorpayPlanId: razorpayPlanIds.razorpayPlanId })
-      .from(razorpayPlanIds)
-      .where(and(
-        eq(razorpayPlanIds.planKey, plan_key),
-        eq(razorpayPlanIds.environment, config.RAZORPAY_ENVIRONMENT),
-      ))
-      .limit(1);
-
-    if (planRows.length === 0) {
-      return reply.code(400).send({ error: 'plan_not_configured' });
+    // Resolve Razorpay plan_id from env vars
+    let razorpayPlanId: string;
+    try {
+      razorpayPlanId = getPlanId(plan as PlanSlug, cycle as BillingCycle, currency);
+    } catch (err) {
+      req.log.warn({ err, plan, cycle, currency }, 'plan_not_configured');
+      return reply.code(400).send({ error: 'plan_not_configured', detail: (err as Error).message });
     }
-    const razorpayPlanId = planRows[0]!.razorpayPlanId;
+
+    // Count writer seats (minimum 1)
+    const billableSeats = await countBillableSeats(req.auth.tenant_id);
 
     // Ensure a Razorpay customer exists for this workspace
-    let customerId = customer_id ?? await getRazorpayCustomerForWorkspace(req.auth.tenant_id);
+    let customerId = await getRazorpayCustomerForWorkspace(req.auth.tenant_id);
     if (!customerId) {
       const wsRows = await db.select({ slug: workspaces.slug, name: workspaces.name })
         .from(workspaces)
@@ -171,11 +304,17 @@ export const billingRoutes: FastifyPluginAsync = async (app) => {
     const subscription = await (razorpay.subscriptions.create({
       plan_id: razorpayPlanId,
       customer_id: customerId,
-      quantity: 1,
+      quantity: billableSeats,
       total_count: 120, // up to 10 years — effectively open-ended
       // Razorpay hosted page redirects here after successful payment.
       callback_url: `${webBaseUrl}/app/settings/billing?checkout=success`,
-      notes: { workspace_id: req.auth.tenant_id },
+      // Pass billing metadata in notes so webhook can reconstruct it
+      notes: {
+        workspace_id: req.auth.tenant_id,
+        plan_slug: plan,
+        billing_cycle: cycle,
+        billing_currency: currency,
+      },
     } as Parameters<typeof razorpay.subscriptions.create>[0]) as Promise<{ id: string; short_url: string }>);
 
     return {

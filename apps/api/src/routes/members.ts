@@ -5,6 +5,7 @@ import { db } from '../db/index.js';
 import { users, workspaceMembers } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { requireRole, RoleError } from '../lib/role.js';
+import { syncSubscriptionSeats } from '../lib/billing/sync-seats.js';
 
 const updateRoleSchema = z.object({
   role: z.enum(['owner', 'editor', 'viewer']),
@@ -122,6 +123,12 @@ export const membersRoutes: FastifyPluginAsync = async (app) => {
     if (updated.length === 0) {
       return reply.code(404).send({ error: 'not_a_member' });
     }
+
+    // Sync billable seat count with Razorpay (fire-and-forget).
+    void syncSubscriptionSeats(req.auth.tenant_id).catch((err) =>
+      req.log.warn({ err }, 'syncSubscriptionSeats failed after role change'),
+    );
+
     return { member: updated[0] };
   });
 
@@ -166,6 +173,12 @@ export const membersRoutes: FastifyPluginAsync = async (app) => {
     if (removed.length === 0) {
       return reply.code(404).send({ error: 'not_a_member' });
     }
+
+    // Sync billable seat count with Razorpay (fire-and-forget).
+    void syncSubscriptionSeats(req.auth.tenant_id).catch((err) =>
+      req.log.warn({ err }, 'syncSubscriptionSeats failed after member removal'),
+    );
+
     return { removed: true };
   });
 };

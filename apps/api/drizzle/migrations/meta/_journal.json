@@ -106,6 +106,13 @@
       "when": 1779450000000,
       "tag": "0014_notifications",
       "breakpoints": false
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1748217600000,
+      "tag": "0015_subscriptions_billing_tier",
+      "breakpoints": false
     }
   ]
 }

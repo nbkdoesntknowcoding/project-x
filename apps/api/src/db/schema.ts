@@ -665,6 +665,14 @@ export const subscriptions = pgTable(
     currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
     cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
     canceledAt: timestamp('canceled_at', { withTimezone: true }),
+    // Billing tier columns (added for multi-tier + dual-currency support)
+    currency: text('currency').notNull().default('INR'),       // 'USD' | 'INR'
+    cycle: text('cycle').notNull().default('monthly'),         // 'monthly' | 'annual'
+    billableSeats: integer('billable_seats').notNull().default(1),
+    accessUntil: timestamp('access_until', { withTimezone: true }),       // set on cancellation
+    paymentFailureCount: integer('payment_failure_count').notNull().default(0),
+    trialAlertSent: boolean('trial_alert_sent').notNull().default(false),
+    renewalAlertSent: boolean('renewal_alert_sent').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
