@@ -11,21 +11,31 @@ interface CreateCustomerArgs {
 }
 
 export async function createRazorpayCustomerForWorkspace(args: CreateCustomerArgs): Promise<string> {
-  // fail_existing: 0 — return existing customer if email already registered
-  const customer = await (razorpay.customers.create({
-    name: args.workspaceName,
-    email: args.ownerEmail,
-    fail_existing: 0,
-    notes: {
-      workspace_id: args.workspaceId,
-      workspace_slug: args.workspaceSlug,
-    },
-  }) as Promise<{ id: string }>);
-
-  // razorpayCustomerId is stored per-subscription in the subscriptions table,
-  // not on workspaces. The customer ID will be persisted when the first
-  // subscription is created (via the webhook upsert).
-  return customer.id;
+  // Attempt to create. If the customer already exists (fail_existing does not
+  // reliably suppress the error in test mode), fall back to a lookup by email.
+  try {
+    const customer = await (razorpay.customers.create({
+      name: args.workspaceName,
+      email: args.ownerEmail,
+      fail_existing: 0,
+      notes: {
+        workspace_id: args.workspaceId,
+        workspace_slug: args.workspaceSlug,
+      },
+    }) as Promise<{ id: string }>);
+    return customer.id;
+  } catch (err: unknown) {
+    const rzErr = err as { error?: { description?: string }; statusCode?: number };
+    const desc = rzErr?.error?.description ?? '';
+    // "Customer already exists for the merchant" → look up the existing record
+    if (typeof desc === 'string' && desc.toLowerCase().includes('already exists')) {
+      const list = await (razorpay.customers.all({ count: 100 }) as Promise<{ items: { id: string; email: string }[] }>);
+      const existing = list.items.find((c) => c.email === args.ownerEmail);
+      if (existing) return existing.id;
+    }
+    // Any other error — re-throw so the route's try/catch formats it properly
+    throw err;
+  }
 }
 
 export async function getRazorpayCustomerForWorkspace(workspaceId: string): Promise<string | null> {
