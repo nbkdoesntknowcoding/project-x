@@ -5,14 +5,8 @@ import { T } from '../../lib/dev-tokens';
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
-const API_BASE =
-  (typeof window !== 'undefined' &&
-    (window as unknown as Record<string, string>).__PUBLIC_API_URL__) ||
-  (import.meta as unknown as { env: Record<string, string> }).env?.PUBLIC_API_URL ||
-  'http://localhost:8080';
-
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(path, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(opts?.headers ?? {}) },
     ...opts,
@@ -188,7 +182,7 @@ export function SessionsList({ workspaceId: _workspaceId }: SessionsListProps): 
 
   // ── SSE subscription ────────────────────────────────────────────────────────
   useEffect(() => {
-    const es = new EventSource(`${API_BASE}/api/notifications/stream`, {
+    const es = new EventSource('/api/notifications/stream', {
       withCredentials: true,
     } as EventSourceInit);
     esRef.current = es;

@@ -78,7 +78,14 @@ export function WorkspaceModeToggle({ initialMode, workspaceId }: Props): JSX.El
       }}
       title="Enable AgentLens dev mode for this workspace"
     >
-      {loading ? 'Enabling…' : '⚡ Dev Mode'}
+      {loading ? 'Enabling…' : (
+        <>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+          Dev Mode
+        </>
+      )}
     </button>
   );
 }

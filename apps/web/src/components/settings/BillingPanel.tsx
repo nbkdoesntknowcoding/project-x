@@ -539,8 +539,12 @@ export function BillingPanel(): JSX.Element {
           border: '1px solid rgba(74,222,128,0.20)',
           fontSize: '0.875rem',
           color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
         }}>
-          🎉 Payment received — your subscription is activating. This page will update automatically.
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="20 6 9 17 4 12"/></svg>
+          Payment received — your subscription is activating. This page will update automatically.
         </div>
       )}
 
@@ -557,7 +561,7 @@ export function BillingPanel(): JSX.Element {
           alignItems: 'center',
           gap: '0.625rem',
         }}>
-          <span style={{ fontSize: '1rem' }}>⏳</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
           Waiting for payment confirmation — this page will update automatically once your subscription is active.
         </div>
       )}
@@ -571,8 +575,12 @@ export function BillingPanel(): JSX.Element {
           border: '1px solid rgba(74,222,128,0.20)',
           fontSize: '0.875rem',
           color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
         }}>
-          🎉 Payment confirmed — your subscription is now active!
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><polyline points="20 6 9 17 4 12"/></svg>
+          Payment confirmed — your subscription is now active!
         </div>
       )}
 
@@ -1026,12 +1034,14 @@ export function BillingPanel(): JSX.Element {
       {/* Cancellation pending notice (replaces danger zone) */}
       {isActiveSub && isCancelPending && (
         <section style={{ ...cardStyle, border: '1px solid rgba(245,158,11,0.20)' }}>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0 }}>
-            ⚠️ Your subscription is set to cancel at the end of the billing period. You retain access until then.
-            To reactivate, email{' '}
-            <a href="mailto:support@theboringpeople.in" style={{ color: 'inherit', textDecoration: 'underline' }}>
-              support@theboringpeople.in
-            </a>.
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: 0, display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 2 }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span>Your subscription is set to cancel at the end of the billing period. You retain access until then.
+              {' '}To reactivate, email{' '}
+              <a href="mailto:support@theboringpeople.in" style={{ color: 'inherit', textDecoration: 'underline' }}>
+                support@theboringpeople.in
+              </a>.
+            </span>
           </p>
         </section>
       )}
