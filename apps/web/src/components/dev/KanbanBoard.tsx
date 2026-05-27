@@ -383,10 +383,11 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
         gridAutoColumns:  '280px',
         gap:              16,
         flex:             1,
+        minHeight:        0,
         overflowX:        'auto',
         overflowY:        'hidden',
         paddingBottom:    8,
-        alignItems:       'start',
+        alignItems:       'stretch',
       }}>
         {COLUMNS.map((col) => (
           <KanbanColumn

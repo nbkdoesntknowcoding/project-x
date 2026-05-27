@@ -68,6 +68,7 @@ export function KanbanColumn({
       style={{
         display:       'flex',
         flexDirection: 'column',
+        height:        '100%',
         minHeight:     200,
         fontFamily:    T.fontUI,
       }}
@@ -137,7 +138,7 @@ export function KanbanColumn({
       </div>
 
       {/* Task cards list — grouped by sprint when tags are present */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flex: 1 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flex: 1, overflowY: 'auto', paddingRight: 2 }}>
         {tasks.length === 0 ? (
           <div style={{
             border:      `1px dashed ${T.glassBorder}`,
