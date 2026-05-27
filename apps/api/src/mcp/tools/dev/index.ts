@@ -7,11 +7,12 @@
  * Reference: /Users/nischaybk/Projects/project-x/devmanager/agentlens/daemon/mcp/
  */
 
-import { and, asc, desc, eq, gte, sql, sum } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, max, sql, sum } from 'drizzle-orm';
 import { z } from 'zod';
 import type { McpAuthContext } from '../../auth.js';
-import { agentSessions, docs, folders, tasks, toolCalls } from '../../../db/schema.js';
+import { agentSessions, docs, folders, tasks, toolCalls, users, workspaceMembers } from '../../../db/schema.js';
 import { db } from '../../../db/index.js';
+import { withSystemPrivilege } from '../../../db/with-system-privilege.js';
 import { withTenant } from '../../../db/with-tenant.js';
 import { emitWorkspaceEvent } from '../../../lib/events.js';
 
@@ -886,6 +887,354 @@ export async function logMilestone(ctx: McpAuthContext, rawArgs: Record<string, 
   };
 }
 
+// ── Phase 5: Sprint planning tools ───────────────────────────────────────────
+
+export const CREATE_TASK_TOOL = {
+  name: 'create_task',
+  description: [
+    'Create a single task on the Kanban board.',
+    '',
+    'Use this for one-off tasks during a session.',
+    'For planning a full sprint from a doc, use create_sprints instead.',
+    '',
+    'To assign to a human team member, pass their display name (case-insensitive partial',
+    'match). Leave assigned_to blank to create an unassigned task for any agent to pick up.',
+    '',
+    'To group under a sprint, pass the sprint name (e.g. "Sprint 1 - Auth"). The task',
+    'gets tagged with "sprint:<name>" so the board can filter by sprint.',
+  ].join('\n'),
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      title: {
+        type: 'string',
+        description: 'Task title (required, max 200 chars).',
+      },
+      description: {
+        type: 'string',
+        description: 'Full task description / acceptance criteria (max 3000 chars).',
+      },
+      priority: {
+        type: 'string',
+        enum: ['low', 'medium', 'high', 'critical'],
+        description: 'Task priority. Defaults to "medium".',
+      },
+      assigned_to: {
+        type: 'string',
+        description: 'Display name of workspace member to assign (partial, case-insensitive). Leave blank for unassigned.',
+      },
+      sprint: {
+        type: 'string',
+        description: 'Sprint name, e.g. "Sprint 1 - Core Auth". Auto-tagged as "sprint:<name>".',
+      },
+      tags: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Additional tags (merged with sprint tag if provided).',
+      },
+      doc_id: {
+        type: 'string',
+        description: 'UUID of a spec/PRD doc to link this task to.',
+      },
+    },
+    required: ['title'],
+    additionalProperties: false,
+  },
+  annotations: { destructiveHint: false, title: 'Create a task' },
+};
+
+/** Shared helper: load all workspace members with their display names. */
+async function loadMemberList(tenantId: string): Promise<{ id: string; nameLower: string; displayName: string }[]> {
+  const rows = await withSystemPrivilege((tx) =>
+    tx
+      .select({ id: users.id, displayName: users.displayName })
+      .from(workspaceMembers)
+      .innerJoin(users, eq(users.id, workspaceMembers.userId))
+      .where(eq(workspaceMembers.workspaceId, tenantId)),
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    displayName: r.displayName ?? '',
+    nameLower: (r.displayName ?? '').toLowerCase(),
+  }));
+}
+
+/** Find first member whose display name contains the search string (case-insensitive). */
+function resolveAssignee(
+  search: string,
+  members: { id: string; nameLower: string; displayName: string }[],
+): { id: string; displayName: string } | undefined {
+  const q = search.toLowerCase().trim();
+  return members.find((m) => m.nameLower.includes(q));
+}
+
+export async function createTask(
+  ctx: McpAuthContext,
+  rawArgs: Record<string, unknown>,
+): Promise<{ content: string; structuredContent: Record<string, unknown>; error?: string }> {
+  if (ctx.workspaceMode !== 'dev_project') return devModeError();
+
+  const argsSchema = z.object({
+    title:       z.string().min(1).max(200),
+    description: z.string().max(3000).optional(),
+    priority:    z.enum(['low', 'medium', 'high', 'critical']).optional(),
+    assigned_to: z.string().optional(),
+    sprint:      z.string().optional(),
+    tags:        z.array(z.string()).optional(),
+    doc_id:      z.string().uuid().optional(),
+  }).strict();
+
+  const args = argsSchema.parse(rawArgs);
+
+  // Resolve assignee by display name
+  let assignedMemberId: string | undefined;
+  let resolvedName: string | undefined;
+  if (args.assigned_to) {
+    const members = await loadMemberList(ctx.tenant_id);
+    const match = resolveAssignee(args.assigned_to, members);
+    if (!match) {
+      const names = members.map((m) => `"${m.displayName}"`).join(', ');
+      return {
+        content: `Error: No workspace member matching "${args.assigned_to}". Available members: ${names || '(none)'}`,
+        structuredContent: { error: 'assignee_not_found', available: members.map((m) => m.displayName) },
+        error: 'assignee_not_found',
+      };
+    }
+    assignedMemberId = match.id;
+    resolvedName = match.displayName;
+  }
+
+  // Build tag list
+  const allTags: string[] = [
+    ...(args.sprint ? [`sprint:${args.sprint}`] : []),
+    ...(args.tags ?? []),
+  ];
+
+  // Calculate board order (append to end of backlog)
+  const [orderRow] = await withTenant(ctx.tenant_id, (tx) =>
+    tx.select({ maxOrder: max(tasks.boardOrder) }).from(tasks)
+      .where(and(eq(tasks.workspaceId, ctx.tenant_id), eq(tasks.status, 'backlog'))),
+  );
+  const newOrder = (orderRow?.maxOrder ?? -1) + 1;
+
+  // Insert task
+  const [task] = await withTenant(ctx.tenant_id, (tx) =>
+    tx.insert(tasks).values({
+      workspaceId:      ctx.tenant_id,
+      title:            args.title,
+      description:      args.description ?? null,
+      priority:         args.priority ?? 'medium',
+      assignedMemberId: assignedMemberId ?? null,
+      tags:             allTags.length > 0 ? allTags : null,
+      docId:            args.doc_id ?? null,
+      boardOrder:       newOrder,
+      status:           'backlog',
+    }).returning(),
+  );
+
+  // Notify board
+  emitWorkspaceEvent(ctx.tenant_id, {
+    type: 'task_updated',
+    data: {
+      task: { id: task!.id, workspaceId: ctx.tenant_id, title: task!.title, status: 'backlog', priority: task!.priority, boardOrder: newOrder, updatedAt: task!.updatedAt },
+      previousStatus: 'none',
+      changedBy: 'agent',
+    },
+  });
+
+  return {
+    content: `Created task "${args.title}" [${task!.id}]${resolvedName ? ` → assigned to ${resolvedName}` : ''}`,
+    structuredContent: {
+      task_id:     task!.id,
+      title:       args.title,
+      priority:    task!.priority,
+      status:      'backlog',
+      assigned_to: resolvedName ?? null,
+      sprint:      args.sprint ?? null,
+      tags:        allTags,
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const CREATE_SPRINTS_TOOL = {
+  name: 'create_sprints',
+  description: [
+    'Plan and create multiple sprints with tasks from a spec doc.',
+    '',
+    'WORKFLOW:',
+    '1. Call get_doc(doc_id) to read the full spec/PRD/architecture doc markdown.',
+    '2. Decompose ALL work described in the doc into logical sprints',
+    '   (typically 1–3 weeks of work each). Consider dependencies and priorities.',
+    '3. Call THIS tool ONCE with the complete sprint plan.',
+    '',
+    'Each task in a sprint is automatically tagged "sprint:<name>" for board filtering.',
+    'Tasks can be assigned to human team members by display name (partial match).',
+    'Unassigned tasks will appear in the backlog for any agent to claim.',
+    '',
+    'The doc_id links all created tasks back to their source spec for traceability.',
+    '',
+    'Returns a summary of sprints + task IDs, and warns about any unmatched assignees.',
+  ].join('\n'),
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      doc_id: {
+        type: 'string',
+        description: 'UUID of the source spec/PRD doc this plan was derived from.',
+      },
+      sprints: {
+        type: 'array',
+        description: 'Ordered list of sprints. Max 20.',
+        items: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Sprint name, e.g. "Sprint 1 - Core Infrastructure". Max 200 chars.',
+            },
+            goal: {
+              type: 'string',
+              description: 'One-line sprint goal / definition of done. Max 500 chars.',
+            },
+            tasks: {
+              type: 'array',
+              description: 'Tasks for this sprint. Max 50 per sprint.',
+              items: {
+                type: 'object',
+                properties: {
+                  title:       { type: 'string', description: 'Task title. Max 200 chars.' },
+                  description: { type: 'string', description: 'Details / acceptance criteria. Max 3000 chars.' },
+                  priority:    { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+                  assigned_to: { type: 'string', description: 'Display name of team member (partial match).' },
+                  tags:        { type: 'array', items: { type: 'string' }, description: 'Extra tags (sprint tag added automatically).' },
+                },
+                required: ['title'],
+                additionalProperties: false,
+              },
+            },
+          },
+          required: ['name', 'tasks'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['sprints'],
+    additionalProperties: false,
+  },
+  annotations: { destructiveHint: false, title: 'Plan and create sprints' },
+};
+
+export async function createSprints(
+  ctx: McpAuthContext,
+  rawArgs: Record<string, unknown>,
+): Promise<{ content: string; structuredContent: Record<string, unknown>; error?: string }> {
+  if (ctx.workspaceMode !== 'dev_project') return devModeError();
+
+  const taskItemSchema = z.object({
+    title:       z.string().min(1).max(200),
+    description: z.string().max(3000).optional(),
+    priority:    z.enum(['low', 'medium', 'high', 'critical']).optional(),
+    assigned_to: z.string().optional(),
+    tags:        z.array(z.string()).optional(),
+  }).strict();
+
+  const argsSchema = z.object({
+    doc_id:  z.string().uuid().optional(),
+    sprints: z.array(z.object({
+      name:  z.string().min(1).max(200),
+      goal:  z.string().max(500).optional(),
+      tasks: z.array(taskItemSchema).min(1).max(50),
+    }).strict()).min(1).max(20),
+  }).strict();
+
+  const args = argsSchema.parse(rawArgs);
+
+  // Load all workspace members once for assignee resolution
+  const members = await loadMemberList(ctx.tenant_id);
+
+  // Get current max boardOrder as base for all new tasks
+  const [orderRow] = await withTenant(ctx.tenant_id, (tx) =>
+    tx.select({ maxOrder: max(tasks.boardOrder) }).from(tasks)
+      .where(eq(tasks.workspaceId, ctx.tenant_id)),
+  );
+  let cursor = (orderRow?.maxOrder ?? -1) + 1;
+
+  const unmatchedAssignees: string[] = [];
+  const sprintSummaries: { name: string; sprint_tag: string; task_count: number; task_ids: string[] }[] = [];
+  let lastTask: typeof tasks.$inferSelect | undefined;
+  let totalTasks = 0;
+
+  for (const sprint of args.sprints) {
+    const sprintTag = `sprint:${sprint.name}`;
+    const taskIds: string[] = [];
+
+    for (const taskInput of sprint.tasks) {
+      // Resolve assignee
+      let assignedMemberId: string | undefined;
+      if (taskInput.assigned_to) {
+        const match = resolveAssignee(taskInput.assigned_to, members);
+        if (match) {
+          assignedMemberId = match.id;
+        } else if (!unmatchedAssignees.includes(taskInput.assigned_to)) {
+          unmatchedAssignees.push(taskInput.assigned_to);
+        }
+      }
+
+      const allTags: string[] = [sprintTag, ...(taskInput.tags ?? [])];
+
+      const [task] = await withTenant(ctx.tenant_id, (tx) =>
+        tx.insert(tasks).values({
+          workspaceId:      ctx.tenant_id,
+          title:            taskInput.title,
+          description:      taskInput.description ?? (sprint.goal ? `Sprint goal: ${sprint.goal}` : null),
+          priority:         taskInput.priority ?? 'medium',
+          assignedMemberId: assignedMemberId ?? null,
+          tags:             allTags,
+          docId:            args.doc_id ?? null,
+          boardOrder:       cursor++,
+          status:           'backlog',
+        }).returning(),
+      );
+
+      taskIds.push(task!.id);
+      lastTask = task;
+      totalTasks++;
+    }
+
+    sprintSummaries.push({ name: sprint.name, sprint_tag: sprintTag, task_count: taskIds.length, task_ids: taskIds });
+  }
+
+  // Single board refresh event
+  if (lastTask) {
+    emitWorkspaceEvent(ctx.tenant_id, {
+      type: 'task_updated',
+      data: {
+        task: { id: lastTask.id, workspaceId: ctx.tenant_id, title: lastTask.title, status: 'backlog', priority: lastTask.priority, boardOrder: lastTask.boardOrder, updatedAt: lastTask.updatedAt },
+        previousStatus: 'none',
+        changedBy: 'agent',
+      },
+    });
+  }
+
+  const unmatchedNote = unmatchedAssignees.length > 0
+    ? ` Warning: unmatched assignees (created unassigned): ${unmatchedAssignees.join(', ')}.`
+    : '';
+  const memberNames = members.map((m) => m.displayName).filter(Boolean);
+
+  return {
+    content: `Created ${args.sprints.length} sprint${args.sprints.length !== 1 ? 's' : ''}, ${totalTasks} tasks.${unmatchedNote}`,
+    structuredContent: {
+      sprints_created:      args.sprints.length,
+      total_tasks:          totalTasks,
+      unmatched_assignees:  unmatchedAssignees,
+      available_members:    memberNames,
+      sprints:              sprintSummaries,
+    },
+  };
+}
+
 // ── Dev tool registry ─────────────────────────────────────────────────────────
 
 export const DEV_TOOLS = [
@@ -899,4 +1248,7 @@ export const DEV_TOOLS = [
   { spec: GET_CURRENT_SESSION_TOOL,  handler: getCurrentSession },
   { spec: GET_COST_SUMMARY_TOOL,     handler: getCostSummary },
   { spec: LOG_MILESTONE_TOOL,        handler: logMilestone },
+  // Phase 5 — Sprint planning
+  { spec: CREATE_TASK_TOOL,          handler: createTask },
+  { spec: CREATE_SPRINTS_TOOL,       handler: createSprints },
 ] as const;
