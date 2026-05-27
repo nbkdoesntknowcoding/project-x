@@ -106,7 +106,7 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
     void fetchTasks();
   }, [fetchTasks]);
 
-  // SSE: subscribe to task_updated events
+  // SSE: subscribe to task_updated + task_deleted events
   useEffect(() => {
     const es = new EventSource('/api/notifications/stream', {
       withCredentials: true,
@@ -122,6 +122,18 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
           next[idx] = payload.task;
           return next;
         });
+        // Also update selectedTask if this is the open modal's task
+        setSelectedTask((prev) => prev?.id === payload.task.id ? payload.task : prev);
+      } catch {
+        /* malformed event */
+      }
+    });
+
+    es.addEventListener('task_deleted', (e: MessageEvent) => {
+      try {
+        const payload = JSON.parse(e.data as string) as { taskId: string };
+        setTasks((prev) => prev.filter((t) => t.id !== payload.taskId));
+        setSelectedTask((prev) => (prev?.id === payload.taskId ? null : prev));
       } catch {
         /* malformed event */
       }
@@ -225,6 +237,28 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
       await fetchTasks();
     },
     [fetchTasks],
+  );
+
+  // Save task edits (PATCH) — board live-updates via SSE
+  const handleSaveTask = useCallback(
+    async (taskId: string, updates: Partial<Task>) => {
+      await apiFetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+      // SSE will update state; also optimistically update selectedTask immediately
+      setSelectedTask((prev) => prev?.id === taskId ? { ...prev, ...updates } : prev);
+    },
+    [],
+  );
+
+  // Delete task (hard delete) — board live-updates via SSE
+  const handleDeleteTask = useCallback(
+    async (taskId: string) => {
+      await apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+      // SSE will remove from tasks; modal closes itself after onDelete resolves
+    },
+    [],
   );
 
   const showBanner =
@@ -381,6 +415,8 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
         <TaskDetailModal
           task={selectedTask}
           onClose={() => { setSelectedTask(null); }}
+          onSave={handleSaveTask}
+          onDelete={handleDeleteTask}
         />
       )}
     </div>

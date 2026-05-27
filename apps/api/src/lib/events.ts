@@ -65,9 +65,15 @@ export interface SessionEndedPayload {
   status:       string;
 }
 
+export interface TaskDeletedPayload {
+  taskId:      string;
+  workspaceId: string;
+}
+
 export type WorkspaceEvent =
   | { type: 'notification'; data: NotificationPayload }
   | { type: 'task_updated'; data: TaskUpdatedPayload }
+  | { type: 'task_deleted'; data: TaskDeletedPayload }
   | { type: 'session_cost_updated'; data: SessionCostUpdatedPayload }
   | { type: 'session_started';      data: SessionStartedPayload }
   | { type: 'session_ended';        data: SessionEndedPayload }

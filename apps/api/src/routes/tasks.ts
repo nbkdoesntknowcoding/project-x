@@ -215,11 +215,14 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
       tx.update(tasks).set(updates).where(eq(tasks.id, id)).returning(),
     );
 
+    // Emit SSE so the board live-updates when a task is edited
+    emitTaskUpdated(req.auth.tenant_id, updated!, task.status, 'user');
+
     return updated;
   });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // DELETE /api/tasks/:id — soft-delete (moves to done)
+  // DELETE /api/tasks/:id — hard delete
   // ──────────────────────────────────────────────────────────────────────────
   app.delete('/api/tasks/:id', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
@@ -228,16 +231,15 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
     const task = await fetchTask(req.auth.tenant_id, id);
     if (!task) return reply.code(404).send({ error: 'task_not_found' });
 
-    const previousStatus = task.status;
-    const [updated] = await withTenant(req.auth.tenant_id, async (tx) =>
-      tx
-        .update(tasks)
-        .set({ status: 'done', completedAt: new Date(), updatedAt: new Date() })
-        .where(eq(tasks.id, id))
-        .returning(),
+    await withTenant(req.auth.tenant_id, async (tx) =>
+      tx.delete(tasks).where(eq(tasks.id, id)),
     );
 
-    emitTaskUpdated(req.auth.tenant_id, updated!, previousStatus, 'user');
+    emitWorkspaceEvent(req.auth.tenant_id, {
+      type: 'task_deleted',
+      data: { taskId: id, workspaceId: req.auth!.tenant_id },
+    });
+
     return { ok: true };
   });
 
