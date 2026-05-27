@@ -4,6 +4,29 @@ import type { JSX } from 'react';
 import { T } from '../../lib/dev-tokens';
 import { TaskCard, type Task } from './TaskCard';
 
+/** Extract the sprint name from a task's tags (strips the "sprint:" prefix). */
+function getSprintName(task: Task): string | null {
+  const tag = task.tags?.find((t) => t.startsWith('sprint:'));
+  return tag ? tag.slice('sprint:'.length) : null;
+}
+
+/**
+ * Group an already-ordered task list into { sprint, tasks } segments,
+ * preserving boardOrder within each group and the order sprints first appear.
+ */
+function groupBySprint(
+  tasks: Task[],
+): { sprint: string | null; tasks: Task[] }[] {
+  const seen = new Map<string | null, Task[]>();
+  const order: (string | null)[] = [];
+  for (const task of tasks) {
+    const s = getSprintName(task);
+    if (!seen.has(s)) { seen.set(s, []); order.push(s); }
+    seen.get(s)!.push(task);
+  }
+  return order.map((s) => ({ sprint: s, tasks: seen.get(s)! }));
+}
+
 interface KanbanColumnProps {
   id: string;
   label: string;
@@ -21,6 +44,8 @@ export function KanbanColumn({
   onTaskDrop,
   onAddTask,
 }: KanbanColumnProps): JSX.Element {
+  const groups = groupBySprint(tasks);
+
   function handleDragOver(e: React.DragEvent): void {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -109,23 +134,9 @@ export function KanbanColumn({
         )}
       </div>
 
-      {/* Task cards list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-        {tasks.map((task) => (
-          <div
-            key={task.id}
-            draggable
-            onDragStart={(e) => {
-              e.dataTransfer.setData('text/plain', task.id);
-              e.dataTransfer.effectAllowed = 'move';
-            }}
-          >
-            <TaskCard task={task} />
-          </div>
-        ))}
-
-        {/* Drop zone hint when empty */}
-        {tasks.length === 0 && (
+      {/* Task cards list — grouped by sprint when tags are present */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flex: 1 }}>
+        {tasks.length === 0 ? (
           <div style={{
             border:      `1px dashed ${T.glassBorder}`,
             borderRadius: 12,
@@ -137,6 +148,62 @@ export function KanbanColumn({
           }}>
             Drop here
           </div>
+        ) : (
+          groups.map(({ sprint, tasks: groupTasks }, groupIdx) => (
+            <div key={sprint ?? '__unspringed__'} style={{ marginBottom: groupIdx < groups.length - 1 ? 16 : 0 }}>
+
+              {/* Sprint header divider — only when the group has a name */}
+              {sprint && (
+                <div style={{
+                  display:       'flex',
+                  alignItems:    'center',
+                  gap:           8,
+                  marginBottom:  8,
+                  paddingLeft:   2,
+                }}>
+                  <span style={{
+                    fontSize:      10,
+                    fontWeight:    600,
+                    color:         T.accent,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    whiteSpace:    'nowrap',
+                    fontFamily:    T.fontUI,
+                  }}>
+                    {sprint}
+                  </span>
+                  <div style={{
+                    flex:       1,
+                    height:     1,
+                    background: `linear-gradient(to right, ${T.accent}40, transparent)`,
+                  }} />
+                  <span style={{
+                    fontSize:   10,
+                    color:      T.textDisabled,
+                    fontFamily: T.fontMono,
+                  }}>
+                    {groupTasks.length}
+                  </span>
+                </div>
+              )}
+
+              {/* Tasks in this sprint group */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {groupTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', task.id);
+                      e.dataTransfer.effectAllowed = 'move';
+                    }}
+                  >
+                    <TaskCard task={task} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
         )}
       </div>
     </div>
