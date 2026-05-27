@@ -906,7 +906,7 @@ export const apiKeys = pgTable(
     workspaceId: uuid('workspace_id').notNull()
                  .references(() => workspaces.id, { onDelete: 'cascade' }),
     createdBy:   uuid('created_by').notNull()
-                 .references(() => workspaceMembers.userId, { onDelete: 'cascade' }),
+                 .references(() => users.id, { onDelete: 'cascade' }),
     name:        text('name').notNull(),
     // SHA-256 of plaintext key. Format: mnema_api_ + 48 random hex chars.
     keyHash:     text('key_hash').notNull().unique(),

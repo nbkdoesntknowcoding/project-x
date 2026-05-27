@@ -23,8 +23,8 @@ import { seedBuildFlow } from '../services/dev-flow-seed.js';
 const isDryRun = process.argv.includes('--dry-run');
 
 const DEV_FOLDERS = ['Architecture', 'PRD', 'Tasks', 'Build Prompts', 'Skills', 'Decisions'];
-// System user ID for seeding (nullable — Build Flow createdBy)
-const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
+// createdBy is nullable on folders and flows — use null for scripted seeding
+const SYSTEM_USER_ID = null as unknown as string;
 
 interface BackfillResult {
   workspaceId: string;

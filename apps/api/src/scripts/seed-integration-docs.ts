@@ -15,7 +15,8 @@ import { workspaces, folders, docs } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { emptyYjsState } from '../lib/yjs.js';
 
-const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
+// createdBy is nullable on both folders and docs — use null for scripted seeding
+const SYSTEM_USER_ID = null as unknown as string;
 
 // ── Integration guide content ─────────────────────────────────────────────────
 
