@@ -468,11 +468,8 @@ const isLocalhost = mcpBaseUrl.includes('localhost') || mcpBaseUrl.includes('127
     </div>
   </div>
 
-  <script define:vars={{ mcpEndpoint, hasTokenInit: hasToken, apiUrl, sessionJwt: auth.jwt }}>
-    const API = apiUrl;   // full URL to Fastify API (port 8080)
-    // sessionJwt is the user's JWT — sent as Bearer token for cross-origin API calls
-    // (cookies don't travel cross-origin to the tunnel domain)
-    const AUTH_HEADER = sessionJwt ? { 'Authorization': `Bearer ${sessionJwt}` } : {};
+  <script define:vars={{ mcpEndpoint, hasTokenInit: hasToken }}>
+    const API = '';   // relative — proxied through Astro → backend
 
     // ---- helpers ----
     function copyText(text, labelEl, original) {
@@ -530,7 +527,7 @@ const isLocalhost = mcpBaseUrl.includes('localhost') || mcpBaseUrl.includes('127
         const res = await fetch(`${API}/api/mcp-tokens`, {
           method: 'POST',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: 'Claude Desktop' }),
         });
         if (!res.ok) throw new Error(`API ${res.status}`);
@@ -572,7 +569,7 @@ const isLocalhost = mcpBaseUrl.includes('localhost') || mcpBaseUrl.includes('127
 
     async function revokeToken(id) {
       if (!confirm('Revoke this token? Claude Desktop will lose access immediately.')) return;
-      const res = await fetch(`${API}/api/mcp-tokens/${id}`, { method: 'DELETE', credentials: 'include', headers: { ...AUTH_HEADER } });
+      const res = await fetch(`${API}/api/mcp-tokens/${id}`, { method: 'DELETE', credentials: 'include', headers: {} });
       if (!res.ok && res.status !== 204) return alert('Failed to revoke token');
       const row = document.querySelector(`[data-token-id="${id}"]`);
       row?.remove();
@@ -605,7 +602,7 @@ const isLocalhost = mcpBaseUrl.includes('localhost') || mcpBaseUrl.includes('127
     if (revokeAllBtn) revokeAllBtn.addEventListener('click', async function() {
       if (!confirm('Revoke ALL active tokens? Claude will lose access immediately.')) return;
       var rows = Array.from(document.querySelectorAll('[data-token-id]'));
-      await Promise.all(rows.map(function(r) { return fetch(API + '/api/mcp-tokens/' + r.dataset.tokenId, { method: 'DELETE', credentials: 'include', headers: { ...AUTH_HEADER } }); }));
+      await Promise.all(rows.map(function(r) { return fetch(API + '/api/mcp-tokens/' + r.dataset.tokenId, { method: 'DELETE', credentials: 'include', headers: {} }); }));
       document.querySelectorAll('.cc-token-row').forEach(function(r) { r.remove(); });
       var sec = document.getElementById('cc-tokens-section');
       if (sec) sec.style.display = 'none';

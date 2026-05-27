@@ -1,7 +1,6 @@
 import { type JSX, useEffect, useState } from 'react';
 import { VersionItem } from './VersionItem';
 import type { VersionRow } from './types';
-import { authHeaders } from '../../lib/api';
 
 interface Props {
   docId: string;
@@ -39,12 +38,9 @@ export function VersionsSidebar({
     let cancelled = false;
     setLoading(true);
     void (async () => {
-      const apiUrl =
-        (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
       try {
-        const res = await fetch(`${apiUrl}/api/doc-versions?doc_id=${docId}`, {
+        const res = await fetch(`/api/doc-versions?doc_id=${docId}`, {
           credentials: 'include',
-          headers: authHeaders(),
         });
         if (!res.ok) return;
         const body = (await res.json()) as { versions: VersionRow[] };

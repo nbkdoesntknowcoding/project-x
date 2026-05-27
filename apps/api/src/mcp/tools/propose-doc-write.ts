@@ -18,7 +18,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { docs, workspaceMembers } from '../../db/schema.js';
+import { docs, folders, workspaceMembers } from '../../db/schema.js';
 import { withSystemPrivilege } from '../../db/with-system-privilege.js';
 import { withTenant } from '../../db/with-tenant.js';
 import type { McpAuthContext } from '../auth.js';
@@ -207,6 +207,7 @@ export async function proposeDocWrite(
     args.section_anchor,
     args.title ?? args.doc_name,
     args.expected_anchors,
+    args.folder_id,
   );
 
   // Build the operation-specific preview sub-object.
@@ -238,14 +239,25 @@ export async function proposeDocWrite(
         anchor_drift: false,
       };
       break;
-    case 'create':
+    case 'create': {
+      let folderName = 'workspace root';
+      if (args.folder_id) {
+        const folderRows = await withTenant(ctx.tenant_id, (tx) =>
+          tx.select({ name: folders.name }).from(folders)
+            .where(and(eq(folders.id, args.folder_id!), isNull(folders.deletedAt)))
+            .limit(1),
+        );
+        folderName = folderRows[0]?.name ?? args.folder_id;
+      }
       preview = {
         kind: 'create',
         title: args.title ?? args.doc_name ?? 'New Doc',
-        folder_name: args.folder_id ?? 'workspace root',
+        folder_name: folderName,
+        folder_id: args.folder_id ?? null,
         body_markdown: proposedContent,
       };
       break;
+    }
     case 'trash_doc':
       preview = {
         kind: 'trash_doc',

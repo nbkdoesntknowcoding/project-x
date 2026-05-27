@@ -60,6 +60,7 @@ interface ContentStoreEntry {
   anchor_id?: string;
   doc_name?: string;
   expected_anchors?: string[];
+  folder_id?: string;
   exp: number;
 }
 const contentStore = new Map<string, ContentStoreEntry>();
@@ -71,12 +72,14 @@ export function storeProposalContent(
   anchorId?: string,
   docName?: string,
   expectedAnchors?: string[],
+  folderId?: string,
 ): void {
   contentStore.set(nonce, {
     markdown,
     anchor_id: anchorId,
     doc_name: docName,
     expected_anchors: expectedAnchors,
+    folder_id: folderId,
     exp: expMs,
   });
   if (contentStore.size > 1000) {
@@ -89,7 +92,7 @@ export function storeProposalContent(
 
 export function getProposalContent(
   nonce: string,
-): { markdown: string; anchor_id?: string; doc_name?: string; expected_anchors?: string[] } | null {
+): { markdown: string; anchor_id?: string; doc_name?: string; expected_anchors?: string[]; folder_id?: string } | null {
   const entry = contentStore.get(nonce);
   if (!entry) return null;
   if (Date.now() > entry.exp) { contentStore.delete(nonce); return null; }
@@ -98,6 +101,7 @@ export function getProposalContent(
     anchor_id: entry.anchor_id,
     doc_name: entry.doc_name,
     expected_anchors: entry.expected_anchors,
+    folder_id: entry.folder_id,
   };
 }
 

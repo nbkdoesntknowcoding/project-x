@@ -1,6 +1,5 @@
 import { type JSX, useEffect, useState } from 'react';
 import type { DiffChunk } from './types';
-import { authHeaders } from '../../lib/api';
 
 interface Props {
   docId: string;
@@ -42,12 +41,10 @@ export function VersionDiffView({
     setLoading(true);
     setError(null);
     void (async () => {
-      const apiUrl =
-        (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
       try {
         const res = await fetch(
-          `${apiUrl}/api/doc-versions/diff?doc_id=${docId}&version=${version}`,
-          { credentials: 'include', headers: authHeaders() },
+          `/api/doc-versions/diff?doc_id=${docId}&version=${version}`,
+          { credentials: 'include' },
         );
         if (!res.ok) {
           setError('Could not load diff.');
@@ -68,11 +65,9 @@ export function VersionDiffView({
     setRestoring(true);
     setError(null);
     try {
-      const apiUrl =
-        (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
-      const res = await fetch(`${apiUrl}/api/doc-versions/restore`, {
+      const res = await fetch(`/api/doc-versions/restore`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ doc_id: docId, version }),
       });

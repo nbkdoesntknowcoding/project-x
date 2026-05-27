@@ -176,6 +176,7 @@ export async function commitProposedWrite(
             markdown,
             idempotency_key: iKey,
             user_confirmed: true,
+            ...(stored?.folder_id ? { folder_id: stored.folder_id } : {}),
           });
           if (result.error) return { error: result.error, message: result.message };
           return { committed: true, doc_id: result.doc_id, operation: 'create' };

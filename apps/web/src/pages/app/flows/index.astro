@@ -305,13 +305,12 @@ function statusLabel(flow: FlowSummary): string {
     </div>
   </div>
 
-  <script define:vars={{ apiUrl, sessionJwt: auth.jwt }}>
+  <script>
     async function createFlow() {
-      const AUTH_HEADER = sessionJwt ? { 'Authorization': `Bearer ${sessionJwt}` } : {};
-      const res = await fetch(`${apiUrl}/api/flows`, {
+      const res = await fetch(`/api/flows`, {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json', ...AUTH_HEADER },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'Untitled flow' }),
       });
       if (!res.ok) { alert('Failed to create flow'); return; }

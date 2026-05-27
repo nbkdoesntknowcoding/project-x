@@ -19,9 +19,6 @@
  *      suggestion this time", never an error toast.
  */
 
-const API_URL =
-  (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
-
 export interface CompletionContext {
   prefix: string;
   suffix: string;
@@ -35,7 +32,7 @@ export async function streamCompletion(
   signal: AbortSignal,
   onUpdate: CompletionStreamCallback,
 ): Promise<string> {
-  const response = await fetch(`${API_URL}/api/complete`, {
+  const response = await fetch(`/api/complete`, {
     method: 'POST',
     credentials: 'include',
     headers: {

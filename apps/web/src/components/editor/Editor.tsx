@@ -9,7 +9,6 @@ import { type JSX, useEffect, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import './editor.css';
 import { $prose, getMarkdown } from '@milkdown/kit/utils';
-import { authHeaders } from '../../lib/api';
 import { ConnectionStatus } from './ConnectionStatus';
 import { createAutocompletePlugin } from './plugins/autocomplete/plugin';
 import { mathPlugin } from './plugins/math';
@@ -202,11 +201,9 @@ export function Editor({
               try {
                 const md = crepe.editor.action(getMarkdown);
                 if (!md) return;
-                const saveUrl =
-                  (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
-                void fetch(`${saveUrl}/api/docs/${docId}`, {
+                void fetch(`/api/docs/${docId}`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json', ...authHeaders() },
+                  headers: { 'Content-Type': 'application/json' },
                   credentials: 'include',
                   body: JSON.stringify({ markdown: md }),
                 });
