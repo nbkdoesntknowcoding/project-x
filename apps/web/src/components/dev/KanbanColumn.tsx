@@ -34,6 +34,7 @@ interface KanbanColumnProps {
   tasks: Task[];
   onTaskDrop: (taskId: string, targetStatus: string, targetIndex: number) => void;
   onAddTask?: () => void;
+  onTaskClick?: (task: Task) => void;
 }
 
 export function KanbanColumn({
@@ -43,6 +44,7 @@ export function KanbanColumn({
   tasks,
   onTaskDrop,
   onAddTask,
+  onTaskClick,
 }: KanbanColumnProps): JSX.Element {
   const groups = groupBySprint(tasks);
 
@@ -197,6 +199,8 @@ export function KanbanColumn({
                       e.dataTransfer.setData('text/plain', task.id);
                       e.dataTransfer.effectAllowed = 'move';
                     }}
+                    onClick={() => onTaskClick?.(task)}
+                    style={{ cursor: 'pointer' }}
                   >
                     <TaskCard task={task} />
                   </div>

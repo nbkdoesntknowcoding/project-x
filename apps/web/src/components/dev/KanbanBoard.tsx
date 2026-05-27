@@ -5,6 +5,7 @@ import { T } from '../../lib/dev-tokens';
 import { AddTaskModal } from './AddTaskModal';
 import { DevSetupBanner } from './DevSetupBanner';
 import { KanbanColumn } from './KanbanColumn';
+import { TaskDetailModal } from './TaskDetailModal';
 import type { Task } from './TaskCard';
 
 interface KanbanBoardProps {
@@ -69,6 +70,7 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [devConfig, setDevConfig] = useState<DevConfig | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const sseRef = useRef<EventSource | null>(null);
@@ -361,6 +363,7 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
             tasks={tasksByStatus[col.id] ?? []}
             onTaskDrop={handleTaskDrop}
             onAddTask={col.id === 'backlog' ? () => { setShowAddModal(true); } : undefined}
+            onTaskClick={setSelectedTask}
           />
         ))}
       </div>
@@ -370,6 +373,14 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
         <AddTaskModal
           onAdd={handleAddTask}
           onClose={() => { setShowAddModal(false); }}
+        />
+      )}
+
+      {/* Task Detail Modal */}
+      {selectedTask && (
+        <TaskDetailModal
+          task={selectedTask}
+          onClose={() => { setSelectedTask(null); }}
         />
       )}
     </div>
