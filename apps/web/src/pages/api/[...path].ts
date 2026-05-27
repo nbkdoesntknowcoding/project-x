@@ -60,8 +60,18 @@ const handler: APIRoute = async (context) => {
 
   // Forward upstream response verbatim
   const responseHeaders: Record<string, string> = {};
-  const upstreamCT = upstream.headers.get('content-type');
+  const upstreamCT = upstream.headers.get('content-type') ?? '';
   if (upstreamCT) responseHeaders['content-type'] = upstreamCT;
+
+  // SSE / streaming: pipe body directly — never buffer an infinite stream
+  if (upstreamCT.includes('text/event-stream') || upstreamCT.includes('stream')) {
+    responseHeaders['cache-control'] = 'no-cache';
+    responseHeaders['x-accel-buffering'] = 'no';
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: responseHeaders,
+    });
+  }
 
   const body = await upstream.arrayBuffer();
   return new Response(body, {
