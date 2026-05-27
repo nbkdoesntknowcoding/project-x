@@ -19,6 +19,7 @@ export function WorkspaceModeToggle({ initialMode, workspaceId }: Props): JSX.El
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
+        body: '{}',
       });
       if (res.ok) {
         setMode('dev_project');

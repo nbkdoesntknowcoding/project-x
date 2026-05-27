@@ -92,7 +92,7 @@ export function DevSettings({ workspaceId, isOwner }: DevSettingsProps): JSX.Ele
     try {
       const res = await apiFetch<{ mode: string; hookToken: string }>(
         `/api/workspaces/${workspaceId}/convert-to-dev-project`,
-        { method: 'POST' },
+        { method: 'POST', body: '{}' },
       );
       setNewToken(res.hookToken);
       // Reload full config now that mode is dev_project
