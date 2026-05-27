@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mnema · Developer Mode · Index</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet" />
+<style>
+:root { --canvas:#0A0B0D; --surface:#121317; --surface-2:#181A1F; --line:rgba(255,255,255,0.06); --ink:#F4F5F7; --ink-soft:#B0B4BC; --ink-muted:#707479; --accent:#FFB370; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--canvas); color: var(--ink); font-family: "Inter", system-ui, sans-serif; font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 56px 40px 80px; }
+.hero h1 { margin: 0 0 8px; font: 600 36px/1.1 "Geist", system-ui, sans-serif; letter-spacing: -0.02em; }
+.hero p { margin: 0 0 36px; color: var(--ink-soft); font-size: 16px; max-width: 600px; }
+.eyebrow { font: 500 11px/1 "Geist Mono", monospace; color: var(--accent); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 18px; }
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
+.tile { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; text-decoration: none; color: inherit; transition: border-color 140ms ease, transform 140ms ease; }
+.tile:hover { border-color: rgba(255,255,255,0.18); transform: translateY(-2px); }
+.tile-frame { aspect-ratio: 16 / 10; background: var(--canvas); position: relative; overflow: hidden; border-bottom: 1px solid var(--line); }
+.tile-frame iframe { border: 0; transform-origin: top left; width: 1440px; height: 900px; background: var(--canvas); }
+.tile-meta { padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 6px; }
+.tile-num { font: 500 10.5px/1 "Geist Mono", monospace; color: var(--ink-muted); letter-spacing: 0.12em; }
+.tile-name { font: 500 16px/1.2 "Geist", system-ui, sans-serif; color: var(--ink); }
+.tile-desc { font: 400 13px/1.4 "Inter", system-ui, sans-serif; color: var(--ink-soft); }
+.tile-tags { display: flex; gap: 6px; margin-top: 8px; }
+.tile-tag { font: 500 10px/1 "Geist Mono", monospace; padding: 3px 7px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-muted); letter-spacing: 0.04em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <span class="eyebrow">Developer Mode · AgentLens v1</span>
+    <h1>Mnema Developer Mode — 6 screens</h1>
+    <p>Kanban board, dev-setup modal, session list, session detail, cost dashboard, and optimization page. Standalone HTML, shared sidebar (matches Settings.html), spec-compliant tokens.</p>
+  </div>
+  <div class="grid" id="grid">
+    <a class="tile" href="Kanban.html"><div class="tile-frame"><iframe loading="lazy" src="Kanban.html"></iframe></div><div class="tile-meta"><span class="tile-num">01 · /app/kanban</span><span class="tile-name">Kanban</span><span class="tile-desc">5-column task board · priority strips, agent pulse, audit/fix state.</span><div class="tile-tags"><span class="tile-tag">dnd-kit</span><span class="tile-tag">glass cards</span></div></div></a>
+    <a class="tile" href="DevSetup.html"><div class="tile-frame"><iframe loading="lazy" src="DevSetup.html"></iframe></div><div class="tile-meta"><span class="tile-num">02 · first-time</span><span class="tile-name">Dev setup banner</span><span class="tile-desc">Modal overlay · hook token + install command + checkbox gate.</span><div class="tile-tags"><span class="tile-tag">overlay</span><span class="tile-tag">terminal</span></div></div></a>
+    <a class="tile" href="Sessions.html"><div class="tile-frame"><iframe loading="lazy" src="Sessions.html"></iframe></div><div class="tile-meta"><span class="tile-num">03 · /app/sessions</span><span class="tile-name">Session list</span><span class="tile-desc">Flat table · status dots, agent badges, mono cost column.</span><div class="tile-tags"><span class="tile-tag">filters</span><span class="tile-tag">table</span></div></div></a>
+    <a class="tile" href="SessionDetail.html"><div class="tile-frame"><iframe loading="lazy" src="SessionDetail.html"></iframe></div><div class="tile-meta"><span class="tile-num">04 · /app/sessions/:id</span><span class="tile-name">Session detail</span><span class="tile-desc">3-panel · metadata · tool-call timeline · file diff.</span><div class="tile-tags"><span class="tile-tag">timeline</span><span class="tile-tag">diff</span></div></div></a>
+    <a class="tile" href="Cost.html"><div class="tile-frame"><iframe loading="lazy" src="Cost.html"></iframe></div><div class="tile-meta"><span class="tile-num">05 · /app/cost</span><span class="tile-name">Cost dashboard</span><span class="tile-desc">4 stats · stacked bars · per-dev bars · budget config.</span><div class="tile-tags"><span class="tile-tag">recharts</span><span class="tile-tag">budgets</span></div></div></a>
+    <a class="tile" href="Optimize.html"><div class="tile-frame"><iframe loading="lazy" src="Optimize.html"></iframe></div><div class="tile-meta"><span class="tile-num">06 · /app/optimize</span><span class="tile-name">Optimization</span><span class="tile-desc">Findings list · rule badges · ROI circle · expand-on-click.</span><div class="tile-tags"><span class="tile-tag">findings</span><span class="tile-tag">apply</span></div></div></a>
+  </div>
+</div>
+<script>
+function fit() {
+  document.querySelectorAll('.tile-frame').forEach(f => {
+    const iframe = f.querySelector('iframe');
+    const w = f.clientWidth;
+    const scale = w / 1440;
+    iframe.style.transform = 'scale(' + scale + ')';
+    iframe.style.height = (f.clientHeight / scale) + 'px';
+    iframe.style.width = '1440px';
+  });
+}
+window.addEventListener('load', fit);
+window.addEventListener('resize', fit);
+setTimeout(fit, 200);
+setTimeout(fit, 1200);
+</script>
+</body>
+</html>

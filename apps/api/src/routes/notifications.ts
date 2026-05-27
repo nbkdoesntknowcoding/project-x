@@ -157,6 +157,8 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
           send('session_started', event.data);
         } else if (event.type === 'session_ended') {
           send('session_ended', event.data);
+        } else if (event.type === 'optimization_findings_updated') {
+          send('optimization_findings_updated', event.data);
         }
       } catch {
         // Client disconnected mid-write — safe to ignore

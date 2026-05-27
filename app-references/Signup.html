@@ -1,0 +1,935 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1280" />
+<title>Mnema · Create your account</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --canvas:        #0A0B0D;
+  --surface:       #131418;
+  --surface-2:     #1B1D22;
+  --surface-3:     #24272D;
+  --line:          rgba(255,255,255,0.06);
+  --line-strong:   rgba(255,255,255,0.12);
+  --line-bright:   rgba(255,255,255,0.22);
+  --ink:           #F4F5F7;
+  --ink-soft:      #B8BCC4;
+  --ink-muted:     #6E737C;
+  --ink-faint:     #3F434B;
+
+  --accent:        #F4F5F7;
+  --accent-rgb:    244, 245, 247;
+  --accent-soft:   rgba(var(--accent-rgb), 0.10);
+  --accent-line:   rgba(var(--accent-rgb), 0.28);
+
+  --aux-1-rgb:     124, 156, 255;   /* aurora wash 1 — soft blue */
+  --aux-2-rgb:     200, 162, 255;   /* aurora wash 2 — soft violet */
+  --aux-3-rgb:     255, 144, 120;   /* aurora wash 3 — warm coral */
+
+  --on-ink:        #0A0B0D;
+
+  --sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --intensity: 0.6;
+  --anim-mult: 1;
+}
+
+[data-theme="light"] {
+  --canvas: #F7F7F5;
+  --surface: #FFFFFF;
+  --surface-2: #F1F1EE;
+  --surface-3: #E8E8E4;
+  --line: rgba(10,11,13,0.07);
+  --line-strong: rgba(10,11,13,0.14);
+  --line-bright: rgba(10,11,13,0.28);
+  --ink: #0A0B0D;
+  --ink-soft: #4B4F57;
+  --ink-muted: #8A8F98;
+  --ink-faint: #C2C5CA;
+  --on-ink: #FFFFFF;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01";
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+  transition: background-color 240ms ease, color 240ms ease;
+}
+
+/* ============================================================
+   LABEL TYPE (replaces mono usage — sans uppercase, tight tracking)
+   ============================================================ */
+.label, .field label .hint, .divider, .corner-mark, .status-pill,
+.trust { font: 500 11px/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* ============================================================
+   ARTISTIC ANIMATED BACKGROUND
+   ============================================================ */
+.bg {
+  position: fixed; inset: 0;
+  pointer-events: none; overflow: hidden;
+  z-index: 0;
+}
+
+/* Subtle grid layer (always available, toggled) */
+.bg .grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+  background-size: 72px 72px;
+  background-position: -1px -1px;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 40%, black 30%, transparent 88%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 40%, black 30%, transparent 88%);
+  animation: gridBreath calc(14s / var(--anim-mult)) ease-in-out infinite;
+}
+[data-theme="light"] .bg .grid {
+  background-image:
+    linear-gradient(rgba(10,11,13,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(10,11,13,0.04) 1px, transparent 1px);
+}
+.bg[data-grid="off"] .grid { display: none; }
+@keyframes gridBreath {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1.0; }
+}
+
+/* Fluid metaballs — morphing blobs merged via SVG goo filter */
+.bg .fluid-stage {
+  position: absolute; inset: 0;
+  filter: url(#mnema-goo);
+  opacity: calc(0.6 + var(--intensity) * 0.7);
+}
+[data-theme="light"] .bg .fluid-stage {
+  opacity: calc(var(--intensity) * 0.5);
+  mix-blend-mode: multiply;
+}
+.bg .blob {
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+  filter: blur(6px);
+}
+.bg .blob.b1 {
+  width: 380px; height: 380px; left: 8%; top: 12%;
+  background: rgba(var(--accent-rgb), 0.85);
+  animation: fluid1 calc(28s / var(--anim-mult)) ease-in-out infinite;
+}
+.bg .blob.b2 {
+  width: 440px; height: 440px; right: 6%; top: 20%;
+  background: rgba(var(--aux-1-rgb), 0.75);
+  animation: fluid2 calc(34s / var(--anim-mult)) ease-in-out infinite;
+}
+.bg .blob.b3 {
+  width: 320px; height: 320px; left: 28%; bottom: -6%;
+  background: rgba(var(--aux-2-rgb), 0.78);
+  animation: fluid3 calc(31s / var(--anim-mult)) ease-in-out infinite;
+}
+.bg .blob.b4 {
+  width: 280px; height: 280px; right: 22%; bottom: 8%;
+  background: rgba(var(--aux-3-rgb), 0.72);
+  animation: fluid4 calc(36s / var(--anim-mult)) ease-in-out infinite;
+}
+.bg .blob.b5 {
+  width: 220px; height: 220px; left: 46%; top: 38%;
+  background: rgba(var(--accent-rgb), 0.7);
+  animation: fluid5 calc(24s / var(--anim-mult)) ease-in-out infinite;
+}
+.bg .blob.b6 {
+  width: 260px; height: 260px; left: 12%; bottom: 26%;
+  background: rgba(var(--aux-1-rgb), 0.72);
+  animation: fluid6 calc(30s / var(--anim-mult)) ease-in-out infinite;
+}
+@keyframes fluid1 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  20% { transform: translate(180px, 90px) scale(1.12); }
+  45% { transform: translate(80px, 260px) scale(0.92); }
+  70% { transform: translate(-100px, 180px) scale(1.06); }
+  90% { transform: translate(40px, 60px) scale(0.96); }
+}
+@keyframes fluid2 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  30% { transform: translate(-200px, 120px) scale(1.15); }
+  55% { transform: translate(-90px, 280px) scale(0.94); }
+  80% { transform: translate(60px, 160px) scale(1.05); }
+}
+@keyframes fluid3 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  25% { transform: translate(140px, -200px) scale(1.1); }
+  55% { transform: translate(-50px, -120px) scale(0.92); }
+  80% { transform: translate(-180px, -240px) scale(1.04); }
+}
+@keyframes fluid4 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  35% { transform: translate(180px, -130px) scale(1.12); }
+  70% { transform: translate(-80px, -60px) scale(0.95); }
+}
+@keyframes fluid5 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  25% { transform: translate(-160px, -80px) scale(1.18); }
+  50% { transform: translate(200px, 60px) scale(0.88); }
+  75% { transform: translate(80px, 180px) scale(1.06); }
+}
+@keyframes fluid6 {
+  0%,100% { transform: translate(0,0) scale(1); }
+  40% { transform: translate(220px, -140px) scale(1.1); }
+  75% { transform: translate(-60px, 80px) scale(0.94); }
+}
+
+/* Aurora — large soft wash */
+.bg .aurora {
+  position: absolute; inset: -20%;
+  background:
+    radial-gradient(circle at 18% 30%, rgba(var(--accent-rgb), 0.32) 0%, transparent 45%),
+    radial-gradient(circle at 82% 55%, rgba(var(--aux-1-rgb), 0.30) 0%, transparent 50%),
+    radial-gradient(circle at 50% 90%, rgba(var(--aux-3-rgb), 0.22) 0%, transparent 50%);
+  filter: blur(50px);
+  opacity: calc(var(--intensity) * 1.1);
+  animation: aurora calc(22s / var(--anim-mult)) ease-in-out infinite;
+}
+[data-theme="light"] .bg .aurora { mix-blend-mode: multiply; opacity: calc(var(--intensity) * 0.45); }
+@keyframes aurora {
+  0%,100% { transform: translate(0,0) rotate(0deg); }
+  33% { transform: translate(60px, -30px) rotate(2deg); }
+  66% { transform: translate(-40px, 60px) rotate(-2deg); }
+}
+
+/* Particle stars (created by JS) */
+.bg .star {
+  position: absolute;
+  background: rgba(255,255,255,0.85);
+  border-radius: 50%;
+  opacity: 0;
+  animation: twinkle calc(var(--life,5s) / var(--anim-mult)) ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+[data-theme="light"] .bg .star { background: rgba(10,11,13,0.45); }
+@keyframes twinkle {
+  0%,100% { opacity: 0; transform: scale(0.6); }
+  50%     { opacity: 0.8; transform: scale(1); }
+}
+
+/* Scanning line — a faint horizontal sweep, only in aurora mode */
+.bg .scan {
+  position: absolute; left: 0; right: 0; height: 1px;
+  top: 0;
+  background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb), 0.5), transparent);
+  animation: scan calc(18s / var(--anim-mult)) linear infinite;
+}
+@keyframes scan {
+  0%   { top: -2%; opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { top: 102%; opacity: 0; }
+}
+
+/* Background style switches */
+.bg[data-style="minimal"] .fluid-stage,
+.bg[data-style="minimal"] .aurora,
+.bg[data-style="minimal"] .scan,
+.bg[data-style="minimal"] .star  { display: none; }
+
+.bg[data-style="grid"] .fluid-stage,
+.bg[data-style="grid"] .aurora,
+.bg[data-style="grid"] .scan { display: none; }
+
+.bg[data-style="aurora"] .fluid-stage { display: none; }
+
+.bg[data-style="fluid"] .aurora,
+.bg[data-style="fluid"] .scan { display: none; }
+
+/* ============================================================
+   TOPBAR
+   ============================================================ */
+.topbar {
+  height: 64px; padding: 0 32px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: relative; z-index: 2;
+}
+.brand {
+  display: inline-flex; align-items: center; gap: 12px;
+  font: 600 16px/1 var(--sans); letter-spacing: -0.01em;
+  color: var(--ink); text-decoration: none;
+}
+.brand .glyph {
+  width: 30px; height: 30px; border-radius: 9px;
+  background: var(--ink); color: var(--on-ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 500 20px/1 var(--sans); padding-bottom: 3px;
+  position: relative;
+}
+.brand .glyph::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,0.16), transparent 50%);
+}
+.top-link {
+  font: 500 13.5px/1 var(--sans);
+  color: var(--ink-soft); text-decoration: none;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.top-link:hover { color: var(--ink); }
+.top-link a { color: var(--ink); text-decoration: none; }
+
+/* MAIN */
+main {
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px 24px 80px;
+  position: relative; z-index: 2;
+}
+
+/* AUTH CARD */
+.auth {
+  width: 420px; max-width: 100%;
+  background: rgba(6,7,10,0.72);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border-radius: 20px;
+  padding: 36px 36px 30px;
+  position: relative;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.07),
+    inset 0 0 0 1px rgba(255,255,255,0.05),
+    0 40px 80px -30px rgba(255,255,255,0.04),
+    0 60px 100px -40px rgba(0,0,0,0.7);
+}
+[data-theme="light"] .auth {
+  background: rgba(255,255,255,0.78);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.6),
+    0 1px 0 var(--line),
+    0 30px 60px -30px rgba(10,11,13,0.18);
+}
+.auth::before {
+  content: ""; position: absolute; inset: 0;
+  border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0.04) 18%, rgba(255,255,255,0) 40%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+[data-theme="light"] .auth::before {
+  background: linear-gradient(180deg, rgba(10,11,13,0.10), rgba(10,11,13,0.02) 30%, transparent 50%);
+}
+.auth::after {
+  content: ""; position: absolute; left: 15%; right: 15%; bottom: -3px;
+  height: 18px; pointer-events: none;
+  background: radial-gradient(ellipse 60% 100% at 50% 0%, rgba(255,255,255,0.2), transparent 70%);
+  filter: blur(6px); opacity: 0.55;
+}
+[data-theme="light"] .auth::after { display: none; }
+
+.auth-mark {
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 22px;
+}
+.auth-mark .glyph-lg {
+  width: 56px; height: 56px;
+  background: var(--surface-2);
+  border-radius: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 500 38px/1 var(--sans); color: var(--ink);
+  padding-bottom: 5px;
+  position: relative;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.1),
+    inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+[data-theme="light"] .auth-mark .glyph-lg {
+  background: var(--ink); color: var(--on-ink);
+}
+
+.auth h1 {
+  margin: 0 0 8px;
+  font: 600 24px/1.2 var(--sans);
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+.auth .sub {
+  margin: 0 0 28px;
+  text-align: center;
+  font-size: 14px; color: var(--ink-muted);
+  line-height: 1.5;
+}
+
+.field { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
+.field label {
+  font: 500 12.5px/1 var(--sans);
+  color: var(--ink-soft);
+  display: flex; justify-content: space-between; align-items: center;
+  text-transform: none; letter-spacing: 0;
+}
+.field label .hint { color: var(--ink-muted); }
+.input {
+  width: 100%;
+  font: 400 14.5px/1 var(--sans);
+  padding: 13px 14px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+  color: var(--ink);
+  border: 1px solid rgba(255,255,255,0.10);
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+[data-theme="light"] .input { background: rgba(10,11,13,0.025); border-color: rgba(10,11,13,0.12); }
+.input::placeholder { color: var(--ink-muted); }
+.input:focus {
+  border-color: rgba(var(--accent-rgb), 0.6);
+  background: rgba(255,255,255,0.05);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.12);
+}
+[data-theme="light"] .input:focus { background: rgba(10,11,13,0.035); }
+
+/* primary */
+.btn-primary {
+  width: 100%; margin-top: 6px;
+  font: 600 14px/1 var(--sans);
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: var(--ink); color: var(--on-ink);
+  border: 1px solid var(--ink);
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  transition: transform 100ms ease, background 140ms ease;
+  position: relative;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+}
+.btn-primary:hover { background: rgba(255,255,255,0.92); }
+[data-theme="light"] .btn-primary:hover { background: #1A1B1F; }
+.btn-primary:active { transform: translateY(0.5px); }
+.btn-primary[disabled] { opacity: 0.5; cursor: not-allowed; }
+.btn-primary .arrow { transition: transform 160ms ease; }
+.btn-primary:hover .arrow { transform: translateX(3px); }
+
+/* divider */
+.divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 22px 0 18px;
+  color: var(--ink-muted);
+}
+.divider::before, .divider::after {
+  content: ""; flex: 1; height: 1px;
+  background: rgba(255,255,255,0.08);
+}
+[data-theme="light"] .divider::before,
+[data-theme="light"] .divider::after { background: rgba(10,11,13,0.08); }
+
+/* SSO */
+.sso-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.sso {
+  display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  padding: 11px 12px;
+  font: 500 13.5px/1 var(--sans); color: var(--ink);
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+[data-theme="light"] .sso { background: rgba(10,11,13,0.02); border-color: rgba(10,11,13,0.10); }
+.sso:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.16);
+}
+[data-theme="light"] .sso:hover { background: rgba(10,11,13,0.04); border-color: rgba(10,11,13,0.16); }
+.sso svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* fine print */
+.legal {
+  margin: 22px 0 0;
+  text-align: center;
+  color: var(--ink-muted);
+  font: 400 12px/1.55 var(--sans);
+}
+.legal a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--ink-faint); }
+.legal a:hover { color: var(--ink); }
+
+/* footer below card */
+.card-foot {
+  text-align: center; margin-top: 22px;
+  color: var(--ink-muted); font-size: 13.5px;
+}
+.card-foot a { color: var(--ink); text-decoration: none; font-weight: 500; border-bottom: 1px solid var(--ink-faint); padding-bottom: 1px; }
+.card-foot a:hover { border-color: var(--ink); }
+
+/* TRUST STRIP */
+.trust {
+  display: flex; align-items: center; justify-content: center; gap: 28px;
+  margin-top: 56px;
+  color: var(--ink-muted);
+}
+.trust .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-faint); }
+.trust .item { display: flex; align-items: center; gap: 8px; }
+.trust .item .v { color: var(--ink-soft); font-weight: 600; }
+
+/* CORNER MARKS */
+.corner-mark {
+  position: fixed; left: 24px; bottom: 20px;
+  color: var(--ink-muted);
+  z-index: 2;
+}
+.corner-mark .v { color: var(--ink-soft); }
+
+.status-pill {
+  position: fixed; right: 24px; bottom: 20px;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 11px 7px 9px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--ink-soft);
+  z-index: 2;
+  backdrop-filter: blur(8px);
+}
+[data-theme="light"] .status-pill { background: rgba(10,11,13,0.04); border-color: rgba(10,11,13,0.08); }
+.status-pill .signal {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #6BE39B;
+  box-shadow: 0 0 8px rgba(107,227,155,0.6);
+  animation: signalPulse 2s ease-in-out infinite;
+}
+@keyframes signalPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(107,227,155,0.7); }
+  50%     { box-shadow: 0 0 0 6px rgba(107,227,155,0); }
+}
+
+/* ============================================================
+   TWEAKS PANEL
+   ============================================================ */
+.tweaks {
+  position: fixed; right: 16px; bottom: 16px; z-index: 50;
+  width: 280px;
+  background: rgba(20,21,25,0.85);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  color: var(--ink);
+  font: 12px/1.4 var(--sans);
+  box-shadow: 0 24px 60px -16px rgba(0,0,0,0.5);
+  display: none;
+}
+[data-theme="light"] .tweaks { background: rgba(255,255,255,0.92); border-color: rgba(10,11,13,0.08); }
+.tweaks.active { display: block; }
+.tweaks-hd {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+[data-theme="light"] .tweaks-hd { border-color: rgba(10,11,13,0.06); }
+.tweaks-hd b { font-weight: 600; font-size: 12.5px; letter-spacing: -0.005em; }
+.tweaks-close {
+  border: 0; background: transparent; color: var(--ink-muted);
+  width: 22px; height: 22px; border-radius: 6px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 16px; line-height: 1;
+}
+.tweaks-close:hover { background: rgba(255,255,255,0.05); color: var(--ink); }
+.tweaks-body {
+  padding: 8px 14px 14px;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.tweaks-section { display: flex; flex-direction: column; gap: 7px; }
+.tweaks-section h6 {
+  margin: 4px 0 0; font: 500 10px/1 var(--sans);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--ink-muted);
+}
+.tweaks .seg {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 2px;
+}
+[data-theme="light"] .tweaks .seg { background: rgba(10,11,13,0.04); border-color: rgba(10,11,13,0.06); }
+.tweaks .seg button {
+  border: 0; background: transparent; cursor: pointer;
+  font: 500 11.5px/1 var(--sans);
+  padding: 7px 8px; border-radius: 6px;
+  color: var(--ink-muted);
+}
+.tweaks .seg button.active {
+  background: var(--ink); color: var(--on-ink);
+}
+.tweaks .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.tweaks .swatches button {
+  aspect-ratio: 1; border-radius: 6px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.1); padding: 0;
+  transition: transform 100ms ease;
+}
+.tweaks .swatches button.active {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.tweaks input[type="range"] {
+  width: 100%; -webkit-appearance: none; appearance: none;
+  height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.1); outline: none;
+}
+[data-theme="light"] .tweaks input[type="range"] { background: rgba(10,11,13,0.1); }
+.tweaks input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--ink); cursor: pointer;
+  border: 2px solid var(--canvas);
+}
+.tweaks-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11.5px; color: var(--ink-soft);
+}
+.tweaks-row .v { color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.tweaks .toggle {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12.5px; color: var(--ink);
+}
+.tweaks .sw {
+  width: 30px; height: 18px; border-radius: 999px;
+  background: rgba(255,255,255,0.1); cursor: pointer;
+  position: relative; transition: background 140ms ease;
+}
+.tweaks .sw::after {
+  content: ""; position: absolute; left: 2px; top: 2px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--ink-soft); transition: transform 140ms ease;
+}
+.tweaks .sw.on { background: var(--ink); }
+.tweaks .sw.on::after { transform: translateX(12px); background: var(--canvas); }
+
+/* respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .bg .blob, .bg .aurora, .bg .grid, .bg .scan, .bg .star { animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- SVG goo filter for fluid metaballs -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="mnema-goo">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="22" result="blur"/>
+      <feColorMatrix in="blur" mode="matrix"
+        values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -11" result="goo"/>
+      <feBlend in="SourceGraphic" in2="goo"/>
+    </filter>
+  </defs>
+</svg>
+
+<!-- ARTISTIC BACKGROUND -->
+<div class="bg" id="bg" data-style="fluid" data-grid="on">
+  <div class="grid"></div>
+  <div class="aurora"></div>
+  <div class="scan"></div>
+  <div class="fluid-stage">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+    <div class="blob b4"></div>
+    <div class="blob b5"></div>
+    <div class="blob b6"></div>
+  </div>
+  <div id="stars"></div>
+</div>
+
+<header class="topbar">
+  <a href="#" class="brand">
+    <span class="glyph">μ</span>
+    <span>Mnema</span>
+  </a>
+  <div class="top-link">Already have an account? <a href="#">Sign in →</a></div>
+</header>
+
+<main>
+  <div style="display:flex;flex-direction:column;align-items:center;width:100%;">
+
+    <div class="auth" role="form" aria-label="Sign up">
+      <div class="auth-mark">
+        <span class="glyph-lg">μ</span>
+      </div>
+
+      <h1>Create your account</h1>
+      <p class="sub">The live context engine for AI-native teams.<br/>Free forever for personal use.</p>
+
+      <div class="field">
+        <label for="email">Work email <span class="hint">REQUIRED</span></label>
+        <input class="input" id="email" type="email" placeholder="you@workplace.com" autocomplete="email" />
+      </div>
+
+      <button class="btn-primary" id="continue-btn">
+        Continue with email
+        <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </button>
+
+      <div class="divider">OR CONTINUE WITH</div>
+
+      <div class="sso-grid">
+        <button class="sso">
+          <svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A10.99 10.99 0 0 0 12 23z" fill="#34A853"/><path d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.44.34-2.1V7.07H2.18A11 11 0 0 0 1 12c0 1.78.43 3.46 1.18 4.93l3.66-2.83z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.07l3.66 2.83C6.71 7.31 9.14 5.38 12 5.38z" fill="#EA4335"/></svg>
+          Google
+        </button>
+        <button class="sso">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.54 2.87 8.39 6.84 9.75.5.09.69-.22.69-.49 0-.24-.01-.88-.01-1.73-2.78.61-3.37-1.36-3.37-1.36-.46-1.18-1.11-1.49-1.11-1.49-.91-.63.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.89 1.55 2.34 1.1 2.91.84.09-.66.35-1.1.63-1.36-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05A9.34 9.34 0 0 1 12 6.96c.85 0 1.71.12 2.5.34 1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.59.69.49C19.13 20.64 22 16.79 22 12.25 22 6.58 17.52 2 12 2z"/></svg>
+          GitHub
+        </button>
+        <button class="sso">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8.5" height="8.5" fill="#F25022"/><rect x="12.5" y="3" width="8.5" height="8.5" fill="#7FBA00"/><rect x="3" y="12.5" width="8.5" height="8.5" fill="#00A4EF"/><rect x="12.5" y="12.5" width="8.5" height="8.5" fill="#FFB900"/></svg>
+          Microsoft
+        </button>
+        <button class="sso">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 12.64c-.03-2.91 2.39-4.32 2.5-4.39-1.36-1.99-3.48-2.27-4.24-2.3-1.81-.18-3.53 1.07-4.45 1.07-.92 0-2.34-1.04-3.84-1.01-1.98.03-3.8 1.15-4.82 2.92-2.05 3.55-.52 8.81 1.48 11.7.97 1.41 2.13 3.0 3.63 2.95 1.45-.06 2.0-.94 3.76-.94 1.75 0 2.25.94 3.79.91 1.56-.03 2.55-1.44 3.51-2.86 1.1-1.64 1.55-3.22 1.58-3.31-.03-.01-3.03-1.16-3.06-4.6zM14.21 4.07c.79-.96 1.32-2.29 1.18-3.61-1.13.05-2.51.76-3.33 1.71-.73.84-1.37 2.2-1.2 3.5 1.27.1 2.56-.65 3.35-1.6z"/></svg>
+          Apple
+        </button>
+      </div>
+
+      <p class="legal">By continuing you agree to our <a href="#">Terms</a> and <a href="#">Privacy Policy</a>. We'll set up your workspace on the next step.</p>
+    </div>
+
+    <p class="card-foot">Already have an account? <a href="#">Sign in</a></p>
+
+    <div class="trust">
+      <span class="item"><span class="v">4,800+</span> WORKSPACES</span>
+      <span class="dot"></span>
+      <span class="item">SOC 2 TYPE II</span>
+      <span class="dot"></span>
+      <span class="item">MCP <span class="v">2025-11-25</span></span>
+    </div>
+  </div>
+</main>
+
+<div class="corner-mark">MNEMA · <span class="v">v2.0</span> · AUTH</div>
+<div class="status-pill"><span class="signal"></span>ALL SYSTEMS LIVE</div>
+
+<!-- TWEAKS PANEL -->
+<aside class="tweaks" id="tweaks">
+  <div class="tweaks-hd">
+    <b>Tweaks · Signup</b>
+    <button class="tweaks-close" id="tweaks-close" aria-label="Close">×</button>
+  </div>
+  <div class="tweaks-body">
+    <div class="tweaks-section">
+      <h6>Theme</h6>
+      <div class="seg" data-tweak="theme">
+        <button data-val="dark">Dark</button>
+        <button data-val="light">Light</button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Background</h6>
+      <div class="seg" data-tweak="bgStyle">
+        <button data-val="fluid">Fluid</button>
+        <button data-val="aurora">Aurora</button>
+        <button data-val="grid">Grid</button>
+        <button data-val="minimal">Off</button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Accent</h6>
+      <div class="swatches" data-tweak="accent">
+        <button data-val="244,245,247" style="background:#F4F5F7" title="White"></button>
+        <button data-val="107,227,155" style="background:#6BE39B" title="Signal green"></button>
+        <button data-val="124,156,255" style="background:#7C9CFF" title="Soft blue"></button>
+        <button data-val="200,162,255" style="background:#C8A2FF" title="Violet"></button>
+        <button data-val="255,179,112" style="background:#FFB370" title="Amber"></button>
+        <button data-val="255,122,138" style="background:#FF7A8A" title="Coral"></button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Intensity</h6>
+      <div class="tweaks-row"><span>Glow opacity</span><span class="v" id="intensity-v">60%</span></div>
+      <input type="range" min="0" max="100" step="1" data-tweak="intensity" />
+    </div>
+    <div class="tweaks-section">
+      <h6>Speed</h6>
+      <div class="tweaks-row"><span>Animation rate</span><span class="v" id="speed-v">1.0×</span></div>
+      <input type="range" min="0" max="200" step="10" data-tweak="speed" />
+    </div>
+    <div class="tweaks-section">
+      <h6>Stars</h6>
+      <div class="tweaks-row"><span>Particle count</span><span class="v" id="stars-v">24</span></div>
+      <input type="range" min="0" max="80" step="2" data-tweak="stars" />
+    </div>
+    <div class="tweaks-section">
+      <h6>Grid</h6>
+      <div class="toggle">
+        <span>Show grid overlay</span>
+        <div class="sw" data-tweak="grid"></div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<script>
+/* ============================================================
+   TWEAK STATE
+   ============================================================ */
+const TWEAKS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "bgStyle": "fluid",
+  "accent": "255,122,138",
+  "intensity": 34,
+  "speed": 120,
+  "stars": 60,
+  "grid": false
+}/*EDITMODE-END*/;
+
+/* ============================================================
+   APPLY STATE TO DOM
+   ============================================================ */
+function applyTweaks() {
+  const root = document.documentElement;
+  root.setAttribute('data-theme', TWEAKS.theme);
+  root.style.setProperty('--accent-rgb', TWEAKS.accent);
+  root.style.setProperty('--intensity', (TWEAKS.intensity / 100).toFixed(2));
+  root.style.setProperty('--anim-mult', (TWEAKS.speed / 100).toFixed(2));
+
+  const bg = document.getElementById('bg');
+  bg.setAttribute('data-style', TWEAKS.bgStyle);
+  bg.setAttribute('data-grid', TWEAKS.grid ? 'on' : 'off');
+
+  // sync controls
+  document.querySelectorAll('[data-tweak]').forEach(el => {
+    const key = el.dataset.tweak;
+    const val = TWEAKS[key];
+    if (el.classList.contains('seg')) {
+      el.querySelectorAll('button').forEach(b => {
+        b.classList.toggle('active', b.dataset.val === val);
+      });
+    } else if (el.classList.contains('swatches')) {
+      el.querySelectorAll('button').forEach(b => {
+        b.classList.toggle('active', b.dataset.val === val);
+      });
+    } else if (el.classList.contains('sw')) {
+      el.classList.toggle('on', !!val);
+    } else if (el.type === 'range') {
+      el.value = val;
+    }
+  });
+  document.getElementById('intensity-v').textContent = TWEAKS.intensity + '%';
+  document.getElementById('speed-v').textContent = (TWEAKS.speed / 100).toFixed(1) + '×';
+  document.getElementById('stars-v').textContent = TWEAKS.stars;
+
+  renderStars(TWEAKS.stars);
+}
+
+function setTweak(key, val) {
+  TWEAKS[key] = val;
+  applyTweaks();
+  try {
+    window.parent.postMessage({type: '__edit_mode_set_keys', edits: { [key]: val }}, '*');
+  } catch (e) {}
+}
+
+/* ============================================================
+   STAR PARTICLES
+   ============================================================ */
+function renderStars(n) {
+  const host = document.getElementById('stars');
+  host.innerHTML = '';
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    const sz = 1 + Math.random() * 2.2;
+    s.style.width = s.style.height = sz + 'px';
+    s.style.left = Math.random() * 100 + '%';
+    s.style.top = Math.random() * 100 + '%';
+    s.style.setProperty('--life', (3 + Math.random() * 5).toFixed(1) + 's');
+    s.style.setProperty('--delay', (Math.random() * 5).toFixed(1) + 's');
+    host.appendChild(s);
+  }
+}
+
+/* ============================================================
+   TWEAKS PANEL — control bindings
+   ============================================================ */
+document.querySelectorAll('.seg[data-tweak]').forEach(seg => {
+  seg.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    setTweak(seg.dataset.tweak, btn.dataset.val);
+  });
+});
+document.querySelectorAll('.swatches[data-tweak]').forEach(sw => {
+  sw.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    setTweak(sw.dataset.tweak, btn.dataset.val);
+  });
+});
+document.querySelectorAll('.sw[data-tweak]').forEach(el => {
+  el.addEventListener('click', () => {
+    setTweak(el.dataset.tweak, !TWEAKS[el.dataset.tweak]);
+  });
+});
+document.querySelectorAll('input[type="range"][data-tweak]').forEach(el => {
+  el.addEventListener('input', () => {
+    setTweak(el.dataset.tweak, parseInt(el.value, 10));
+  });
+});
+
+/* ============================================================
+   HOST PROTOCOL
+   ============================================================ */
+(function() {
+  const panel = document.getElementById('tweaks');
+  const close = document.getElementById('tweaks-close');
+  function show() { panel.classList.add('active'); }
+  function hide() {
+    panel.classList.remove('active');
+    try { window.parent.postMessage({type: '__edit_mode_dismissed'}, '*'); } catch(e){}
+  }
+  window.addEventListener('message', e => {
+    const m = e.data;
+    if (!m || !m.type) return;
+    if (m.type === '__activate_edit_mode') show();
+    if (m.type === '__deactivate_edit_mode') hide();
+  });
+  close.addEventListener('click', hide);
+  try { window.parent.postMessage({type: '__edit_mode_available'}, '*'); } catch(e){}
+})();
+
+/* ============================================================
+   EMAIL VALIDATION + SUBMIT FEEDBACK
+   ============================================================ */
+(function(){
+  const email = document.getElementById('email');
+  const btn = document.getElementById('continue-btn');
+  function check() {
+    const v = email.value.trim();
+    btn.disabled = !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  }
+  email.addEventListener('input', check);
+  check();
+  btn.addEventListener('click', () => {
+    if (btn.disabled) return;
+    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></path></svg> Sending magic link…';
+    setTimeout(() => {
+      btn.innerHTML = '✓ Check your inbox';
+      btn.style.background = '#6BE39B';
+      btn.style.color = '#07140C';
+      btn.style.borderColor = '#6BE39B';
+    }, 1200);
+  });
+})();
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+applyTweaks();
+</script>
+
+</body>
+</html>

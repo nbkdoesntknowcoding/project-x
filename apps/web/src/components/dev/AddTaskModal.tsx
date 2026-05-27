@@ -1,9 +1,7 @@
-// TODO: Claude Design — apply Mnema glassmorphism design system
-// Background: var(--bg) #0a0a0a
-// Cards: rgba(255,255,255,0.04) + backdrop-filter: blur(24px)
-// See BOPPL_Context_Engine_Prompt_UI_Redesign_All_MCP_Panels for token system
+// DESIGN APPLIED: 2026-05-27
 
 import { type JSX, useState } from 'react';
+import { T, glassCard } from '../../lib/dev-tokens';
 
 interface AddTaskModalProps {
   onAdd: (title: string, description?: string, priority?: string) => Promise<void>;
@@ -11,6 +9,13 @@ interface AddTaskModalProps {
 }
 
 const PRIORITIES = ['low', 'medium', 'high', 'critical'];
+
+const PRIORITY_COLORS: Record<string, string> = {
+  low:      T.low,
+  medium:   T.medium,
+  high:     T.high,
+  critical: T.critical,
+};
 
 export function AddTaskModal({ onAdd, onClose }: AddTaskModalProps): JSX.Element {
   const [title, setTitle] = useState('');
@@ -34,30 +39,58 @@ export function AddTaskModal({ onAdd, onClose }: AddTaskModalProps): JSX.Element
     }
   }
 
+  const inputStyle: React.CSSProperties = {
+    width:        '100%',
+    padding:      '9px 12px',
+    borderRadius: 10,
+    background:   T.surface2,
+    border:       `0.5px solid ${T.glassBorder}`,
+    color:        T.textPrimary,
+    fontSize:     13,
+    outline:      'none',
+    boxSizing:    'border-box',
+    fontFamily:   T.fontUI,
+    lineHeight:   '1.5',
+  };
+
   return (
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 100,
-        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position:      'fixed',
+        inset:         0,
+        zIndex:        100,
+        background:    'rgba(0,0,0,0.65)',
+        backdropFilter: 'blur(6px)',
+        display:       'flex',
+        alignItems:    'center',
+        justifyContent: 'center',
       }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--line)',
-        borderRadius: 12,
-        padding: 24,
-        width: 480,
-        maxWidth: '90vw',
+        ...glassCard,
+        background:  T.surface1,
+        border:      `0.5px solid ${T.glassBorderStrong}`,
+        borderRadius: 20,
+        padding:     28,
+        width:       480,
+        maxWidth:    '90vw',
+        fontFamily:  T.fontUI,
       }}>
-        <h2 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
+        <h2 style={{
+          margin:      '0 0 20px',
+          fontSize:    16,
+          fontWeight:  600,
+          color:       T.textPrimary,
+          letterSpacing: '-0.01em',
+        }}>
           Add task to backlog
         </h2>
 
         <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-muted)', marginBottom: 4 }}>
+          {/* Title */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: T.textMuted, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Title *
             </label>
             <input
@@ -66,16 +99,13 @@ export function AddTaskModal({ onAdd, onClose }: AddTaskModalProps): JSX.Element
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Task title…"
               required
-              style={{
-                width: '100%', padding: '8px 10px', borderRadius: 6,
-                background: 'var(--surface-2)', border: '1px solid var(--line)',
-                color: 'var(--ink)', fontSize: 13, outline: 'none', boxSizing: 'border-box',
-              }}
+              style={inputStyle}
             />
           </div>
 
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-muted)', marginBottom: 4 }}>
+          {/* Description */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: T.textMuted, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Description
             </label>
             <textarea
@@ -83,36 +113,47 @@ export function AddTaskModal({ onAdd, onClose }: AddTaskModalProps): JSX.Element
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional description…"
               rows={3}
-              style={{
-                width: '100%', padding: '8px 10px', borderRadius: 6,
-                background: 'var(--surface-2)', border: '1px solid var(--line)',
-                color: 'var(--ink)', fontSize: 13, outline: 'none',
-                resize: 'vertical', boxSizing: 'border-box',
-              }}
+              style={{ ...inputStyle, resize: 'vertical' }}
             />
           </div>
 
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ display: 'block', fontSize: 12, color: 'var(--ink-muted)', marginBottom: 4 }}>
+          {/* Priority */}
+          <div style={{ marginBottom: 22 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: T.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Priority
             </label>
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-              style={{
-                padding: '7px 10px', borderRadius: 6,
-                background: 'var(--surface-2)', border: '1px solid var(--line)',
-                color: 'var(--ink)', fontSize: 13, outline: 'none', cursor: 'pointer',
-              }}
-            >
-              {PRIORITIES.map((p) => (
-                <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
-              ))}
-            </select>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {PRIORITIES.map((p) => {
+                const active = priority === p;
+                const col = PRIORITY_COLORS[p]!;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPriority(p)}
+                    style={{
+                      padding:      '5px 12px',
+                      borderRadius: 8,
+                      border:       active ? `0.5px solid ${col}80` : `0.5px solid ${T.glassBorder}`,
+                      background:   active ? `${col}18` : T.glass,
+                      color:        active ? col : T.textMuted,
+                      fontSize:     12,
+                      fontWeight:   active ? 600 : 400,
+                      cursor:       'pointer',
+                      fontFamily:   T.fontUI,
+                      textTransform: 'capitalize',
+                      transition:   'all 0.1s ease',
+                    }}
+                  >
+                    {p}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {error && (
-            <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 12 }}>{error}</p>
+            <p style={{ color: T.red, fontSize: 12, marginBottom: 14 }}>{error}</p>
           )}
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -120,8 +161,14 @@ export function AddTaskModal({ onAdd, onClose }: AddTaskModalProps): JSX.Element
               type="button"
               onClick={onClose}
               style={{
-                padding: '7px 14px', borderRadius: 6, border: '1px solid var(--line)',
-                background: 'transparent', color: 'var(--ink-muted)', fontSize: 13, cursor: 'pointer',
+                padding:      '8px 16px',
+                borderRadius: 10,
+                border:       `0.5px solid ${T.glassBorder}`,
+                background:   T.glass,
+                color:        T.textSecondary,
+                fontSize:     13,
+                cursor:       'pointer',
+                fontFamily:   T.fontUI,
               }}
             >
               Cancel
@@ -130,10 +177,17 @@ export function AddTaskModal({ onAdd, onClose }: AddTaskModalProps): JSX.Element
               type="submit"
               disabled={submitting || !title.trim()}
               style={{
-                padding: '7px 14px', borderRadius: 6, border: 'none',
-                background: 'var(--accent)', color: '#fff',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                opacity: submitting || !title.trim() ? 0.5 : 1,
+                padding:      '8px 18px',
+                borderRadius: 10,
+                border:       'none',
+                background:   T.accent,
+                color:        '#0A0B0D',
+                fontSize:     13,
+                fontWeight:   600,
+                cursor:       submitting || !title.trim() ? 'not-allowed' : 'pointer',
+                fontFamily:   T.fontUI,
+                opacity:      submitting || !title.trim() ? 0.45 : 1,
+                letterSpacing: '-0.01em',
               }}
             >
               {submitting ? 'Adding…' : 'Add task'}

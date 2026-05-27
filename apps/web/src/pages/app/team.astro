@@ -1,17 +1,10 @@
 ---
-// Phase 2 stub — team velocity and developer analytics
 import AppLayout from '../../layouts/AppLayout.astro';
+import { TeamPage } from '../../components/dev/TeamPage';
 
 const auth = Astro.locals.auth;
-if (!auth) {
-  return Astro.redirect('/auth/login');
-}
+if (!auth) return Astro.redirect('/auth/login');
 ---
-
 <AppLayout title="Team">
-  <div style="padding: 40px; color: var(--ink-muted); font-family: var(--mono);">
-    <!-- TODO: Claude Design — apply Mnema glassmorphism design system -->
-    <h1 style="font-size: 18px; font-weight: 600; color: var(--ink);">Team</h1>
-    <p style="margin-top: 8px; font-size: 13px;">Developer velocity and team analytics — available in Phase 2.</p>
-  </div>
+  <TeamPage client:load />
 </AppLayout>

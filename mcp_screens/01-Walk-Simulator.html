@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1000" />
+<title>Mnema MCP · walk_flow</title>
+<link rel="stylesheet" href="_mcp.css" />
+<style>
+/* ============================================================
+   WALK SIMULATOR — specific styles
+   ============================================================ */
+.walk-progress {
+  display: flex; gap: 4px;
+  padding: 16px 22px 0;
+  background: var(--canvas);
+}
+.walk-progress .seg {
+  flex: 1; height: 3px; border-radius: 999px;
+  background: var(--surface-3);
+  position: relative;
+}
+.walk-progress .seg.done { background: var(--accent); }
+.walk-progress .seg.current {
+  background: linear-gradient(90deg, var(--accent) 60%, var(--surface-3) 60%);
+}
+.walk-progress .seg.current::after {
+  content: ""; position: absolute; right: 39%; top: -2px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255,179,112,0.20);
+}
+
+.walk-stepmeta {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.walk-stepmeta .num {
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.walk-stepmeta .num strong { color: var(--accent); font-weight: 600; }
+.walk-stepmeta .kind {
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 4px 8px; border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+}
+
+.walk-step {
+  padding: 22px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.walk-title {
+  font: 500 24px/1.2 var(--sans);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0;
+}
+.walk-doc-ref {
+  display: flex; align-items: center; gap: 9px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font: 500 12.5px/1 var(--sans);
+  color: var(--ink);
+}
+.walk-doc-ref svg { color: var(--ink-muted); flex-shrink: 0; }
+.walk-doc-ref .path { margin-left: auto; color: var(--ink-muted); font: 400 11px var(--mono); }
+
+.walk-instr {
+  font: 400 14px/1.6 var(--sans);
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.walk-instr em {
+  font-style: italic;
+  color: var(--ink);
+}
+
+/* Decision branches */
+.walk-decision {
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+}
+.walk-decision-q {
+  font: 500 14px/1.4 var(--sans);
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+.walk-decision-help {
+  font: 400 12.5px/1.5 var(--sans);
+  color: var(--ink-muted);
+  margin: 0 0 8px;
+}
+.branches { display: flex; flex-direction: column; gap: 6px; }
+.branch-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.branch-row:hover {
+  background: var(--surface-3);
+  border-color: var(--line-strong);
+}
+.branch-row.selected {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+.branch-row .lbl { display: flex; align-items: center; gap: 10px; }
+.branch-row .kbd {
+  font: 500 10px/1 var(--mono);
+  padding: 2px 5px; border-radius: 3px;
+  background: var(--surface); border: 1px solid var(--line);
+  color: var(--ink-muted);
+}
+.branch-row .branch-text {
+  font: 500 13px/1 var(--sans);
+  color: var(--ink);
+}
+.branch-row.selected .branch-text { color: var(--accent); }
+.branch-row .target {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 500 11px/1 var(--mono);
+  color: var(--ink-muted);
+}
+.branch-row .target svg { color: var(--ink-faint); }
+.branch-row.selected .target { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="claude-msg">
+  <div class="claude-msg-head">
+    <span class="claude-bullet"></span>
+    <span>Walking</span>
+    <span class="toolname"><span class="mu">μ</span>mnema.walk_flow</span>
+    <span class="arrow">→</span>
+    <span class="summary">New-hire onboarding · step 3 of 8</span>
+  </div>
+
+  <div class="m-card">
+    <div class="m-head">
+      <div class="left">
+        <span class="glyph">μ</span>
+        <span class="sep"></span>
+        <span class="tool">walk_flow<span class="args">("new-hire-onboarding")</span></span>
+      </div>
+      <div class="meta"><span class="dot"></span>LIVE · STEP 3 / 8</span></div>
+    </div>
+
+    <!-- Segmented progress -->
+    <div class="walk-progress">
+      <div class="seg done"></div>
+      <div class="seg done"></div>
+      <div class="seg current"></div>
+      <div class="seg"></div>
+      <div class="seg"></div>
+      <div class="seg"></div>
+      <div class="seg"></div>
+      <div class="seg"></div>
+    </div>
+
+    <div class="walk-stepmeta">
+      <span class="num">STEP <strong>03</strong> / 08 — NEW-HIRE ONBOARDING</span>
+      <span class="kind">Decision</span>
+    </div>
+
+    <div class="walk-step">
+      <h2 class="walk-title">Does this hire need engineering access?</h2>
+
+      <div class="walk-doc-ref">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+        <span>Onboarding-Decision-Matrix.md</span>
+        <span class="path">/onboarding/decisions</span>
+      </div>
+
+      <div class="walk-instr">
+        Before picking a path, read the hire's role doc and confirm they need to ship code, not just read it. The eng path includes secret-management steps that take ~40 min; the non-eng path is ~12 min.
+      </div>
+
+      <div class="walk-decision">
+        <p class="walk-decision-q">Pick the path Claude should follow:</p>
+        <p class="walk-decision-help">Branches are defined on the flow node. Walk Simulator follows the branch you pick and resumes the flow at the chosen target step.</p>
+        <div class="branches">
+          <div class="branch-row">
+            <div class="lbl">
+              <span class="kbd">1</span>
+              <span class="branch-text">Yes — engineering access</span>
+            </div>
+            <span class="target">
+              → step 04 · Eng setup guide
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+            </span>
+          </div>
+          <div class="branch-row selected">
+            <div class="lbl">
+              <span class="kbd">2</span>
+              <span class="branch-text">No — read-only / non-eng</span>
+            </div>
+            <span class="target">
+              → step 06 · Tooling overview
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+            </span>
+          </div>
+          <div class="branch-row">
+            <div class="lbl">
+              <span class="kbd">3</span>
+              <span class="branch-text">Skip — already onboarded elsewhere</span>
+            </div>
+            <span class="target">
+              → end of flow
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 5v14M5 12h14"/></svg>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="m-foot">
+      <div class="left">
+        <span class="kbd-hint"><kbd>←</kbd>back</span>
+        <span class="kbd-hint"><kbd>1–3</kbd>pick branch</span>
+        <span class="kbd-hint"><kbd>esc</kbd>exit walk</span>
+      </div>
+      <div class="right">
+        <button class="btn btn-ghost">Back</button>
+        <button class="btn btn-secondary">Skip step</button>
+        <button class="btn btn-primary">Continue
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="claude-msg-after">
+    <p>I'll take the <strong>non-eng path</strong> — they're joining as a PM, no shipped code.</p>
+    <p class="dim">Resuming at step 06 · Tooling overview…</p>
+  </div>
+</div>
+
+</body>
+</html>

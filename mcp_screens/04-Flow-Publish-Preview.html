@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1000" />
+<title>Mnema MCP · publish_flow</title>
+<link rel="stylesheet" href="_mcp.css" />
+<style>
+/* ============================================================
+   FLOW PUBLISH PREVIEW
+   ============================================================ */
+.fp-versions {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.fp-versions .v-card {
+  flex: 1; display: flex; flex-direction: column; gap: 6px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.fp-versions .v-card.new { border-color: var(--accent-line); background: color-mix(in oklab, var(--surface-2) 70%, var(--accent) 4%); }
+.fp-versions .v-card .top {
+  display: flex; align-items: center; justify-content: space-between;
+}
+.fp-versions .v-card .ver {
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+.fp-versions .v-card .meta { font: 500 10px/1 var(--mono); color: var(--ink-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.fp-versions .v-card .who { font: 400 12px/1.4 var(--sans); color: var(--ink-soft); }
+.fp-versions .arrow-between { color: var(--ink-muted); }
+
+/* Diff stats bar */
+.fp-stats {
+  display: flex; gap: 18px; padding: 14px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas);
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.fp-stats .stat { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-muted); }
+.fp-stats .stat .swatch {
+  width: 8px; height: 8px; border-radius: 2px;
+}
+.fp-stats .stat .v { color: var(--ink); font-weight: 600; }
+.fp-stats .add .swatch { background: var(--status-sync); }
+.fp-stats .rm  .swatch { background: var(--status-error); }
+.fp-stats .ch  .swatch { background: var(--accent); }
+.fp-stats .keep .swatch { background: var(--ink-faint); }
+
+/* Change list */
+.fp-list {
+  background: var(--canvas);
+}
+.fp-list-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 22px 8px;
+}
+.fp-list-head h6 {
+  margin: 0;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.fp-filter {
+  display: inline-flex; gap: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px;
+}
+.fp-filter button {
+  font: 500 10.5px/1 var(--mono);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 5px 9px;
+  background: transparent;
+  border: 0; border-radius: 3px;
+  color: var(--ink-muted); cursor: pointer;
+}
+.fp-filter button.active {
+  background: var(--canvas);
+  color: var(--ink);
+  box-shadow: 0 1px 0 var(--line-strong);
+}
+
+.fp-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 130px 110px;
+  align-items: center;
+  padding: 11px 22px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.fp-row:first-of-type { border-top: 0; }
+.fp-row:hover { background: var(--surface); }
+.fp-row .sig {
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 3px;
+  display: inline-flex; align-items: center; gap: 5px;
+  width: max-content;
+}
+.fp-row .sig.add { background: rgba(107,227,155,0.10); color: var(--status-sync); border: 1px solid rgba(107,227,155,0.28); }
+.fp-row .sig.rm  { background: rgba(255,122,138,0.10); color: var(--status-error); border: 1px solid rgba(255,122,138,0.28); }
+.fp-row .sig.ch  { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line); }
+
+.fp-row .ttl-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fp-row .ttl {
+  font: 500 13px/1.3 var(--sans);
+  color: var(--ink);
+  letter-spacing: -0.005em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fp-row.rm .ttl { color: var(--ink-soft); }
+.fp-row .sub {
+  font: 400 11.5px/1.3 var(--mono);
+  color: var(--ink-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.fp-row .kind-pill {
+  font: 500 9.5px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted);
+  padding: 3px 7px; border-radius: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  width: max-content;
+}
+.fp-row .pos { font: 500 11px var(--mono); color: var(--ink-muted); text-align: right; }
+</style>
+</head>
+<body>
+
+<div class="claude-msg">
+  <div class="claude-msg-head">
+    <span class="claude-bullet"></span>
+    <span>Requesting approval</span>
+    <span class="toolname"><span class="mu">μ</span>mnema.publish_flow</span>
+    <span class="arrow">→</span>
+    <span class="summary">New-hire onboarding · v07 → v08 · 5 changes</span>
+  </div>
+
+  <div class="m-card">
+    <div class="m-head">
+      <div class="left">
+        <span class="glyph">μ</span>
+        <span class="sep"></span>
+        <span class="tool">publish_flow<span class="args">("new-hire-onboarding")</span></span>
+      </div>
+      <div class="meta">
+        <span class="pill change">DRAFT → PUBLISH</span>
+      </div>
+    </div>
+
+    <div class="fp-versions">
+      <div class="v-card">
+        <div class="top">
+          <span class="ver">v07</span>
+          <span class="meta">PUBLISHED · 2D AGO</span>
+        </div>
+        <div class="who">7 nodes · 2 branches · Maya</div>
+      </div>
+      <span class="arrow-between">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </span>
+      <div class="v-card new">
+        <div class="top">
+          <span class="ver" style="color: var(--accent);">v08 · DRAFT</span>
+          <span class="meta" style="color: var(--accent);">EDITED 4M AGO</span>
+        </div>
+        <div class="who">8 nodes · 3 branches · Maya + Claude</div>
+      </div>
+    </div>
+
+    <div class="fp-stats">
+      <span class="stat add"><span class="swatch"></span><span class="v">+1</span>added</span>
+      <span class="stat rm"><span class="swatch"></span><span class="v">−1</span>removed</span>
+      <span class="stat ch"><span class="swatch"></span><span class="v">3</span>changed</span>
+      <span class="stat keep"><span class="swatch"></span><span class="v">5</span>unchanged</span>
+    </div>
+
+    <div class="fp-list">
+      <div class="fp-list-head">
+        <h6>5 changes since v07</h6>
+        <div class="fp-filter">
+          <button class="active">ALL · 5</button>
+          <button>+ ADDED · 1</button>
+          <button>− REMOVED · 1</button>
+          <button>∼ CHANGED · 3</button>
+        </div>
+      </div>
+
+      <div class="fp-row">
+        <span class="sig add">+ ADD</span>
+        <div class="ttl-wrap">
+          <span class="ttl">Tooling overview</span>
+          <span class="sub">Reads from /onboarding/tooling.md · new branch target from step 03</span>
+        </div>
+        <span class="kind-pill">DOC</span>
+        <span class="pos">→ step 06</span>
+      </div>
+
+      <div class="fp-row">
+        <span class="sig ch">∼ CHANGE</span>
+        <div class="ttl-wrap">
+          <span class="ttl">Has eng access?</span>
+          <span class="sub">Branches 2 → 3 · added "Skip — already onboarded elsewhere"</span>
+        </div>
+        <span class="kind-pill">DECISION</span>
+        <span class="pos">step 03</span>
+      </div>
+
+      <div class="fp-row">
+        <span class="sig ch">∼ CHANGE</span>
+        <div class="ttl-wrap">
+          <span class="ttl">Product overview</span>
+          <span class="sub">Doc ref updated · /onboarding/product-overview.md @ v3</span>
+        </div>
+        <span class="kind-pill">DOC</span>
+        <span class="pos">step 02</span>
+      </div>
+
+      <div class="fp-row">
+        <span class="sig ch">∼ CHANGE</span>
+        <div class="ttl-wrap">
+          <span class="ttl">Review &amp; check-in</span>
+          <span class="sub">Instruction text rewritten · −2 lines / +5 lines</span>
+        </div>
+        <span class="kind-pill">DOC</span>
+        <span class="pos">step 07</span>
+      </div>
+
+      <div class="fp-row rm">
+        <span class="sig rm">− REMOVE</span>
+        <div class="ttl-wrap">
+          <span class="ttl">Slack invite</span>
+          <span class="sub">Replaced by tooling step · was step 04 in v07</span>
+        </div>
+        <span class="kind-pill">DOC</span>
+        <span class="pos">— removed</span>
+      </div>
+    </div>
+
+    <div class="m-foot">
+      <div class="left">
+        <span class="kbd-hint"><kbd>⌘</kbd><kbd>↩</kbd>publish</span>
+        <span class="kbd-hint"><kbd>esc</kbd>cancel</span>
+      </div>
+      <div class="right">
+        <button class="btn btn-ghost">Open canvas</button>
+        <button class="btn btn-secondary">Save draft</button>
+        <button class="btn btn-primary">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          Publish v08
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="claude-msg-after">
+    <p>Five changes since v07. The main shift is the new <strong>Tooling overview</strong> step replacing the standalone Slack-invite node, plus a third branch on the eng-access decision.</p>
+    <p class="dim">Approve to publish — anyone walking the flow will pick up v08 on their next call.</p>
+  </div>
+</div>
+
+</body>
+</html>

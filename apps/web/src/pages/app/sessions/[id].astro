@@ -1,5 +1,5 @@
 ---
-// Phase 2 AgentLens — Session detail page
+// DESIGN APPLIED: 2026-05-27
 import AppLayout from '../../../layouts/AppLayout.astro';
 import { SessionDetail } from '../../../components/dev/SessionDetail';
 
@@ -15,8 +15,5 @@ if (!id) {
 ---
 
 <AppLayout title={`Session ${id.slice(0, 8)}`}>
-  <div>
-    <!-- TODO: Claude Design — apply Mnema glassmorphism design system -->
-    <SessionDetail sessionId={id} client:load />
-  </div>
+  <SessionDetail sessionId={id} client:load />
 </AppLayout>

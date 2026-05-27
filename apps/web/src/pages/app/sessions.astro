@@ -1,5 +1,5 @@
 ---
-// Phase 2 AgentLens — Sessions list page
+// DESIGN APPLIED: 2026-05-27
 import AppLayout from '../../layouts/AppLayout.astro';
 import { SessionsList } from '../../components/dev/SessionsList';
 
@@ -10,11 +10,5 @@ if (!auth) {
 ---
 
 <AppLayout title="Sessions">
-  <div>
-    <!-- TODO: Claude Design — apply Mnema glassmorphism design system -->
-    <!-- Background: var(--bg) #0a0a0a -->
-    <!-- Cards: rgba(255,255,255,0.04) + backdrop-filter: blur(24px) -->
-    <!-- See BOPPL_Context_Engine_Prompt_UI_Redesign_All_MCP_Panels for token system -->
-    <SessionsList workspaceId={auth.tenant_id} client:load />
-  </div>
+  <SessionsList workspaceId={auth.tenant_id} client:load />
 </AppLayout>

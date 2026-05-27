@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Mnema · Doc settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --canvas:#0A0B0D;--surface:#121317;--surface-2:#181A1F;--surface-3:#22252B;--sunken:#050608;
+  --line:rgba(255,255,255,0.06);--line-strong:rgba(255,255,255,0.12);--line-bright:rgba(255,255,255,0.22);
+  --ink:#F4F5F7;--ink-soft:#B0B4BC;--ink-muted:#707479;--ink-faint:#3D4046;
+  --accent-rgb:255,179,112;--accent:rgb(var(--accent-rgb));
+  --accent-soft:rgba(var(--accent-rgb),0.14);--accent-line:rgba(var(--accent-rgb),0.32);
+  --status-sync:#6BE39B;--status-edit:#FFB370;--status-info:#7C9CFF;--status-error:#FF7A8A;
+  --on-ink:#0A0B0D;
+  --sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --topbar-h:40px;--status-h:24px;--sidebar-w:220px;--drawer-w:360px;
+}
+*{box-sizing:border-box;}html,body{margin:0;padding:0;height:100%;}
+body{background:var(--canvas);color:var(--ink);font-family:var(--sans);font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow:hidden;}
+button,a,input{font-family:inherit;}a{color:inherit;text-decoration:none;}
+*{scrollbar-width:none;-ms-overflow-style:none;}*::-webkit-scrollbar{display:none;}
+
+.app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:var(--topbar-h) 1fr var(--status-h);grid-template-areas:"topbar topbar" "sidebar main" "status status";height:100vh;}
+
+/* TOPBAR + SIDEBAR — same as Settings */
+.topbar{grid-area:topbar;display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:var(--surface);border-bottom:1px solid var(--line);}
+.tb-left{display:flex;align-items:center;gap:8px;}
+.brand{display:inline-flex;align-items:center;gap:7px;font:600 12.5px/1 var(--sans);}
+.brand .glyph{width:20px;height:20px;border-radius:5px;background:var(--ink);color:var(--on-ink);display:inline-flex;align-items:center;justify-content:center;font:500 13px/1 var(--sans);padding-bottom:1px;position:relative;}
+.brand .glyph::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,0.18),transparent 50%);}
+.tb-sep{width:1px;height:14px;background:var(--line-strong);}
+.ws-switch{display:inline-flex;align-items:center;gap:6px;padding:3px 6px 3px 4px;border-radius:5px;border:1px solid transparent;color:var(--ink);font:500 12px/1 var(--sans);background:transparent;cursor:pointer;}
+.ws-avatar{width:14px;height:14px;border-radius:4px;background:linear-gradient(135deg,#7C9CFF,#C8A2FF);color:white;font-weight:700;font-size:8.5px;display:inline-flex;align-items:center;justify-content:center;}
+.crumbs{display:flex;align-items:center;gap:6px;font:500 12px/1 var(--sans);color:var(--ink-muted);flex:1;justify-content:center;}
+.crumbs .here{color:var(--ink);font-weight:600;}
+.crumbs .sep{color:var(--ink-faint);font-size:9px;}
+.tb-right{display:flex;align-items:center;gap:2px;}
+.icon-btn{width:24px;height:24px;border-radius:4px;background:transparent;border:0;color:var(--ink-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
+.icon-btn:hover, .icon-btn.active{background:var(--surface-2);color:var(--ink);}
+.user-chip{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,rgba(var(--accent-rgb),0.95),rgba(255,122,138,0.95));color:var(--on-ink);font:700 9.5px/1 var(--sans);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;margin-left:4px;}
+
+.sidebar{grid-area:sidebar;background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;}
+.sb-section h6{margin:0 0 4px;padding:0 8px;font:500 10px/1 var(--mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-muted);}
+.sb-list{display:flex;flex-direction:column;gap:1px;}
+.sb-item{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:5px;color:var(--ink-soft);font:500 12px/1 var(--sans);position:relative;cursor:pointer;}
+.sb-item:hover{background:var(--surface-2);color:var(--ink);}
+.sb-item.active{background:var(--surface-2);color:var(--ink);}
+.sb-item.active::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:2px;background:var(--accent);border-radius:2px;}
+.sb-item .l{display:flex;align-items:center;gap:9px;}
+.sb-item .l svg{color:var(--ink-muted);}
+.sb-item.active .l svg{color:var(--accent);}
+.sb-item .pill{font:500 9.5px/1 var(--mono);padding:2px 5px;border-radius:3px;background:var(--surface-3);color:var(--ink-muted);letter-spacing:0.04em;}
+.sb-item .pill.acc{background:var(--accent-soft);color:var(--accent);}
+.sb-foot{margin-top:auto;padding:10px;border-top:1px solid var(--line);}
+.plan-card{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;}
+.plan-card .row{display:flex;align-items:center;justify-content:space-between;}
+.plan-card .name{font:600 12px var(--sans);}
+.plan-card .badge{font:500 9px var(--mono);padding:2px 6px;border-radius:3px;background:var(--accent-soft);color:var(--accent);letter-spacing:0.04em;}
+.plan-card .bar{margin:8px 0 4px;height:3px;background:rgba(255,255,255,0.06);border-radius:999px;overflow:hidden;}
+.plan-card .bar>span{display:block;height:100%;width:56%;background:var(--accent);border-radius:999px;}
+.plan-card .meta{font:500 10.5px var(--mono);color:var(--ink-muted);display:flex;justify-content:space-between;margin-top:4px;}
+
+/* MAIN — doc editor preview behind drawer */
+.main{grid-area:main;overflow:hidden;position:relative;display:grid;grid-template-rows:42px 1fr;}
+.doc-toolbar{display:flex;align-items:center;justify-content:space-between;padding:0 22px;border-bottom:1px solid var(--line);background:var(--surface);}
+.doc-toolbar .breadcrumb{font:500 12.5px/1 var(--sans);color:var(--ink-muted);}
+.doc-toolbar .breadcrumb .here{color:var(--ink);font-weight:600;}
+.doc-toolbar-right{display:flex;align-items:center;gap:6px;}
+.sync-pill{display:inline-flex;align-items:center;gap:6px;padding:3px 8px 3px 7px;border-radius:999px;background:rgba(107,227,155,0.10);border:1px solid rgba(107,227,155,0.28);color:var(--status-sync);font:500 11px/1 var(--sans);}
+.sync-pill .dot{width:5px;height:5px;border-radius:50%;background:currentColor;}
+
+.doc{max-width:760px;margin:0 auto;padding:48px 32px 80px;overflow-y:auto;}
+.doc-meta{display:flex;align-items:center;gap:12px;font:500 11px/1 var(--mono);color:var(--ink-muted);margin-bottom:18px;}
+.doc h1{margin:0 0 22px;font:700 28px/1.2 var(--sans);letter-spacing:-0.02em;color:var(--ink);}
+.doc h2{margin:30px 0 10px;font:600 16px/1.35 var(--sans);}
+.doc p{margin:0 0 14px;font:400 14px/1.65 var(--sans);color:var(--ink-soft);}
+.doc p strong{color:var(--ink);font-weight:600;}
+
+.statusbar{grid-area:status;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--surface);border-top:1px solid var(--line);font:500 10.5px/1 var(--mono);color:var(--ink-muted);}
+
+/* DRAWER */
+.drawer-backdrop{position:fixed;top:var(--topbar-h);left:0;right:0;bottom:0;background:rgba(10,11,13,0.30);opacity:0;pointer-events:none;transition:opacity 200ms ease;z-index:40;}
+.drawer-backdrop.open{opacity:1;pointer-events:auto;}
+.drawer{position:fixed;top:var(--topbar-h);right:0;bottom:0;width:var(--drawer-w);background:var(--surface);border-left:1px solid var(--line);box-shadow:-16px 0 40px -16px rgba(0,0,0,0.5);transform:translateX(100%);transition:transform 220ms cubic-bezier(0.16,1,0.3,1);z-index:41;display:flex;flex-direction:column;}
+.drawer.open{transform:translateX(0);}
+
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line);}
+.drawer-head .label{font:500 11px/1 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:var(--ink);}
+.drawer-head .close{width:26px;height:26px;border-radius:5px;background:transparent;border:0;color:var(--ink-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
+.drawer-head .close:hover{background:var(--surface-2);color:var(--ink);}
+
+.drawer-body{flex:1;overflow-y:auto;padding:18px 20px 24px;display:flex;flex-direction:column;gap:24px;}
+
+.sec-label{display:flex;align-items:center;gap:10px;font:500 10.5px/1 var(--mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-muted);margin-bottom:10px;}
+.sec-label::after{content:"";flex:1;height:1px;background:var(--line);}
+.sec-label.danger{color:var(--status-error);}
+
+/* TYPE RADIOS */
+.type-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.type-card{display:flex;flex-direction:column;gap:3px;padding:10px 12px;border-radius:7px;background:var(--surface-2);border:1px solid var(--line);cursor:pointer;text-align:left;position:relative;}
+.type-card:hover{border-color:var(--line-strong);}
+.type-card.selected{background:var(--accent-soft);border-color:var(--accent-line);}
+.type-card .tname{font:500 12.5px/1 var(--sans);color:var(--ink);}
+.type-card .tdesc{font:400 11.5px/1.4 var(--sans);color:var(--ink-muted);}
+.type-card.selected .tdesc{color:var(--ink-soft);}
+
+.inline-prompt{margin-top:8px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--accent-line);border-radius:7px;display:flex;align-items:center;gap:10px;}
+.inline-prompt .text{font:400 12.5px/1.4 var(--sans);color:var(--ink-soft);flex:1;}
+.inline-prompt .text strong{color:var(--ink);font-weight:500;}
+.inline-prompt button{font:500 11.5px/1 var(--sans);padding:5px 9px;border-radius:5px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;}
+.inline-prompt button.primary{background:var(--ink);color:var(--on-ink);border-color:var(--ink);}
+.inline-prompt button.dismiss{background:transparent;border-color:transparent;color:var(--ink-muted);}
+.inline-prompt button.dismiss:hover{color:var(--ink);}
+
+/* STATUS TOGGLE */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:var(--surface-2);border:1px solid var(--line);border-radius:7px;}
+.toggle-row .tr-label{font:500 13px/1.3 var(--sans);color:var(--ink);}
+.toggle-row .tr-sub{font:400 11.5px/1.3 var(--sans);color:var(--ink-muted);margin-top:2px;}
+.switch{width:32px;height:18px;border-radius:999px;background:rgba(255,255,255,0.1);cursor:pointer;position:relative;flex-shrink:0;border:1px solid var(--line-strong);}
+.switch::after{content:"";position:absolute;left:2px;top:1px;width:12px;height:12px;border-radius:50%;background:var(--ink-soft);transition:transform 140ms ease,background 140ms ease;}
+.switch.on{background:var(--accent);border-color:var(--accent);}
+.switch.on::after{transform:translateX(14px);background:var(--on-ink);}
+.status-hint{margin-top:8px;font:400 11.5px/1.4 var(--sans);color:var(--ink-muted);}
+
+/* SHARING */
+.share-row{padding:11px 14px;background:var(--surface-2);border:1px solid var(--line);border-radius:7px;display:flex;align-items:center;gap:10px;}
+.share-row .info{flex:1;min-width:0;}
+.share-row .title-line{font:500 13px/1.3 var(--sans);color:var(--ink);}
+.share-row .sub-line{font:400 11.5px/1.3 var(--sans);color:var(--ink-muted);margin-top:2px;}
+.share-row .avs{display:inline-flex;}
+.share-row .av{width:20px;height:20px;border-radius:50%;border:2px solid var(--surface-2);font:700 9.5px/1 var(--sans);color:white;display:inline-flex;align-items:center;justify-content:center;margin-left:-6px;}
+.share-row .av:first-child{margin-left:0;}
+.share-row .av.a{background:linear-gradient(135deg,#FFB370,#FF7A8A);}
+.share-row .av.b{background:linear-gradient(135deg,#7C9CFF,#C8A2FF);}
+.share-row .av.c{background:linear-gradient(135deg,#6BE39B,#2B9B9B);}
+
+.link-block{margin-top:8px;display:flex;flex-direction:column;gap:8px;padding:11px 14px;background:var(--surface-2);border:1px solid var(--line);border-radius:7px;}
+.link-block .lb-head{display:flex;align-items:center;justify-content:space-between;}
+.link-block .lb-head .text{font:500 13px var(--sans);color:var(--ink);}
+.link-block .lb-head .sub{font:400 11.5px/1.3 var(--sans);color:var(--ink-muted);margin-top:2px;}
+.link-block .url-bar{display:none;align-items:center;gap:6px;padding:7px 10px;background:var(--sunken);border:1px solid var(--line);border-radius:6px;}
+.link-block.on .url-bar{display:flex;}
+.link-block .url-bar .url{flex:1;min-width:0;font:500 11.5px/1 var(--mono);color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.link-block .url-bar .copy{font:500 11px var(--sans);padding:4px 8px;border-radius:4px;background:transparent;border:1px solid var(--line);color:var(--ink-soft);cursor:pointer;}
+.link-block .url-bar .copy:hover{color:var(--ink);border-color:var(--line-strong);}
+
+.add-member{display:inline-flex;align-items:center;gap:6px;margin-top:8px;font:500 12px var(--sans);color:var(--ink-soft);background:transparent;border:0;cursor:pointer;padding:6px 0;}
+.add-member:hover{color:var(--ink);}
+.soon{font:500 9.5px/1 var(--mono);padding:2px 5px;border-radius:3px;background:var(--surface-3);border:1px solid var(--line);color:var(--ink-muted);letter-spacing:0.04em;margin-left:5px;}
+
+/* METADATA */
+.meta-rows{background:var(--surface-2);border:1px solid var(--line);border-radius:7px;overflow:hidden;}
+.meta-row{display:grid;grid-template-columns:100px 1fr;padding:9px 14px;border-top:1px solid var(--line);font:400 12.5px/1.4 var(--sans);gap:10px;align-items:center;}
+.meta-row:first-child{border-top:0;}
+.meta-row .k{font:500 10.5px/1.3 var(--mono);color:var(--ink-muted);letter-spacing:0.04em;text-transform:uppercase;}
+.meta-row .v{color:var(--ink);min-width:0;display:flex;align-items:center;gap:6px;}
+.meta-row .v .av{width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,#FFB370,#FF7A8A);color:white;font:700 9px/1 var(--sans);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;}
+.meta-row .v .when{color:var(--ink-muted);font:500 11px var(--mono);}
+.code-chip{font:500 11.5px/1 var(--mono);padding:3px 7px;background:var(--sunken);border:1px solid var(--line);border-radius:4px;color:var(--ink);}
+
+/* DANGER */
+.danger-zone{margin-top:6px;padding-top:18px;border-top:1px solid rgba(255,122,138,0.22);}
+.trash-btn{display:flex;align-items:center;gap:8px;width:100%;padding:10px 12px;background:transparent;border:1px solid rgba(255,122,138,0.30);border-radius:7px;color:var(--status-error);font:500 13px var(--sans);cursor:pointer;}
+.trash-btn:hover{background:rgba(255,122,138,0.10);}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <div class="tb-left">
+      <a class="brand"><span class="glyph">μ</span><span>Mnema</span></a>
+      <span class="tb-sep"></span>
+      <button class="ws-switch"><span class="ws-avatar">B</span><span>boppl-design</span><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+    </div>
+    <div class="crumbs">
+      <span>Architecture</span>
+      <svg class="sep" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>
+      <span class="here">How Mnema syncs</span>
+    </div>
+    <div class="tb-right">
+      <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+      <button class="user-chip">K</button>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <div class="sb-section">
+      <h6>Workspace</h6>
+      <div class="sb-list">
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Workspace</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Members</span><span class="pill">5</span></div>
+        <div class="sb-item active"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg>Knowledge bases</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>Integrations</span><span class="pill">3</span></div>
+      </div>
+    </div>
+    <div class="sb-section">
+      <h6>Developer</h6>
+      <div class="sb-list">
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>MCP server</span><span class="pill" style="background:rgba(107,227,155,0.12);color:var(--status-sync);">LIVE</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/></svg>API keys</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/></svg>Audit log</span></div>
+      </div>
+    </div>
+    <div class="sb-section">
+      <h6>Account</h6>
+      <div class="sb-list">
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.38 8.38 0 0 1 13 0"/></svg>Profile</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/></svg>Billing</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/></svg>Notifications</span><span class="pill acc">5</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Trash</span><span class="pill">7</span></div>
+      </div>
+    </div>
+    <div class="sb-foot">
+      <div class="plan-card">
+        <div class="row"><span class="name">Pro</span><span class="badge">CURRENT</span></div>
+        <div class="bar"><span></span></div>
+        <div class="meta"><span>2,840 / 5,000 calls</span><span>9d left</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="doc-toolbar">
+      <span class="breadcrumb">Architecture <span style="color:var(--ink-faint);">›</span> <span class="here">How Mnema syncs</span></span>
+      <div class="doc-toolbar-right">
+        <span class="sync-pill"><span class="dot"></span>Synced · 2s</span>
+        <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+        <button class="icon-btn active" id="settings-btn" title="Doc settings">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="doc">
+      <div class="doc-meta">v427 · Last edit by Maya · 2s ago</div>
+      <h1>How Mnema syncs</h1>
+      <p>Every edit is captured by <strong>Yjs</strong> and broadcast through Hocuspocus to all connected clients within 50ms. Persistence flushes to Postgres on a 3-second debounce, batching rapid edits without losing intermediate state.</p>
+      <p>Claude reads from this same surface through MCP. Because there is no upload step, the doc Claude reads at 3:14pm is the doc your teammate edited at 3:13pm.</p>
+      <h2>MCP read path</h2>
+      <p>Claude calls <strong>get_doc</strong> on the MCP server, which returns the markdown of the doc as it exists right now — no caching, no staleness window.</p>
+    </div>
+  </main>
+
+  <footer class="statusbar">
+    <div><span>MCP <span style="color:var(--ink-soft);font-weight:600;">v2025-11-25</span></span></div>
+    <div><span>3 editors online</span></div>
+  </footer>
+</div>
+
+<!-- DRAWER -->
+<div class="drawer-backdrop open" id="backdrop"></div>
+<aside class="drawer open" id="drawer">
+
+  <header class="drawer-head">
+    <span class="label">DOC SETTINGS</span>
+    <button class="close" id="close-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  </header>
+
+  <div class="drawer-body">
+
+    <!-- TYPE -->
+    <div>
+      <div class="sec-label">TYPE</div>
+      <div class="type-grid" id="type-grid">
+        <button class="type-card selected" data-type="doc">
+          <span class="tname">Doc</span>
+          <span class="tdesc">General-purpose markdown.</span>
+        </button>
+        <button class="type-card" data-type="engineering">
+          <span class="tname">Engineering</span>
+          <span class="tdesc">Technical reference with code highlighting.</span>
+        </button>
+        <button class="type-card" data-type="instruction">
+          <span class="tname">Instruction</span>
+          <span class="tdesc">Tell Claude how to behave, no body.</span>
+        </button>
+        <button class="type-card" data-type="snippet">
+          <span class="tname">Snippet</span>
+          <span class="tdesc">Short, reusable block.</span>
+        </button>
+      </div>
+      <div class="inline-prompt" id="template-prompt" style="display:none;">
+        <span class="text"><strong>Apply engineering template?</strong> Adds a code-aware layout with frontmatter.</span>
+        <button class="primary">Apply</button>
+        <button class="dismiss">×</button>
+      </div>
+    </div>
+
+    <!-- STATUS -->
+    <div>
+      <div class="sec-label">STATUS</div>
+      <div class="toggle-row">
+        <div>
+          <div class="tr-label">Published</div>
+          <div class="tr-sub">Visible to MCP and Claude</div>
+        </div>
+        <div class="switch on" id="published-switch"></div>
+      </div>
+      <p class="status-hint">Drafts can be edited but Claude can't read them.</p>
+    </div>
+
+    <!-- SHARING -->
+    <div>
+      <div class="sec-label">SHARING</div>
+      <div class="share-row">
+        <div class="info">
+          <div class="title-line">Workspace editors</div>
+          <div class="sub-line">All 5 members of <strong style="color:var(--ink);font-weight:500;">boppl-design</strong> can view.</div>
+        </div>
+        <div class="avs">
+          <span class="av a">K</span><span class="av b">A</span><span class="av c">M</span>
+        </div>
+      </div>
+      <button class="add-member">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Share with specific members<span class="soon">SOON</span>
+      </button>
+      <div class="link-block" id="link-block">
+        <div class="lb-head">
+          <div>
+            <div class="text">Anyone with the link can view</div>
+            <div class="sub">Public link, no sign-in required.</div>
+          </div>
+          <div class="switch" id="link-switch"></div>
+        </div>
+        <div class="url-bar">
+          <span class="url">https://mnema.app/p/boppl-design/arch-sync-001-pub-x7k2</span>
+          <button class="copy" id="copy-link">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- METADATA -->
+    <div>
+      <div class="sec-label">METADATA</div>
+      <div class="meta-rows">
+        <div class="meta-row"><span class="k">CREATED BY</span><span class="v"><span class="av">K</span>Kevin<span class="when">14 Mar 2025</span></span></div>
+        <div class="meta-row"><span class="k">LAST EDIT</span><span class="v"><span class="av" style="background:linear-gradient(135deg,#6BE39B,#2B9B9B);">M</span>Maya<span class="when">2s ago</span></span></div>
+        <div class="meta-row"><span class="k">DOC ID</span><span class="v"><span class="code-chip">doc_arch_sync_001</span></span></div>
+        <div class="meta-row"><span class="k">WORD COUNT</span><span class="v">412 words · 5 blocks</span></div>
+      </div>
+    </div>
+
+    <!-- DANGER -->
+    <div class="danger-zone">
+      <div class="sec-label danger">DANGER ZONE</div>
+      <button class="trash-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        Move to trash
+      </button>
+    </div>
+
+  </div>
+</aside>
+
+<script>
+const drawer = document.getElementById('drawer');
+const backdrop = document.getElementById('backdrop');
+const settingsBtn = document.getElementById('settings-btn');
+
+function open() { drawer.classList.add('open'); backdrop.classList.add('open'); settingsBtn.classList.add('active'); }
+function close() { drawer.classList.remove('open'); backdrop.classList.remove('open'); settingsBtn.classList.remove('active'); }
+
+settingsBtn.addEventListener('click', () => drawer.classList.contains('open') ? close() : open());
+document.getElementById('close-btn').addEventListener('click', close);
+backdrop.addEventListener('click', close);
+window.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+
+// Type radios
+document.querySelectorAll('.type-card').forEach(c => {
+  c.addEventListener('click', () => {
+    document.querySelectorAll('.type-card').forEach(x => x.classList.remove('selected'));
+    c.classList.add('selected');
+    const prompt = document.getElementById('template-prompt');
+    prompt.style.display = c.dataset.type === 'engineering' ? 'flex' : 'none';
+  });
+});
+document.querySelector('#template-prompt .dismiss').addEventListener('click', () => {
+  document.getElementById('template-prompt').style.display = 'none';
+});
+
+// Published switch
+document.getElementById('published-switch').addEventListener('click', e => e.currentTarget.classList.toggle('on'));
+
+// Link switch
+const linkBlock = document.getElementById('link-block');
+const linkSwitch = document.getElementById('link-switch');
+linkSwitch.addEventListener('click', () => {
+  linkSwitch.classList.toggle('on');
+  linkBlock.classList.toggle('on', linkSwitch.classList.contains('on'));
+});
+document.getElementById('copy-link').addEventListener('click', e => {
+  const btn = e.target;
+  btn.textContent = 'Copied'; btn.style.color = 'var(--status-sync)';
+  setTimeout(() => { btn.textContent = 'Copy'; btn.style.color = ''; }, 1500);
+});
+</script>
+</body>
+</html>

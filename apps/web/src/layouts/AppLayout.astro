@@ -3,6 +3,7 @@ import BaseLayout from './BaseLayout.astro';
 import { Sidebar } from '../components/app/Sidebar';
 import { NotificationBell } from '../components/app/NotificationBell';
 import { WorkspaceSwitcher } from '../components/nav/WorkspaceSwitcher';
+import { DevSearch } from '../components/dev/DevSearch';
 
 interface Props {
   title: string;
@@ -255,6 +256,11 @@ if (auth) {
     <main class="ap-main">
       <slot />
     </main>
+
+    <!-- DEV SEARCH overlay (dev_project workspaces only, opens on '/' keypress) -->
+    {workspaceMode === 'dev_project' && (
+      <DevSearch workspaceMode={workspaceMode} client:load />
+    )}
 
     <!-- STATUS BAR -->
     <footer class="ap-statusbar">

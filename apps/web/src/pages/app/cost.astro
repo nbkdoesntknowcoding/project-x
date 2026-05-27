@@ -1,17 +1,10 @@
 ---
-// Phase 2 stub — cost intelligence dashboard
 import AppLayout from '../../layouts/AppLayout.astro';
+import { CostDashboard } from '../../components/dev/CostDashboard';
 
 const auth = Astro.locals.auth;
-if (!auth) {
-  return Astro.redirect('/auth/login');
-}
+if (!auth) return Astro.redirect('/auth/login');
 ---
-
-<AppLayout title="Cost">
-  <div style="padding: 40px; color: var(--ink-muted); font-family: var(--mono);">
-    <!-- TODO: Claude Design — apply Mnema glassmorphism design system -->
-    <h1 style="font-size: 18px; font-weight: 600; color: var(--ink);">Cost Intelligence</h1>
-    <p style="margin-top: 8px; font-size: 13px;">AI cost tracking and analytics — available in Phase 2.</p>
-  </div>
+<AppLayout title="Cost Intelligence">
+  <CostDashboard client:load />
 </AppLayout>

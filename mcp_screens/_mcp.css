@@ -1,0 +1,198 @@
+/* ============================================================
+   Mnema · MCP-embedded UI cards
+   These render INSIDE Claude's conversation surface, so we wrap
+   the Mnema card in a light "Claude chrome" frame (just enough
+   attribution + the conversation-paper background) and let the
+   Mnema card carry the brand on the inside.
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
+
+:root {
+  /* Mnema tokens (matches colors_and_type.css) */
+  --canvas:#0A0B0D; --surface:#121317; --surface-2:#181A1F; --surface-3:#22252B; --sunken:#050608;
+  --line:rgba(255,255,255,0.06); --line-strong:rgba(255,255,255,0.12); --line-bright:rgba(255,255,255,0.22);
+  --ink:#F4F5F7; --ink-soft:#B0B4BC; --ink-muted:#707479; --ink-faint:#3D4046;
+  --accent-rgb:255,179,112; --accent:rgb(var(--accent-rgb));
+  --accent-soft:rgba(var(--accent-rgb),0.14); --accent-line:rgba(var(--accent-rgb),0.32);
+  --status-sync:#6BE39B; --status-edit:#FFB370; --status-info:#7C9CFF; --status-error:#FF7A8A;
+  --on-accent:#1A0E04;
+  --sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,Menlo,Consolas,monospace;
+
+  /* Claude conversation chrome (warm paper) */
+  --paper:#F5F3EE;
+  --paper-ink:#2D2A23;
+  --paper-ink-soft:#6B665B;
+  --paper-line:rgba(45,42,35,0.10);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--paper);
+  color: var(--paper-ink);
+  font-family: var(--sans);
+  font-size: 13px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  padding: 28px 40px 32px;
+  min-height: 100vh;
+}
+button { font-family: inherit; color: inherit; }
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; }
+
+/* ============================================================
+   Claude chat frame around the MCP card
+   ============================================================ */
+.claude-msg { max-width: 920px; margin: 0 auto; }
+
+.claude-msg-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 4px 14px;
+  font: 500 12px/1 var(--sans);
+  color: var(--paper-ink-soft);
+}
+.claude-bullet {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--paper-ink); opacity: 0.4;
+}
+.claude-msg-head .toolname {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px; border-radius: 4px;
+  background: rgba(45,42,35,0.06);
+  font: 500 11px/1 var(--mono);
+  color: var(--paper-ink);
+  letter-spacing: 0.02em;
+}
+.claude-msg-head .toolname .mu {
+  width: 12px; height: 12px; border-radius: 3px;
+  background: #0A0B0D; color: #F4F5F7;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 500 9px/1 var(--sans);
+}
+.claude-msg-head .arrow { color: var(--paper-ink-soft); opacity: 0.5; }
+.claude-msg-head .summary { font-weight: 500; color: var(--paper-ink); }
+
+/* ============================================================
+   Mnema CARD — the actual MCP UI surface
+   ============================================================ */
+.m-card {
+  background: var(--canvas);
+  color: var(--ink);
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,0.4);
+  box-shadow: 0 20px 50px -20px rgba(45,42,35,0.30), 0 1px 0 rgba(0,0,0,0.05);
+  overflow: hidden;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.m-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  min-height: 48px;
+}
+.m-head .left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.m-head .glyph {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--ink); color: var(--canvas);
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 500 14px/1 var(--sans); padding-bottom: 1px;
+  position: relative; flex-shrink: 0;
+}
+.m-head .glyph::after { content:""; position:absolute; inset:0; border-radius: inherit; background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%); }
+.m-head .sep { width: 1px; height: 14px; background: var(--line-strong); }
+.m-head .tool {
+  font: 500 11px/1 var(--mono);
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+}
+.m-head .tool .args { color: var(--ink-muted); }
+.m-head .meta {
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.m-head .meta .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--status-sync); box-shadow: 0 0 6px var(--status-sync); }
+
+.m-body { padding: 22px 22px; background: var(--canvas); }
+.m-sec-label {
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: 10px;
+}
+
+.m-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.m-foot .left, .m-foot .right { display: flex; align-items: center; gap: 8px; }
+
+/* Buttons */
+.btn {
+  font: 500 12.5px/1 var(--sans);
+  padding: 8px 13px; border-radius: 6px;
+  cursor: pointer; border: 1px solid transparent;
+  display: inline-flex; align-items: center; gap: 7px;
+  white-space: nowrap;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+.btn-primary { background: var(--accent); color: var(--on-accent); font-weight: 600; border-color: var(--accent); }
+.btn-primary:hover { background: color-mix(in oklab, var(--accent) 88%, white); }
+.btn-secondary { background: var(--surface-2); color: var(--ink); border-color: var(--line-strong); }
+.btn-secondary:hover { background: var(--surface-3); border-color: var(--line-bright); }
+.btn-ghost { background: transparent; color: var(--ink-soft); }
+.btn-ghost:hover { color: var(--ink); background: var(--surface-2); }
+.btn-danger { background: rgba(255,122,138,0.12); color: var(--status-error); border-color: rgba(255,122,138,0.30); font-weight: 600; }
+.btn-danger:hover { background: rgba(255,122,138,0.20); border-color: rgba(255,122,138,0.50); }
+.btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+/* Keyboard hint */
+.kbd-hint {
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.kbd-hint kbd {
+  padding: 2px 5px; border-radius: 3px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--ink-muted); font: 500 9.5px/1 var(--mono);
+}
+
+/* Status pills */
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 999px;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.04em;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+.pill .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.pill.live { background: rgba(107,227,155,0.10); color: var(--status-sync); border-color: rgba(107,227,155,0.28); }
+.pill.draft { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.pill.add { background: rgba(107,227,155,0.10); color: var(--status-sync); border-color: rgba(107,227,155,0.28); }
+.pill.remove { background: rgba(255,122,138,0.10); color: var(--status-error); border-color: rgba(255,122,138,0.28); }
+.pill.change { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+
+/* Mono inline */
+.mono { font-family: var(--mono); }
+
+/* Helper — claude conversation continuation after the card */
+.claude-msg-after {
+  padding: 14px 4px 0;
+  max-width: 680px;
+  font: 400 14px/1.55 var(--sans);
+  color: var(--paper-ink);
+}
+.claude-msg-after p { margin: 0 0 8px; }
+.claude-msg-after .dim { color: var(--paper-ink-soft); }

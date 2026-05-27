@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Mnema · Search</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --canvas:#0A0B0D; --surface:#121317; --surface-2:#181A1F; --surface-3:#22252B; --sunken:#050608;
+  --line:rgba(255,255,255,0.06); --line-strong:rgba(255,255,255,0.12); --line-bright:rgba(255,255,255,0.22);
+  --ink:#F4F5F7; --ink-soft:#B0B4BC; --ink-muted:#707479; --ink-faint:#3D4046;
+  --accent-rgb:255,179,112; --accent:rgb(var(--accent-rgb));
+  --accent-soft:rgba(var(--accent-rgb),0.14); --accent-line:rgba(var(--accent-rgb),0.32);
+  --status-sync:#6BE39B; --status-edit:#FFB370; --status-info:#7C9CFF; --status-error:#FF7A8A;
+  --on-ink:#0A0B0D;
+  --sans:"Geist","Inter",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --topbar-h:40px; --status-h:24px; --sidebar-w:220px;
+}
+*{box-sizing:border-box;}html,body{margin:0;padding:0;height:100%;}
+body{background:var(--canvas);color:var(--ink);font-family:var(--sans);font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow:hidden;}
+button,a,input{font-family:inherit;}
+a{color:inherit;text-decoration:none;}
+*{scrollbar-width:none;-ms-overflow-style:none;}
+*::-webkit-scrollbar{display:none;}
+
+/* Background app shell (dimmed under modal) */
+.app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:var(--topbar-h) 1fr var(--status-h);grid-template-areas:"topbar topbar" "sidebar main" "status status";height:100vh;}
+.topbar{grid-area:topbar;display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:var(--surface);border-bottom:1px solid var(--line);}
+.tb-left{display:flex;align-items:center;gap:8px;}
+.brand{display:inline-flex;align-items:center;gap:7px;font:600 12.5px/1 var(--sans);}
+.brand .glyph{width:20px;height:20px;border-radius:5px;background:var(--ink);color:var(--on-ink);display:inline-flex;align-items:center;justify-content:center;font:500 13px/1 var(--sans);padding-bottom:1px;position:relative;}
+.brand .glyph::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,0.18),transparent 50%);}
+.tb-sep{width:1px;height:14px;background:var(--line-strong);}
+.ws-switch{display:inline-flex;align-items:center;gap:6px;padding:3px 6px 3px 4px;border-radius:5px;border:1px solid transparent;color:var(--ink);font:500 12px/1 var(--sans);background:transparent;}
+.ws-avatar{width:14px;height:14px;border-radius:4px;background:linear-gradient(135deg,#7C9CFF,#C8A2FF);color:white;font-weight:700;font-size:8.5px;display:inline-flex;align-items:center;justify-content:center;}
+.crumbs{display:flex;align-items:center;gap:6px;font:500 12px/1 var(--sans);color:var(--ink-muted);flex:1;justify-content:center;}
+.crumbs .here{color:var(--ink);font-weight:600;}
+.tb-right{display:flex;align-items:center;gap:2px;}
+.user-chip{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,rgba(var(--accent-rgb),0.95),rgba(255,122,138,0.95));color:var(--on-ink);font:700 9.5px/1 var(--sans);display:inline-flex;align-items:center;justify-content:center;margin-left:4px;}
+
+.sidebar{grid-area:sidebar;background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;display:flex;flex-direction:column;gap:14px;}
+.sb-section h6{margin:0 0 4px;padding:0 8px;font:500 10px/1 var(--mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-muted);}
+.sb-list{display:flex;flex-direction:column;gap:1px;}
+.sb-item{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:5px;color:var(--ink-soft);font:500 12px/1 var(--sans);}
+.sb-item .pill{font:500 9.5px/1 var(--mono);padding:2px 5px;border-radius:3px;background:var(--surface-3);color:var(--ink-muted);letter-spacing:0.04em;}
+
+.main{grid-area:main;padding:48px 40px;}
+.placeholder{font:500 13px/1.5 var(--sans);color:var(--ink-muted);max-width:480px;}
+.placeholder h2{font:500 22px/1.2 var(--sans);color:var(--ink);margin:0 0 10px;letter-spacing:-0.01em;}
+.placeholder p{margin:0 0 14px;}
+.kbd-hero{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;font:500 12px/1 var(--mono);color:var(--ink);}
+.kbd-hero kbd{padding:2px 6px;border-radius:4px;background:var(--surface-3);border:1px solid var(--line);font:500 11px/1 var(--mono);color:var(--ink);}
+
+.statusbar{grid-area:status;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--surface);border-top:1px solid var(--line);font:500 10.5px/1 var(--mono);color:var(--ink-muted);}
+
+/* ============================================================
+   COMMAND PALETTE MODAL
+   ============================================================ */
+.cmdk-overlay{
+  position:fixed; inset:0;
+  background:rgba(10,11,13,0.50);
+  backdrop-filter:blur(8px) saturate(140%);
+  display:flex; justify-content:center; align-items:flex-start;
+  padding:80px 24px 24px;
+  z-index:80;
+  animation:fadeIn 160ms ease;
+}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+
+.cmdk{
+  width:100%; max-width:672px;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    0 30px 80px -20px rgba(0,0,0,0.65);
+  overflow:hidden;
+  animation:pop 220ms cubic-bezier(0.16,1,0.3,1);
+}
+@keyframes pop{from{opacity:0;transform:scale(0.97) translateY(-6px);}to{opacity:1;transform:scale(1) translateY(0);}}
+
+/* SEARCH INPUT */
+.cmdk-search{
+  display:flex; align-items:center; gap:10px;
+  padding:0 16px;
+  height:48px;
+  border-bottom:1px solid var(--line);
+}
+.cmdk-search svg.mag{color:var(--ink-muted);flex-shrink:0;}
+.cmdk-search input{
+  flex:1; border:0; outline:0; background:transparent;
+  font:400 14.5px/1 var(--sans); color:var(--ink);
+  padding:0;
+}
+.cmdk-search input::placeholder{color:var(--ink-muted);}
+.cmdk-esc{
+  font:500 10.5px/1 var(--mono); color:var(--ink-muted);
+  padding:3px 6px; border-radius:4px;
+  background:var(--surface-2); border:1px solid var(--line);
+}
+
+/* FILTER PILLS */
+.cmdk-filters{
+  display:flex; gap:5px; padding:8px 14px;
+  border-bottom:1px solid var(--line);
+  overflow-x:auto;
+}
+.cmdk-pill{
+  font:500 12px/1 var(--sans);
+  padding:5px 10px; border-radius:999px;
+  background:transparent; border:1px solid transparent;
+  color:var(--ink-muted); cursor:pointer;
+  white-space:nowrap; flex-shrink:0;
+}
+.cmdk-pill:hover{color:var(--ink); background:var(--surface-2);}
+.cmdk-pill.active{background:var(--surface-2); color:var(--ink); border-color:var(--line);}
+.cmdk-pill .ct{font:500 10px/1 var(--mono);color:var(--ink-faint);margin-left:5px;}
+.cmdk-pill.active .ct{color:var(--ink-muted);}
+
+/* RESULTS LIST */
+.cmdk-body{
+  max-height:60vh; overflow-y:auto;
+  padding:6px 0;
+}
+.section-label{
+  font:500 10px/1 var(--mono); letter-spacing:0.06em;
+  text-transform:uppercase; color:var(--ink-muted);
+  padding:10px 16px 6px;
+  display:flex; align-items:center; gap:8px;
+}
+.section-label::after{content:""; flex:1; height:1px; background:var(--line);}
+
+.cmdk-row{
+  display:flex; align-items:center; gap:12px;
+  padding:8px 16px;
+  cursor:pointer;
+  border-left:2px solid transparent;
+}
+.cmdk-row:hover, .cmdk-row.selected{
+  background:var(--surface-2);
+  border-left-color:var(--accent);
+}
+.cmdk-row .ic{
+  width:24px; height:24px; border-radius:6px;
+  background:var(--surface-2); border:1px solid var(--line);
+  color:var(--ink-soft);
+  display:inline-flex; align-items:center; justify-content:center;
+  flex-shrink:0;
+}
+.cmdk-row.selected .ic{background:var(--surface-3); color:var(--ink);}
+.cmdk-row .body{flex:1; min-width:0;}
+.cmdk-row .title{
+  font:500 14px/1.3 var(--sans); color:var(--ink);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.cmdk-row .title mark{
+  background:rgba(124,156,255,0.18); color:var(--ink);
+  padding:1px 3px; border-radius:3px;
+}
+.cmdk-row .snippet{
+  font:400 12.5px/1.4 var(--sans); color:var(--ink-muted);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  margin-top:1px;
+}
+.cmdk-row .snippet mark{background:rgba(124,156,255,0.18);color:var(--ink-soft);padding:0 2px;border-radius:2px;}
+.cmdk-row .path{
+  font:500 11px/1 var(--mono); color:var(--ink-muted);
+  letter-spacing:0.02em;
+  flex-shrink:0;
+}
+.cmdk-row .kbd-end{
+  font:500 10.5px/1 var(--mono); color:var(--ink-muted);
+  padding:3px 6px; border-radius:4px;
+  background:var(--surface-2); border:1px solid var(--line);
+  flex-shrink:0;
+}
+
+/* EMPTY / LOADING */
+.cmdk-state{
+  padding:40px 16px;
+  text-align:center;
+  color:var(--ink-muted);
+  font-size:13px;
+}
+.cmdk-state .q{color:var(--ink-soft);font-family:var(--mono);font-size:12.5px;}
+.cmdk-state .alt{margin-top:6px;font-size:12px;color:var(--ink-faint);}
+.cmdk-state .spinner{
+  width:18px; height:18px;
+  border:2px solid var(--line-strong);
+  border-top-color:var(--accent);
+  border-radius:50%;
+  margin:0 auto 10px;
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* FOOTER */
+.cmdk-foot{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 14px;
+  border-top:1px solid var(--line);
+  background:var(--surface-2);
+}
+.cmdk-hints{display:flex; gap:14px;}
+.cmdk-hint{
+  display:flex; align-items:center; gap:6px;
+  font:500 11px/1 var(--sans); color:var(--ink-muted);
+}
+.cmdk-hint kbd{
+  font:500 10px/1 var(--mono); color:var(--ink-soft);
+  padding:2px 5px; border-radius:3px;
+  background:var(--surface); border:1px solid var(--line);
+  min-width:16px; text-align:center;
+}
+.cmdk-mode{
+  display:inline-flex; padding:2px;
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:5px;
+}
+.cmdk-mode button{
+  font:500 11px/1 var(--sans);
+  padding:4px 8px; border:0; background:transparent;
+  color:var(--ink-muted); cursor:pointer; border-radius:3px;
+}
+.cmdk-mode button.active{background:var(--surface-2); color:var(--ink);}
+
+/* INITIAL state styles */
+.recent-row{
+  display:flex; align-items:center; gap:10px;
+  padding:7px 16px;
+  cursor:pointer;
+  color:var(--ink-soft);
+}
+.recent-row:hover{background:var(--surface-2); color:var(--ink);}
+.recent-row .clock{color:var(--ink-faint);}
+.recent-row .q{font:500 13px/1 var(--sans); flex:1;}
+.recent-row .x{
+  width:18px; height:18px; border-radius:4px;
+  border:0; background:transparent; color:var(--ink-faint);
+  cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+  opacity:0;
+}
+.recent-row:hover .x{opacity:1;}
+.recent-row .x:hover{background:var(--surface-3); color:var(--ink-soft);}
+</style>
+</head>
+<body>
+
+<!-- Dimmed app shell -->
+<div class="app">
+  <header class="topbar">
+    <div class="tb-left">
+      <a class="brand"><span class="glyph">μ</span><span>Mnema</span></a>
+      <span class="tb-sep"></span>
+      <button class="ws-switch"><span class="ws-avatar">B</span><span>boppl-design</span></button>
+    </div>
+    <div class="crumbs"><span>Workspace</span><span class="here">Knowledge</span></div>
+    <div class="tb-right"><button class="user-chip">K</button></div>
+  </header>
+  <aside class="sidebar">
+    <div class="sb-section">
+      <h6>Workspace</h6>
+      <div class="sb-list">
+        <div class="sb-item"><span>Knowledge</span><span class="pill">42</span></div>
+        <div class="sb-item"><span>Flows</span><span class="pill">3</span></div>
+        <div class="sb-item"><span>Claude chats</span></div>
+      </div>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="placeholder">
+      <h2>Press <span class="kbd-hero"><kbd>⌘</kbd><kbd>K</kbd></span> to search</h2>
+      <p>Hybrid search across docs, flows, and comments. Modal opens centered, anchored 80px from the top of the viewport.</p>
+    </div>
+  </main>
+  <footer class="statusbar">
+    <div><span>MCP <span style="color:var(--ink-soft);font-weight:600;">v2025-11-25</span></span></div>
+    <div><span>3 collaborators online</span></div>
+  </footer>
+</div>
+
+<!-- COMMAND PALETTE OVERLAY -->
+<div class="cmdk-overlay" id="cmdk-overlay">
+  <div class="cmdk">
+
+    <!-- SEARCH -->
+    <div class="cmdk-search">
+      <svg class="mag" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="cmdk-input" autocomplete="off" autofocus placeholder="Search docs, flows, comments…" value="rate limit" />
+      <span class="cmdk-esc">ESC</span>
+    </div>
+
+    <!-- FILTER PILLS -->
+    <div class="cmdk-filters" id="cmdk-filters">
+      <button class="cmdk-pill active" data-filter="all">All<span class="ct">7</span></button>
+      <button class="cmdk-pill" data-filter="docs">Docs<span class="ct">3</span></button>
+      <button class="cmdk-pill" data-filter="flows">Flows<span class="ct">1</span></button>
+      <button class="cmdk-pill" data-filter="comments">Comments<span class="ct">2</span></button>
+      <button class="cmdk-pill" data-filter="engineering">Engineering<span class="ct">1</span></button>
+      <button class="cmdk-pill" data-filter="instructions">Instructions</button>
+      <button class="cmdk-pill" data-filter="snippets">Snippets</button>
+    </div>
+
+    <!-- BODY -->
+    <div class="cmdk-body" id="cmdk-body">
+
+      <!-- RESULTS VIEW -->
+      <div class="state" data-state="results">
+        <div class="section-label">Docs</div>
+        <div class="cmdk-row selected" data-row>
+          <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+          <div class="body">
+            <div class="title"><mark>Rate limit</mark>s</div>
+            <div class="snippet">Pro tier: 5,000 MCP calls per month with bursts up to 60 RPS. Free tier capped at 500/month…</div>
+          </div>
+          <span class="path">/ Engineering</span>
+          <span class="kbd-end">↵</span>
+        </div>
+
+        <div class="cmdk-row" data-row>
+          <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+          <div class="body">
+            <div class="title">MCP tool reference</div>
+            <div class="snippet">…<mark>rate limit</mark>s apply per workspace MCP key. <mark>Rate</mark> headers returned on every call…</div>
+          </div>
+          <span class="path">/ Engineering</span>
+        </div>
+
+        <div class="cmdk-row" data-row>
+          <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+          <div class="body">
+            <div class="title">Pricing strategy v2</div>
+            <div class="snippet">…how <mark>rate limit</mark>s map to tiers, when to upsell, and when to grandfather existing customers…</div>
+          </div>
+          <span class="path">/ Planning</span>
+        </div>
+
+        <div class="section-label">Flows</div>
+        <div class="cmdk-row" data-row>
+          <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><path d="M9 6h4a2 2 0 0 1 2 2v10M9 18h6"/></svg></span>
+          <div class="body">
+            <div class="title">Bug triage assistant</div>
+            <div class="snippet">Step 04 references <mark>rate-limit</mark>ing policy in the eng docs…</div>
+          </div>
+          <span class="path">/ Flows</span>
+        </div>
+
+        <div class="section-label">Comments</div>
+        <div class="cmdk-row" data-row>
+          <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="body">
+            <div class="title">Anton on Pricing strategy v2</div>
+            <div class="snippet">"Are we sure 5,000 is the right <mark>rate limit</mark> for Pro? Looking at usage, 78% of teams are well under…"</div>
+          </div>
+          <span class="path">/ Planning</span>
+        </div>
+
+        <div class="cmdk-row" data-row>
+          <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          <div class="body">
+            <div class="title">Maya on MCP tool reference</div>
+            <div class="snippet">"Should we surface <mark>rate-limit</mark> headers in the response examples too?"</div>
+          </div>
+          <span class="path">/ Engineering</span>
+        </div>
+      </div>
+
+      <!-- INITIAL VIEW -->
+      <div class="state hidden" data-state="initial">
+        <div class="section-label">Recent searches</div>
+        <div class="recent-row">
+          <span class="clock"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
+          <span class="q">how mnema syncs</span>
+          <button class="x"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="recent-row">
+          <span class="clock"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
+          <span class="q">onboarding playbook</span>
+          <button class="x"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="recent-row">
+          <span class="clock"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
+          <span class="q">claude connector setup</span>
+          <button class="x"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+
+        <div class="section-label">Quick actions</div>
+        <div class="cmdk-row" data-row>
+          <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></svg></span>
+          <div class="body"><div class="title">Create new doc</div></div>
+          <span class="kbd-end">⌘ N</span>
+        </div>
+        <div class="cmdk-row" data-row>
+          <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><path d="M9 6h4a2 2 0 0 1 2 2v10"/></svg></span>
+          <div class="body"><div class="title">Create new flow</div></div>
+          <span class="kbd-end">⌘ ⇧ N</span>
+        </div>
+        <div class="cmdk-row" data-row>
+          <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></span>
+          <div class="body"><div class="title">Invite a member</div></div>
+          <span class="kbd-end">⌘ I</span>
+        </div>
+        <div class="cmdk-row" data-row>
+          <span class="ic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+          <div class="body"><div class="title">Open settings</div></div>
+          <span class="kbd-end">⌘ ,</span>
+        </div>
+      </div>
+
+      <!-- LOADING -->
+      <div class="state hidden" data-state="loading">
+        <div class="cmdk-state">
+          <div class="spinner"></div>
+          Searching…
+        </div>
+      </div>
+
+      <!-- EMPTY -->
+      <div class="state hidden" data-state="empty">
+        <div class="cmdk-state">
+          No matches for <span class="q">"asdfqwer"</span>
+          <div class="alt">Try different terms or switch to <strong style="color:var(--ink-soft);">Semantic</strong> mode below</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- FOOTER -->
+    <div class="cmdk-foot">
+      <div class="cmdk-hints">
+        <span class="cmdk-hint"><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+        <span class="cmdk-hint"><kbd>↵</kbd> open</span>
+        <span class="cmdk-hint"><kbd>esc</kbd> dismiss</span>
+      </div>
+      <div class="cmdk-mode" id="cmdk-mode">
+        <button class="active" data-mode="hybrid">Hybrid</button>
+        <button data-mode="keyword">Keyword</button>
+        <button data-mode="semantic">Semantic</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// state toggles via tweaks-like local toggle for demo
+const overlay = document.getElementById('cmdk-overlay');
+const input = document.getElementById('cmdk-input');
+const body = document.getElementById('cmdk-body');
+
+function showState(name) {
+  body.querySelectorAll('.state').forEach(s => s.classList.toggle('hidden', s.dataset.state !== name));
+}
+
+input.addEventListener('input', () => {
+  const q = input.value.trim();
+  if (!q) {
+    showState('initial');
+  } else if (q.length < 2) {
+    showState('loading');
+  } else if (q === 'asdfqwer') {
+    showState('empty');
+  } else {
+    showState('results');
+  }
+});
+
+// arrow key nav
+function moveSelection(dir) {
+  const rows = [...body.querySelectorAll('.state:not(.hidden) [data-row]')];
+  if (!rows.length) return;
+  const i = rows.findIndex(r => r.classList.contains('selected'));
+  rows.forEach(r => r.classList.remove('selected'));
+  const next = Math.max(0, Math.min(rows.length - 1, i + dir));
+  rows[next].classList.add('selected');
+  rows[next].scrollIntoView({ block: 'nearest' });
+}
+window.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); moveSelection(1); }
+  if (e.key === 'ArrowUp')   { e.preventDefault(); moveSelection(-1); }
+  if (e.key === 'Escape')    { overlay.style.display = 'none'; }
+  if (e.key === 'Enter')     {
+    const sel = body.querySelector('.state:not(.hidden) .cmdk-row.selected');
+    if (sel) console.log('open', sel.querySelector('.title')?.textContent);
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault(); overlay.style.display = 'flex'; input.focus();
+  }
+});
+body.addEventListener('mouseover', e => {
+  const row = e.target.closest('[data-row]');
+  if (!row) return;
+  body.querySelectorAll('.cmdk-row.selected').forEach(r => r.classList.remove('selected'));
+  row.classList.add('selected');
+});
+
+document.getElementById('cmdk-filters').addEventListener('click', e => {
+  const p = e.target.closest('.cmdk-pill'); if (!p) return;
+  document.querySelectorAll('.cmdk-pill').forEach(x => x.classList.toggle('active', x === p));
+});
+document.getElementById('cmdk-mode').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#cmdk-mode button').forEach(x => x.classList.toggle('active', x === b));
+});
+</script>
+</body>
+</html>

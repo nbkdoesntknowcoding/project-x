@@ -1,0 +1,1014 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1280" />
+<title>Mnema · Create your workspace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --canvas:        #0A0B0D;
+  --surface:       #121317;
+  --surface-2:     #181A1F;
+  --surface-3:     #22252B;
+  --line:          rgba(255,255,255,0.06);
+  --line-strong:   rgba(255,255,255,0.12);
+  --line-bright:   rgba(255,255,255,0.22);
+  --ink:           #F4F5F7;
+  --ink-soft:      #B0B4BC;
+  --ink-muted:     #707479;
+  --ink-faint:     #3D4046;
+
+  --accent-rgb:    255, 179, 112;
+  --accent:        rgb(var(--accent-rgb));
+  --accent-soft:   rgba(var(--accent-rgb), 0.13);
+  --accent-line:   rgba(var(--accent-rgb), 0.28);
+  --aux-1-rgb:     124, 156, 255;
+  --aux-2-rgb:     200, 162, 255;
+  --aux-3-rgb:     255, 122, 138;
+
+  --status-sync:   #6BE39B;
+  --on-ink:        #0A0B0D;
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --intensity: 0.45;
+  --anim-mult: 1;
+}
+[data-theme="light"] {
+  --canvas: #F5F5F3; --surface: #FBFBFA; --surface-2: #EEEEEB; --surface-3: #E3E3DF;
+  --line: rgba(10,11,13,0.06); --line-strong: rgba(10,11,13,0.12); --line-bright: rgba(10,11,13,0.22);
+  --ink: #0A0B0D; --ink-soft: #424650; --ink-muted: #80858E; --ink-faint: #B8BCC2; --on-ink: #FFFFFF;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--canvas); color: var(--ink); font-family: var(--sans);
+  font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  min-height: 100vh; position: relative; overflow-x: hidden;
+}
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; }
+button { font-family: inherit; }
+
+/* FLUID BACKDROP */
+.bg { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.bg .fluid-stage { position: absolute; inset: 0; filter: url(#mnema-goo); opacity: calc(0.5 + var(--intensity) * 0.5); }
+[data-theme="light"] .bg .fluid-stage { opacity: calc(var(--intensity) * 0.4); mix-blend-mode: multiply; }
+.bg .blob { position: absolute; border-radius: 50%; filter: blur(6px); will-change: transform; }
+.bg .blob.b1 { width: 360px; height: 360px; left: 6%; top: 8%; background: rgba(var(--accent-rgb), 0.8); animation: f1 calc(28s / var(--anim-mult)) ease-in-out infinite; }
+.bg .blob.b2 { width: 420px; height: 420px; right: 4%; top: 16%; background: rgba(var(--aux-1-rgb), 0.7); animation: f2 calc(32s / var(--anim-mult)) ease-in-out infinite; }
+.bg .blob.b3 { width: 300px; height: 300px; left: 30%; bottom: -6%; background: rgba(var(--aux-2-rgb), 0.75); animation: f3 calc(30s / var(--anim-mult)) ease-in-out infinite; }
+.bg .blob.b4 { width: 260px; height: 260px; right: 18%; bottom: 4%; background: rgba(var(--aux-3-rgb), 0.7); animation: f4 calc(34s / var(--anim-mult)) ease-in-out infinite; }
+@keyframes f1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(180px, 100px) scale(1.1); } }
+@keyframes f2 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-200px, 90px) scale(1.15); } }
+@keyframes f3 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(120px, -180px) scale(1.05); } }
+@keyframes f4 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(160px, -100px) scale(1.1); } }
+
+/* TOPBAR */
+.topbar {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 28px;
+}
+.brand {
+  display: inline-flex; align-items: center; gap: 9px;
+  font: 600 14px/1 var(--sans); color: var(--ink); text-decoration: none;
+}
+.brand .glyph {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: var(--ink); color: var(--on-ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 500 17px/1 var(--sans); padding-bottom: 2px; position: relative;
+}
+.brand .glyph::after { content:""; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%); }
+.top-right { display: flex; align-items: center; gap: 16px; color: var(--ink-muted); font: 500 12px/1 var(--sans); }
+.top-right .signed-as { display: inline-flex; align-items: center; gap: 6px; }
+.top-right .ya { width: 18px; height: 18px; border-radius: 50%; background: linear-gradient(135deg, rgba(var(--accent-rgb),0.95), rgba(255,122,138,0.95)); color: var(--on-ink); font: 700 9px/1 var(--sans); display: inline-flex; align-items: center; justify-content: center; }
+.top-right a { color: var(--ink-soft); text-decoration: none; }
+.top-right a:hover { color: var(--ink); }
+
+/* MAIN */
+main {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px 24px 80px;
+}
+
+/* STEP INDICATOR */
+.steps {
+  display: flex; align-items: center; gap: 0;
+  margin: 0 auto 32px;
+  padding: 6px;
+  background: rgba(18,19,23,0.7);
+  backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 999px;
+}
+[data-theme="light"] .steps { background: rgba(255,255,255,0.75); border-color: rgba(10,11,13,0.07); }
+.step {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--ink-muted);
+  font: 500 12px/1 var(--sans);
+  background: transparent;
+  border: 0;
+}
+.step:hover { color: var(--ink); }
+.step.active { color: var(--ink); }
+.step.done { color: var(--ink-soft); }
+.step .num {
+  font: 600 11px/1 var(--mono);
+  color: var(--ink-faint);
+  letter-spacing: 0.04em;
+}
+.step.active .num { color: var(--accent); }
+.step.done .num { color: var(--status-sync); }
+.step-sep {
+  width: 18px; height: 1px;
+  background: var(--line-strong); margin: 0 2px;
+}
+
+/* CARD */
+.card {
+  width: 100%; max-width: 540px;
+  background: rgba(6,7,10,0.72);
+  backdrop-filter: blur(24px) saturate(140%);
+  border-radius: 16px; padding: 30px 32px 28px;
+  position: relative;
+}
+[data-theme="light"] .card {
+  background: rgba(255,255,255,0.82);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 0 var(--line), 0 30px 60px -30px rgba(10,11,13,0.18);
+}
+.card::before {
+  content: ""; position: absolute; inset: 0;
+  border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255,255,255,0.24), rgba(255,255,255,0.04) 18%, transparent 40%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+[data-theme="light"] .card::before { background: linear-gradient(180deg, rgba(10,11,13,0.10), transparent 40%); }
+
+.card-eyebrow {
+  font: 500 10.5px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: 10px;
+}
+.card h1 {
+  margin: 0 0 7px;
+  font: 600 22px/1.25 var(--sans);
+  letter-spacing: -0.02em;
+}
+.card .sub {
+  margin: 0 0 22px;
+  font-size: 13px; color: var(--ink-muted);
+}
+
+/* FIELDS */
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.field label {
+  font: 500 11.5px/1 var(--sans);
+  color: var(--ink);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.field label .hint { color: var(--ink-muted); font-weight: 400; }
+.input-wrap {
+  display: flex; align-items: stretch;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.10);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+[data-theme="light"] .input-wrap { background: rgba(10,11,13,0.025); border-color: rgba(10,11,13,0.10); }
+.input-wrap:focus-within { border-color: rgba(var(--accent-rgb),0.5); box-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.10); }
+.input-wrap input {
+  flex: 1; border: 0; outline: 0;
+  background: transparent; color: var(--ink);
+  font: 400 13.5px/1 var(--sans);
+  padding: 10px 12px;
+}
+.input-wrap input::placeholder { color: var(--ink-muted); }
+.input-wrap .prefix, .input-wrap .suffix {
+  display: inline-flex; align-items: center; padding: 0 11px;
+  font: 500 12px/1 var(--mono); color: var(--ink-muted);
+}
+.input-wrap .prefix { border-right: 1px solid var(--line); }
+.input-wrap .suffix { border-left: 1px solid var(--line); }
+.input-wrap .suffix svg { color: var(--ink-muted); }
+
+.helper {
+  font: 400 11.5px/1.4 var(--sans);
+  color: var(--ink-muted);
+  margin-top: 2px;
+}
+.helper code { font: 500 11px var(--mono); padding: 1px 5px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 3px; color: var(--ink); }
+
+/* ICON PICKER */
+.icon-picker { display: flex; gap: 8px; margin-bottom: 14px; }
+.icon-opt {
+  width: 38px; height: 38px; border-radius: 9px;
+  cursor: pointer; position: relative;
+  border: 2px solid transparent;
+}
+.icon-opt::after {
+  content: ""; position: absolute; inset: 0; border-radius: 7px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%);
+}
+.icon-opt.selected { border-color: var(--accent); padding: 1px; }
+.icon-opt.selected::before {
+  content: "✓"; position: absolute; right: -5px; bottom: -5px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--accent); color: var(--on-ink);
+  font: 700 9px/1 var(--sans);
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid var(--canvas);
+  z-index: 2;
+}
+.icon-opt .inner {
+  width: 100%; height: 100%; border-radius: inherit;
+  display: flex; align-items: center; justify-content: center;
+  color: white; font: 700 17px/1 var(--sans);
+  position: relative;
+}
+.icon-opt.upload {
+  background: var(--surface-2);
+  border: 1px dashed var(--line-strong);
+  color: var(--ink-muted);
+}
+.icon-opt.upload:hover { border-color: var(--accent-line); color: var(--ink); }
+.icon-opt.upload::after { display: none; }
+
+/* PRIVACY OPTIONS */
+.privacy-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.priv-opt {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.08);
+  cursor: pointer;
+  position: relative;
+}
+[data-theme="light"] .priv-opt { background: rgba(10,11,13,0.02); border-color: rgba(10,11,13,0.08); }
+.priv-opt:hover { border-color: var(--line-strong); }
+.priv-opt.selected {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+.priv-opt .head {
+  display: flex; align-items: center; gap: 7px;
+  font: 600 12.5px/1 var(--sans); color: var(--ink);
+}
+.priv-opt .head svg { color: var(--ink-muted); }
+.priv-opt.selected .head svg { color: var(--accent); }
+.priv-opt .desc { font: 400 11.5px/1.4 var(--sans); color: var(--ink-muted); }
+.priv-opt .radio {
+  position: absolute; top: 12px; right: 12px;
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+}
+.priv-opt.selected .radio {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--canvas);
+}
+[data-theme="light"] .priv-opt.selected .radio { box-shadow: inset 0 0 0 3px white; }
+
+/* BUTTONS */
+.action-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 22px; padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 14px; border-radius: 7px;
+  font: 500 12.5px/1 var(--sans);
+  cursor: pointer; border: 1px solid transparent;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.btn-ink { background: var(--ink); color: var(--on-ink); }
+.btn-ink:hover { background: rgba(255,255,255,0.92); }
+[data-theme="light"] .btn-ink:hover { background: #1A1B1F; }
+.btn-ghost { background: transparent; color: var(--ink-soft); }
+.btn-ghost:hover { color: var(--ink); background: var(--surface-2); }
+
+/* PREVIEW MINI PANEL */
+.preview-panel {
+  margin-top: 16px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 12px;
+  display: flex; align-items: center; gap: 10px;
+}
+[data-theme="light"] .preview-panel { background: rgba(10,11,13,0.025); }
+.preview-panel .preview-eyebrow {
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: 5px;
+}
+.preview-panel .preview-url {
+  font: 500 12px/1 var(--mono);
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.preview-panel .preview-url .slug { color: var(--accent); }
+.preview-panel .preview-meta { flex: 1; min-width: 0; }
+.preview-panel .preview-icon {
+  width: 44px; height: 44px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  color: white; font: 700 22px/1 var(--sans);
+  flex-shrink: 0; position: relative;
+}
+.preview-panel .preview-icon::after { content:""; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%); }
+
+/* BOTTOM HINT */
+.hint-strip {
+  margin-top: 22px;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+  text-align: center;
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+}
+.hint-strip .v { color: var(--ink-soft); }
+.hint-strip .sep { color: var(--ink-faint); }
+.hint-strip kbd {
+  padding: 3px 6px; border-radius: 4px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--ink-soft); font: 500 10.5px/1 var(--mono);
+}
+
+/* TWEAKS */
+.tweaks { position: fixed; right: 14px; bottom: 14px; z-index: 60; width: 240px; background: rgba(18,19,23,0.96); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; color: var(--ink); font-size: 11px; display: none; }
+[data-theme="light"] .tweaks { background: rgba(255,255,255,0.96); border-color: rgba(10,11,13,0.08); }
+.tweaks.active { display: block; }
+.tweaks-hd { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.tweaks-hd b { font: 600 11.5px var(--sans); }
+.tweaks-close { border: 0; background: transparent; color: var(--ink-muted); width: 20px; height: 20px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+.tweaks-body { padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 11px; }
+.tweaks-section { display: flex; flex-direction: column; gap: 6px; }
+.tweaks-section h6 { margin: 4px 0 0; font: 500 9.5px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
+.tweaks .seg2 { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 5px; padding: 2px; }
+[data-theme="light"] .tweaks .seg2 { background: rgba(10,11,13,0.04); border-color: rgba(10,11,13,0.06); }
+.tweaks .seg2 button { border: 0; background: transparent; cursor: pointer; font: 500 11px var(--sans); padding: 4px 5px; border-radius: 4px; color: var(--ink-muted); }
+.tweaks .seg2 button.active { background: var(--ink); color: var(--on-ink); }
+.tweaks .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.tweaks .swatches button { aspect-ratio: 1; border-radius: 4px; cursor: pointer; border: 1px solid rgba(255,255,255,0.1); padding: 0; }
+.tweaks .swatches button.active { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* STEP CONTENT SWITCHING */
+.step-content { display: none; }
+.step-content.active { display: block; }
+
+/* Step 2 — invite */
+.invite-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; }
+.invite-row { display: flex; gap: 6px; }
+.invite-row .input-wrap { flex: 1; }
+.role-pick {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 0 10px; border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: var(--ink); cursor: pointer;
+  font: 500 12px/1 var(--sans);
+  height: 38px;
+  min-width: 96px;
+}
+[data-theme="light"] .role-pick { background: rgba(10,11,13,0.025); border-color: rgba(10,11,13,0.10); }
+.role-pick:hover { border-color: var(--line-bright); }
+.role-pick svg { color: var(--ink-muted); }
+.invite-row .remove {
+  width: 38px; height: 38px; border-radius: 8px;
+  background: transparent; border: 1px solid transparent;
+  color: var(--ink-muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.invite-row .remove:hover { background: var(--surface-2); color: var(--ink); }
+
+.add-more {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: 0;
+  color: var(--ink-soft); cursor: pointer;
+  font: 500 12px/1 var(--sans);
+  padding: 6px 0;
+}
+.add-more:hover { color: var(--ink); }
+
+/* Step 3 — connect Claude */
+.connect-card {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+[data-theme="light"] .connect-card { background: rgba(10,11,13,0.025); }
+.connect-card .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.connect-card .who { display: flex; align-items: center; gap: 9px; font: 600 13px/1 var(--sans); }
+.connect-card .who .lg { width: 28px; height: 28px; border-radius: 7px; background: linear-gradient(135deg, #FFB370, #FF7A8A); color: white; font: 700 13px/1 var(--sans); display: inline-flex; align-items: center; justify-content: center; }
+.connect-card .step-tag { font: 500 10px/1 var(--mono); padding: 3px 7px; border-radius: 4px; background: rgba(107,227,155,0.12); color: var(--status-sync); letter-spacing: 0.04em; }
+.connect-card .step-tag.pending { background: var(--surface-3); color: var(--ink-muted); }
+.endpoint {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px; border-radius: 6px;
+  background: var(--surface); border: 1px solid var(--line);
+  margin-top: 8px;
+}
+.endpoint .url { font: 500 12px/1 var(--mono); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.endpoint .copy { background: transparent; border: 0; color: var(--ink-muted); cursor: pointer; padding: 4px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; font: 500 11px/1 var(--sans); }
+.endpoint .copy:hover { color: var(--ink); background: var(--surface-2); }
+
+.steps-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.step-line {
+  display: flex; align-items: flex-start; gap: 10px;
+  font: 400 12.5px/1.5 var(--sans);
+  color: var(--ink-soft);
+}
+.step-line .num {
+  flex-shrink: 0;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--surface-3); border: 1px solid var(--line);
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 600 10px/1 var(--mono); color: var(--ink-soft);
+  margin-top: 1px;
+}
+.step-line.done .num { background: rgba(107,227,155,0.18); color: var(--status-sync); border-color: rgba(107,227,155,0.4); }
+.step-line.done { color: var(--ink-muted); text-decoration: line-through; }
+
+/* Step 2 polish */
+.field-row-head {
+  display: grid; grid-template-columns: 1fr 96px 38px; gap: 6px;
+  padding: 0 2px 6px;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em; color: var(--ink-muted);
+}
+.invite-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.invite-row .input-wrap input { padding: 9px 12px 9px 4px; }
+.row-actions {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 2px 0;
+}
+.add-more.bulk { color: var(--ink-muted); }
+
+.role-legend {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  margin-top: 14px; padding: 10px 12px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+[data-theme="light"] .role-legend { background: rgba(10,11,13,0.025); }
+.rl-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rl-key { font: 500 11px/1 var(--mono); letter-spacing: 0.04em; color: var(--ink); }
+.rl-desc { font: 400 11.5px/1.35 var(--sans); color: var(--ink-muted); }
+
+/* Step 3 polish */
+.test-row {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.test-row .hint-tiny { font: 500 11px/1.4 var(--sans); color: var(--ink-muted); }
+.test-row .hint-tiny code {
+  font: 500 11px var(--mono); padding: 1px 5px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 3px; color: var(--ink);
+}
+.clients-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  margin-top: 14px;
+}
+.client-chip {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 10px; border-radius: 7px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--line);
+  color: var(--ink-soft); font: 500 11.5px/1 var(--sans);
+  cursor: pointer;
+}
+[data-theme="light"] .client-chip { background: rgba(10,11,13,0.025); }
+.client-chip:hover { color: var(--ink); border-color: var(--line-strong); background: var(--surface-2); }
+.client-chip svg { color: var(--ink-muted); }
+
+/* Step 4 polish */
+.next-actions { display: flex; flex-direction: column; gap: 6px; margin: 22px 0 4px; }
+.next-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 9px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--line);
+  text-decoration: none; color: inherit;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+[data-theme="light"] .next-card { background: rgba(10,11,13,0.025); }
+.next-card:hover { background: var(--surface-2); border-color: var(--line-strong); }
+.next-card .nx-ico {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: white; flex-shrink: 0; position: relative;
+}
+.next-card .nx-ico::after { content:""; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(135deg, rgba(255,255,255,0.2), transparent 50%); }
+.next-card .nx-body { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.next-card .nx-title { font: 600 13px/1.2 var(--sans); color: var(--ink); }
+.next-card .nx-sub { font: 400 11.5px/1.35 var(--sans); color: var(--ink-muted); }
+.next-card .nx-arrow { color: var(--ink-muted); transition: transform 140ms ease; flex-shrink: 0; }
+.next-card:hover .nx-arrow { transform: translateX(2px); color: var(--ink); }
+
+/* Step 4 — done */
+.done-state { text-align: center; padding: 8px 0 4px; }
+.done-glyph {
+  width: 64px; height: 64px; border-radius: 18px;
+  background: linear-gradient(135deg, rgba(var(--accent-rgb),1), rgba(255,122,138,0.95));
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--on-ink); font: 500 38px/1 var(--sans); padding-bottom: 4px;
+  margin-bottom: 16px;
+  position: relative;
+}
+.done-glyph::after { content:""; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(135deg, rgba(255,255,255,0.22), transparent 50%); }
+.done-state h2 { margin: 0 0 6px; font: 600 22px/1.2 var(--sans); letter-spacing: -0.02em; }
+.done-state p { margin: 0 auto; font-size: 13px; color: var(--ink-muted); max-width: 380px; }
+.done-meta {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  margin: 22px 0 4px;
+}
+.done-meta .item {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+[data-theme="light"] .done-meta .item { background: rgba(10,11,13,0.025); }
+.done-meta .v { font: 600 16px/1 var(--sans); letter-spacing: -0.02em; }
+.done-meta .l { font: 500 10px/1 var(--mono); color: var(--ink-muted); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<!-- SVG goo filter -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="mnema-goo">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="22" result="blur"/>
+      <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -11" result="goo"/>
+      <feBlend in="SourceGraphic" in2="goo"/>
+    </filter>
+  </defs>
+</svg>
+
+<div class="bg">
+  <div class="fluid-stage">
+    <div class="blob b1"></div><div class="blob b2"></div>
+    <div class="blob b3"></div><div class="blob b4"></div>
+  </div>
+</div>
+
+<header class="topbar">
+  <a href="#" class="brand"><span class="glyph">μ</span><span>Mnema</span></a>
+  <div class="top-right">
+    <span class="signed-as"><span class="ya">K</span>kevin@boppl.in</span>
+    <a href="#">Sign out</a>
+  </div>
+</header>
+
+<main>
+
+  <!-- STEP INDICATOR -->
+  <div class="steps" id="steps">
+    <button class="step active" data-step="1">
+      <span class="num">1</span>
+      Workspace
+    </button>
+    <span class="step-sep"></span>
+    <button class="step" data-step="2">
+      <span class="num">2</span>
+      Invite team
+    </button>
+    <span class="step-sep"></span>
+    <button class="step" data-step="3">
+      <span class="num">3</span>
+      Connect Claude
+    </button>
+    <span class="step-sep"></span>
+    <button class="step" data-step="4">
+      <span class="num">4</span>
+      Finish
+    </button>
+  </div>
+
+  <!-- CARD -->
+  <div class="card">
+
+    <!-- STEP 1 — workspace name + icon + privacy -->
+    <div class="step-content active" data-step-content="1">
+      <div class="card-eyebrow">STEP 1 OF 4 · WORKSPACE</div>
+      <h1>Name your workspace</h1>
+      <p class="sub">This is where your team's docs live. You can rename it later.</p>
+
+      <div class="field">
+        <label>Workspace name <span class="hint">Required</span></label>
+        <div class="input-wrap"><input id="ws-name" type="text" value="boppl-design" placeholder="acme-design" autocomplete="off" /></div>
+      </div>
+
+      <div class="field">
+        <label>Workspace URL</label>
+        <div class="input-wrap">
+          <span class="prefix">mnema.app /</span>
+          <input id="ws-slug" type="text" value="boppl-design" placeholder="acme-design" autocomplete="off" />
+          <span class="suffix"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+        </div>
+        <p class="helper">Lowercase letters, numbers, hyphens. <code>boppl-design.mnema.app</code></p>
+      </div>
+
+      <div class="field">
+        <label>Icon</label>
+        <div class="icon-picker" id="icon-picker">
+          <button class="icon-opt selected" data-grad="linear-gradient(135deg, #7C9CFF, #C8A2FF)"><span class="inner" style="background:linear-gradient(135deg, #7C9CFF, #C8A2FF);">B</span></button>
+          <button class="icon-opt" data-grad="linear-gradient(135deg, #FFB370, #FF7A8A)"><span class="inner" style="background:linear-gradient(135deg, #FFB370, #FF7A8A);">B</span></button>
+          <button class="icon-opt" data-grad="linear-gradient(135deg, #6BE39B, #2B9B9B)"><span class="inner" style="background:linear-gradient(135deg, #6BE39B, #2B9B9B);">B</span></button>
+          <button class="icon-opt" data-grad="linear-gradient(135deg, #FF7A8A, #B847C0)"><span class="inner" style="background:linear-gradient(135deg, #FF7A8A, #B847C0);">B</span></button>
+          <button class="icon-opt" data-grad="linear-gradient(135deg, #C8A2FF, #7C9CFF)"><span class="inner" style="background:linear-gradient(135deg, #C8A2FF, #7C9CFF);">B</span></button>
+          <button class="icon-opt" data-grad="linear-gradient(135deg, #1E1F23, #3D4046)"><span class="inner" style="background:linear-gradient(135deg, #1E1F23, #3D4046);">B</span></button>
+          <button class="icon-opt upload" title="Upload custom"><span class="inner"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></span></button>
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:0;">
+        <label>Visibility</label>
+        <div class="privacy-row" id="privacy-row">
+          <div class="priv-opt selected" data-priv="private">
+            <span class="radio"></span>
+            <span class="head"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Private</span>
+            <span class="desc">Only invited people can join.</span>
+          </div>
+          <div class="priv-opt" data-priv="org">
+            <span class="radio"></span>
+            <span class="head"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>Org-wide</span>
+            <span class="desc">Anyone with a @boppl.in email.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="preview-panel">
+        <div class="preview-icon" id="preview-icon" style="background:linear-gradient(135deg, #7C9CFF, #C8A2FF);">B</div>
+        <div class="preview-meta">
+          <div class="preview-eyebrow">YOUR WORKSPACE</div>
+          <div class="preview-url" id="preview-url"><span class="slug">boppl-design</span>.mnema.app</div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-ghost">Skip for now</button>
+        <button class="btn btn-ink" data-go="2">Continue<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+
+    <!-- STEP 2 — invite team -->
+    <div class="step-content" data-step-content="2">
+      <div class="card-eyebrow">STEP 2 OF 4 · INVITE TEAM</div>
+      <h1>Bring your team along</h1>
+      <p class="sub">Invite up to 5 teammates on the Pro plan. They'll get a magic link by email.</p>
+
+      <div class="field-row-head">
+        <span>EMAIL</span>
+        <span>ROLE</span>
+        <span></span>
+      </div>
+
+      <div class="invite-list" id="invite-list">
+        <div class="invite-row">
+          <div class="input-wrap">
+            <span class="prefix" style="padding:0 10px;border-right:0;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span>
+            <input type="email" placeholder="teammate@boppl.in" value="anton@boppl.in" />
+          </div>
+          <button class="role-pick">Editor<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+          <button class="remove" aria-label="Remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="invite-row">
+          <div class="input-wrap">
+            <span class="prefix" style="padding:0 10px;border-right:0;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span>
+            <input type="email" placeholder="teammate@boppl.in" value="maya@boppl.in" />
+          </div>
+          <button class="role-pick">Editor<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+          <button class="remove" aria-label="Remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div class="invite-row">
+          <div class="input-wrap">
+            <span class="prefix" style="padding:0 10px;border-right:0;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg></span>
+            <input type="email" placeholder="teammate@boppl.in" />
+          </div>
+          <button class="role-pick">Viewer<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+          <button class="remove" aria-label="Remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+      </div>
+
+      <div class="row-actions">
+        <button class="add-more" id="add-invite"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add another</button>
+        <button class="add-more bulk" type="button"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Paste emails</button>
+      </div>
+
+      <div class="role-legend">
+        <div class="rl-item"><span class="rl-key">Editor</span><span class="rl-desc">Read, write, comment, share</span></div>
+        <div class="rl-item"><span class="rl-key">Viewer</span><span class="rl-desc">Read &amp; comment only</span></div>
+      </div>
+
+      <div class="preview-panel" style="margin-top: 18px;">
+        <div style="display:flex;align-items:center;">
+          <span style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#FFB370,#FF7A8A);color:white;font:700 10px/1 var(--sans);display:inline-flex;align-items:center;justify-content:center;border:2px solid var(--canvas);">K</span>
+          <span style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#7C9CFF,#C8A2FF);color:white;font:700 10px/1 var(--sans);display:inline-flex;align-items:center;justify-content:center;margin-left:-7px;border:2px solid var(--canvas);">A</span>
+          <span style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#6BE39B,#2B9B9B);color:white;font:700 10px/1 var(--sans);display:inline-flex;align-items:center;justify-content:center;margin-left:-7px;border:2px solid var(--canvas);">M</span>
+          <span style="width:24px;height:24px;border-radius:50%;background:var(--surface-3);color:var(--ink-muted);font:600 10px/1 var(--mono);display:inline-flex;align-items:center;justify-content:center;margin-left:-7px;border:2px solid var(--canvas);">+2</span>
+        </div>
+        <div class="preview-meta">
+          <div class="preview-eyebrow">3 OF 5 SEATS USED · 2 PENDING INVITES</div>
+          <div style="font:500 12px/1.2 var(--sans);color:var(--ink);">You'll fill up your Pro plan</div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-ghost" data-go="1"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M11 19l-7-7 7-7"/></svg>Back</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost" data-go="3">Skip for now</button>
+          <button class="btn btn-ink" data-go="3">Send invites<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3 — connect Claude (MCP) -->
+    <div class="step-content" data-step-content="3">
+      <div class="card-eyebrow">STEP 3 OF 4 · MCP BRIDGE</div>
+      <h1>Connect to Claude</h1>
+      <p class="sub">One MCP endpoint and Claude reads your workspace live. No re-uploads, ever.</p>
+
+      <div class="connect-card">
+        <div class="head">
+          <div class="who">
+            <span class="lg">C</span>
+            <span>Claude Desktop<span style="font:500 10.5px var(--mono);color:var(--ink-muted);margin-left:7px;letter-spacing:0.04em;">SONNET 4.5</span></span>
+          </div>
+          <span class="step-tag pending">PENDING</span>
+        </div>
+
+        <div class="endpoint">
+          <span class="url">https://api.mnema.app/mcp/boppl-design</span>
+          <button class="copy"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button>
+        </div>
+
+        <div class="steps-list">
+          <div class="step-line done">
+            <span class="num"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            <span>Workspace MCP key generated</span>
+          </div>
+          <div class="step-line">
+            <span class="num">2</span>
+            <span>In Claude Desktop, open <b style="color:var(--ink);">Settings → Connectors → Add MCP server</b> and paste the URL above.</span>
+          </div>
+          <div class="step-line">
+            <span class="num">3</span>
+            <span>Claude can now call <code style="font:500 11.5px var(--mono);padding:1px 5px;background:var(--surface-2);border:1px solid var(--line);border-radius:3px;">get_doc</code>, <code style="font:500 11.5px var(--mono);padding:1px 5px;background:var(--surface-2);border:1px solid var(--line);border-radius:3px;">search_workspace</code> and <code style="font:500 11.5px var(--mono);padding:1px 5px;background:var(--surface-2);border:1px solid var(--line);border-radius:3px;">list_folders</code> against your docs.</span>
+          </div>
+        </div>
+
+        <div class="test-row">
+          <button class="btn btn-ghost" style="padding:7px 12px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Test connection</button>
+          <span class="hint-tiny">Or run <code>npx @mnema/connect --workspace=boppl-design</code></span>
+        </div>
+      </div>
+
+      <div class="clients-row">
+        <button class="client-chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>claude.ai</button>
+        <button class="client-chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>VS Code</button>
+        <button class="client-chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>Cursor</button>
+        <button class="client-chip"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Other client</button>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-ghost" data-go="2"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M11 19l-7-7 7-7"/></svg>Back</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost" data-go="4">Skip for now</button>
+          <button class="btn btn-ink" data-go="4">Continue<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4 — done -->
+    <div class="step-content" data-step-content="4">
+      <div class="card-eyebrow" style="text-align:center;">STEP 4 OF 4 · READY</div>
+      <div class="done-state">
+        <div class="done-glyph">μ</div>
+        <h2>boppl-design is live</h2>
+        <p>Your workspace is set up. Claude is connected. Edit docs and your team — and Claude — see them in real-time.</p>
+      </div>
+
+      <div class="next-actions">
+        <a class="next-card" href="#">
+          <span class="nx-ico" style="background:linear-gradient(135deg,#FFB370,#FF7A8A);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15h6"/></svg></span>
+          <span class="nx-body">
+            <span class="nx-title">Write your first doc</span>
+            <span class="nx-sub">Start with a README — it's already pre-filled.</span>
+          </span>
+          <svg class="nx-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </a>
+        <a class="next-card" href="#">
+          <span class="nx-ico" style="background:linear-gradient(135deg,#7C9CFF,#C8A2FF);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></span>
+          <span class="nx-body">
+            <span class="nx-title">Invite more teammates</span>
+            <span class="nx-sub">2 of 5 seats still available on Pro.</span>
+          </span>
+          <svg class="nx-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </a>
+        <a class="next-card" href="#">
+          <span class="nx-ico" style="background:linear-gradient(135deg,#6BE39B,#2B9B9B);"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
+          <span class="nx-body">
+            <span class="nx-title">Try the MCP bridge</span>
+            <span class="nx-sub">Ask Claude something — it'll cite your docs.</span>
+          </span>
+          <svg class="nx-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-ghost" data-go="3"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M11 19l-7-7 7-7"/></svg>Back</button>
+        <button class="btn btn-ink">Enter workspace<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="hint-strip">
+    <span>Press <kbd>Enter</kbd> to continue</span>
+    <span class="sep">·</span>
+    <span><span class="v">Step 1</span> of 4</span>
+  </div>
+
+</main>
+
+<aside class="tweaks" id="tweaks">
+  <div class="tweaks-hd"><b>Tweaks · Onboarding</b><button class="tweaks-close" id="tweaks-close">×</button></div>
+  <div class="tweaks-body">
+    <div class="tweaks-section">
+      <h6>Step</h6>
+      <div class="seg2" data-tweak="step">
+        <button data-val="1">1</button>
+        <button data-val="2">2</button>
+        <button data-val="3">3</button>
+        <button data-val="4">4</button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Theme</h6>
+      <div class="seg2" data-tweak="theme">
+        <button data-val="dark">Dark</button>
+        <button data-val="light">Light</button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Accent</h6>
+      <div class="swatches" data-tweak="accent">
+        <button data-val="244,245,247" style="background:#F4F5F7"></button>
+        <button data-val="107,227,155" style="background:#6BE39B"></button>
+        <button data-val="124,156,255" style="background:#7C9CFF"></button>
+        <button data-val="200,162,255" style="background:#C8A2FF"></button>
+        <button data-val="255,179,112" style="background:#FFB370"></button>
+        <button data-val="255,122,138" style="background:#FF7A8A"></button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Background</h6>
+      <div class="seg2" data-tweak="bg">
+        <button data-val="on">On</button>
+        <button data-val="off">Off</button>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<script>
+const TWEAKS = /*EDITMODE-BEGIN*/{
+  "step": "4",
+  "theme": "dark",
+  "accent": "255,179,112",
+  "bg": "on"
+}/*EDITMODE-END*/;
+
+function applyTweaks() {
+  const root = document.documentElement;
+  root.setAttribute('data-theme', TWEAKS.theme);
+  root.style.setProperty('--accent-rgb', TWEAKS.accent);
+  document.querySelector('.bg').style.display = TWEAKS.bg === 'on' ? '' : 'none';
+
+  // step content
+  document.querySelectorAll('.step-content').forEach(el => {
+    el.classList.toggle('active', el.dataset.stepContent === String(TWEAKS.step));
+  });
+  // step indicator
+  document.querySelectorAll('.step').forEach(el => {
+    const n = parseInt(el.dataset.step, 10);
+    const cur = parseInt(TWEAKS.step, 10);
+    el.classList.toggle('active', n === cur);
+    el.classList.toggle('done', n < cur);
+  });
+  // hint strip step number
+  document.querySelector('.hint-strip .v').textContent = 'Step ' + TWEAKS.step;
+
+  document.querySelectorAll('[data-tweak]').forEach(el => {
+    const k = el.dataset.tweak; const v = String(TWEAKS[k]);
+    if (el.classList.contains('seg2') || el.classList.contains('swatches')) {
+      el.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.val === v));
+    }
+  });
+}
+function setTweak(k, v) {
+  TWEAKS[k] = v; applyTweaks();
+  try { window.parent.postMessage({type:'__edit_mode_set_keys', edits:{[k]:v}}, '*'); } catch(e){}
+}
+
+// step navigation
+document.querySelectorAll('[data-go]').forEach(el => {
+  el.addEventListener('click', () => setTweak('step', el.dataset.go));
+});
+document.querySelectorAll('#steps .step').forEach(el => {
+  el.addEventListener('click', () => setTweak('step', el.dataset.step));
+});
+
+// icon picker
+document.querySelectorAll('#icon-picker .icon-opt:not(.upload)').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('#icon-picker .icon-opt').forEach(o => o.classList.remove('selected'));
+    opt.classList.add('selected');
+    document.getElementById('preview-icon').style.background = opt.dataset.grad;
+  });
+});
+// privacy
+document.querySelectorAll('#privacy-row .priv-opt').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('#privacy-row .priv-opt').forEach(o => o.classList.remove('selected'));
+    opt.classList.add('selected');
+  });
+});
+// slug sync
+const wsName = document.getElementById('ws-name');
+const wsSlug = document.getElementById('ws-slug');
+const previewUrl = document.getElementById('preview-url');
+const previewIcon = document.getElementById('preview-icon');
+function syncSlug() {
+  const slug = wsName.value.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  wsSlug.value = slug;
+  previewUrl.innerHTML = `<span class="slug">${slug || 'your-workspace'}</span>.mnema.app`;
+  previewIcon.textContent = (wsName.value[0] || 'W').toUpperCase();
+}
+wsName.addEventListener('input', syncSlug);
+
+// add invite row
+document.getElementById('add-invite').addEventListener('click', () => {
+  const list = document.getElementById('invite-list');
+  const row = document.createElement('div');
+  row.className = 'invite-row';
+  row.innerHTML = `<div class="input-wrap"><input type="email" placeholder="teammate@boppl.in" /></div><button class="role-pick">Editor<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button><button class="remove" aria-label="Remove"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`;
+  row.querySelector('.remove').addEventListener('click', () => row.remove());
+  list.appendChild(row);
+});
+document.querySelectorAll('.invite-row .remove').forEach(b => {
+  b.addEventListener('click', () => b.closest('.invite-row').remove());
+});
+
+// tweak bindings
+document.querySelectorAll('.seg2[data-tweak], .swatches[data-tweak]').forEach(el => {
+  el.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    setTweak(el.dataset.tweak, b.dataset.val);
+  });
+});
+(function() {
+  const panel = document.getElementById('tweaks');
+  const close = document.getElementById('tweaks-close');
+  window.addEventListener('message', e => {
+    const m = e.data; if (!m || !m.type) return;
+    if (m.type === '__activate_edit_mode') panel.classList.add('active');
+    if (m.type === '__deactivate_edit_mode') {
+      panel.classList.remove('active');
+      try { window.parent.postMessage({type:'__edit_mode_dismissed'}, '*'); } catch(e){}
+    }
+  });
+  close.addEventListener('click', () => {
+    panel.classList.remove('active');
+    try { window.parent.postMessage({type:'__edit_mode_dismissed'}, '*'); } catch(e){}
+  });
+  try { window.parent.postMessage({type:'__edit_mode_available'}, '*'); } catch(e){}
+})();
+
+applyTweaks();
+</script>
+</body>
+</html>

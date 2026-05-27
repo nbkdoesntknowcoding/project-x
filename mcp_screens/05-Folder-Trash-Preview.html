@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1000" />
+<title>Mnema MCP · trash_folder</title>
+<link rel="stylesheet" href="_mcp.css" />
+<style>
+/* ============================================================
+   FOLDER TRASH PREVIEW
+   destructive surface — restraint, no red flood, just a coral
+   accent on the action button and a single warning line.
+   ============================================================ */
+.ft-summary {
+  display: flex; align-items: flex-start; gap: 18px;
+  padding: 22px 22px;
+}
+.ft-folder {
+  width: 84px; height: 64px;
+  position: relative;
+  flex-shrink: 0;
+  filter: drop-shadow(0 6px 14px rgba(0,0,0,0.45));
+}
+.ft-folder svg { display: block; }
+
+.ft-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.ft-title-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ft-title { font: 500 22px/1.2 var(--sans); letter-spacing: -0.02em; color: var(--ink); margin: 0; }
+.ft-path { font: 500 12px/1 var(--mono); color: var(--ink-muted); }
+.ft-lede { font: 400 14px/1.5 var(--sans); color: var(--ink-soft); max-width: 600px; margin: 0; }
+
+/* Impact stats */
+.ft-impact {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 0 22px 22px;
+}
+.ft-stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.ft-stat .num { font: 600 28px/1 var(--sans); letter-spacing: -0.02em; color: var(--ink); }
+.ft-stat .lbl {
+  font: 500 10.5px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.ft-stat.warn { border-color: rgba(255,122,138,0.32); background: rgba(255,122,138,0.04); }
+.ft-stat.warn .num { color: var(--status-error); }
+
+/* Warning callout */
+.ft-callout {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px;
+  margin: 0 22px 22px;
+  background: rgba(255,122,138,0.06);
+  border: 1px solid rgba(255,122,138,0.20);
+  border-radius: 7px;
+}
+.ft-callout svg { color: var(--status-error); flex-shrink: 0; }
+.ft-callout p {
+  margin: 0;
+  font: 500 12.5px/1.5 var(--sans);
+  color: var(--ink);
+}
+.ft-callout p .dim { color: var(--ink-soft); font-weight: 400; }
+
+/* Subfolder + doc preview */
+.ft-preview {
+  margin: 0 22px 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.ft-preview-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.ft-preview-head .toggle {
+  font: 500 10.5px/1 var(--mono);
+  color: var(--ink-soft);
+  cursor: pointer; border: 0; background: transparent;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.ft-preview-head .toggle:hover { color: var(--ink); }
+
+.ft-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 70px;
+  align-items: center;
+  padding: 9px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  cursor: default;
+}
+.ft-row:first-of-type { border-top: 0; }
+.ft-row:hover { background: var(--surface-2); }
+.ft-row .name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ft-row .name svg { color: var(--ink-muted); flex-shrink: 0; }
+.ft-row .name .nm { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-row .name .nm .indent { color: var(--ink-faint); display: inline-block; }
+.ft-row.sub .name { padding-left: 18px; }
+.ft-row .kind {
+  font: 500 9.5px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted);
+  padding: 3px 7px; border-radius: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  width: max-content;
+}
+.ft-row .upd { color: var(--ink-muted); font: 500 11px var(--mono); text-align: right; }
+
+/* Restore note */
+.ft-restore {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 22px 22px;
+  padding: 0;
+  font: 400 12px/1.5 var(--sans);
+  color: var(--ink-muted);
+}
+.ft-restore svg { color: var(--ink-muted); }
+.ft-restore .b { color: var(--ink-soft); }
+</style>
+</head>
+<body>
+
+<div class="claude-msg">
+  <div class="claude-msg-head">
+    <span class="claude-bullet"></span>
+    <span>Requesting approval</span>
+    <span class="toolname"><span class="mu">μ</span>mnema.trash_folder</span>
+    <span class="arrow">→</span>
+    <span class="summary">Archive · 22 docs · 3 subfolders</span>
+  </div>
+
+  <div class="m-card">
+    <div class="m-head">
+      <div class="left">
+        <span class="glyph">μ</span>
+        <span class="sep"></span>
+        <span class="tool">trash_folder<span class="args">("f_a17c", path: "/Archive")</span></span>
+      </div>
+      <div class="meta">
+        <span class="pill" style="background: rgba(255,122,138,0.10); color: var(--status-error); border-color: rgba(255,122,138,0.28);">DESTRUCTIVE</span>
+      </div>
+    </div>
+
+    <div class="ft-summary">
+      <div class="ft-folder">
+        <svg width="84" height="64" viewBox="0 0 168 130">
+          <defs>
+            <linearGradient id="ftPaper" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#F5F5F5"/>
+              <stop offset="1" stop-color="#D6D6D6"/>
+            </linearGradient>
+            <linearGradient id="ftFront" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#5C5E64"/>
+              <stop offset="0.45" stop-color="#3E4046"/>
+              <stop offset="1" stop-color="#2C2E33"/>
+            </linearGradient>
+          </defs>
+          <g>
+            <path d="M48 16 L106 16 L116 26 L116 84 Q116 88 112 88 L48 88 Q44 88 44 84 L44 20 Q44 16 48 16 Z" fill="url(#ftPaper)"/>
+            <path d="M106 16 L116 26 L106 26 Z" fill="#B8B8B8"/>
+          </g>
+          <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31 L152 116 Q152 120 148 120 L24 120 Q20 120 20 116 Z" fill="url(#ftFront)"/>
+          <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31"
+            stroke="rgba(255,255,255,0.18)" stroke-width="1" fill="none" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="ft-body">
+        <div class="ft-title-row">
+          <h2 class="ft-title">Move "Archive" to trash?</h2>
+          <span class="ft-path">/Archive  ·  f_a17c</span>
+        </div>
+        <p class="ft-lede">
+          This folder and everything inside it will be moved to <strong style="color:var(--ink);">Trash</strong>.
+          Items in trash are kept for 30 days, then permanently deleted.
+        </p>
+      </div>
+    </div>
+
+    <div class="ft-impact">
+      <div class="ft-stat warn">
+        <span class="num">22</span>
+        <span class="lbl">Docs trashed</span>
+      </div>
+      <div class="ft-stat warn">
+        <span class="num">3</span>
+        <span class="lbl">Subfolders trashed</span>
+      </div>
+      <div class="ft-stat">
+        <span class="num">2</span>
+        <span class="lbl">Flows reference these</span>
+      </div>
+    </div>
+
+    <div class="ft-callout">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <p>
+        <strong>2 published flows</strong> still cite docs in this folder.
+        <span class="dim">Walks that hit those docs will fail until the flow nodes are updated.</span>
+      </p>
+    </div>
+
+    <div class="ft-preview">
+      <div class="ft-preview-head">
+        <span>Contents · 25 items</span>
+        <button class="toggle">
+          Show all
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      </div>
+
+      <div class="ft-row">
+        <span class="name">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg>
+          <span class="nm">Q3-launch-retro</span>
+        </span>
+        <span class="kind">SUBFOLDER · 8</span>
+        <span class="upd">2 mo ago</span>
+      </div>
+      <div class="ft-row sub">
+        <span class="name">
+          <svg width="13" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          <span class="nm">launch-postmortem.md</span>
+        </span>
+        <span class="kind">DOC</span>
+        <span class="upd">2 mo</span>
+      </div>
+      <div class="ft-row sub">
+        <span class="name">
+          <svg width="13" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          <span class="nm">on-call-rotation.md</span>
+        </span>
+        <span class="kind">DOC</span>
+        <span class="upd">3 mo</span>
+      </div>
+      <div class="ft-row">
+        <span class="name">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg>
+          <span class="nm">Old-pricing-drafts</span>
+        </span>
+        <span class="kind">SUBFOLDER · 11</span>
+        <span class="upd">5 mo ago</span>
+      </div>
+      <div class="ft-row">
+        <span class="name">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg>
+          <span class="nm">Pre-MCP-architecture</span>
+        </span>
+        <span class="kind">SUBFOLDER · 3</span>
+        <span class="upd">6 mo ago</span>
+      </div>
+      <div class="ft-row" style="color: var(--ink-muted); font-style: italic;">
+        <span class="name" style="padding-left: 22px;">
+          <span class="nm">+ 20 more items</span>
+        </span>
+        <span></span>
+        <span></span>
+      </div>
+    </div>
+
+    <div class="ft-restore">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+      <span>Restore from <span class="b">Trash → Archive</span> within 30 days. After that, permanently deleted.</span>
+    </div>
+
+    <div class="m-foot">
+      <div class="left">
+        <span class="kbd-hint"><kbd>⌘</kbd><kbd>↩</kbd>confirm</span>
+        <span class="kbd-hint"><kbd>esc</kbd>cancel</span>
+      </div>
+      <div class="right">
+        <button class="btn btn-ghost">Open in Mnema</button>
+        <button class="btn btn-secondary">Cancel</button>
+        <button class="btn btn-danger">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+          Move to trash
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="claude-msg-after">
+    <p>Heads-up: <strong>2 published flows</strong> cite docs in this folder. You may want to update them before walks start failing.</p>
+    <p class="dim">If you confirm, I'll move the folder and you can restore from Trash within 30 days.</p>
+  </div>
+</div>
+
+</body>
+</html>

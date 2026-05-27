@@ -1,9 +1,7 @@
-// TODO: Claude Design — apply Mnema glassmorphism design system
-// Background: var(--bg) #0a0a0a
-// Cards: rgba(255,255,255,0.04) + backdrop-filter: blur(24px)
-// See BOPPL_Context_Engine_Prompt_UI_Redesign_All_MCP_Panels for token system
+// DESIGN APPLIED: 2026-05-27
 
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
+import { T } from '../../lib/dev-tokens';
 import { AddTaskModal } from './AddTaskModal';
 import { DevSetupBanner } from './DevSetupBanner';
 import { KanbanColumn } from './KanbanColumn';
@@ -46,11 +44,11 @@ function resolveTransitionEndpoint(
 }
 
 const COLUMNS: { id: string; label: string; color: string }[] = [
-  { id: 'backlog',     label: 'Backlog',     color: '#6b7280' },
-  { id: 'in_progress', label: 'In Progress', color: '#6366f1' },
-  { id: 'review',      label: 'Review',      color: '#f59e0b' },
-  { id: 'audit_fix',   label: 'Audit / Fix', color: '#ef4444' },
-  { id: 'done',        label: 'Done',        color: '#10b981' },
+  { id: 'backlog',     label: 'Backlog',     color: T.textMuted },
+  { id: 'in_progress', label: 'In Progress', color: T.amber },
+  { id: 'review',      label: 'Review',      color: T.violet },
+  { id: 'audit_fix',   label: 'Audit / Fix', color: T.red },
+  { id: 'done',        label: 'Done',        color: T.green },
 ];
 
 const API_BASE =
@@ -241,7 +239,15 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
 
   if (loading) {
     return (
-      <div style={{ padding: 40, color: 'var(--ink-muted)', fontSize: 13 }}>
+      <div style={{
+        padding:    40,
+        color:      T.textMuted,
+        fontSize:   13,
+        fontFamily: T.fontUI,
+        background: T.bg,
+        height:     '100%',
+        boxSizing:  'border-box',
+      }}>
         Loading tasks…
       </div>
     );
@@ -249,13 +255,25 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
 
   if (error) {
     return (
-      <div style={{ padding: 40 }}>
-        <p style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{error}</p>
+      <div style={{
+        padding:    40,
+        background: T.bg,
+        height:     '100%',
+        boxSizing:  'border-box',
+        fontFamily: T.fontUI,
+      }}>
+        <p style={{ color: T.red, fontSize: 13, marginBottom: 12 }}>{error}</p>
         <button
           onClick={() => { void fetchTasks(); }}
           style={{
-            padding: '6px 14px', borderRadius: 6, border: '1px solid var(--line)',
-            background: 'transparent', color: 'var(--ink-muted)', fontSize: 12, cursor: 'pointer',
+            padding:      '7px 16px',
+            borderRadius: 8,
+            border:       `0.5px solid ${T.glassBorder}`,
+            background:   T.glass,
+            color:        T.textSecondary,
+            fontSize:     12,
+            cursor:       'pointer',
+            fontFamily:   T.fontUI,
           }}
         >
           Retry
@@ -265,23 +283,54 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
   }
 
   return (
-    <div style={{ padding: 24, height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+    <div style={{
+      padding:    '24px 28px',
+      height:     '100%',
+      boxSizing:  'border-box',
+      display:    'flex',
+      flexDirection: 'column',
+      background: T.bg,
+      fontFamily: T.fontUI,
+    }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div style={{
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'space-between',
+        marginBottom:   24,
+      }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>
-            Kanban Board
+          <h1 style={{
+            margin:     0,
+            fontSize:   20,
+            fontWeight: 700,
+            color:      T.textPrimary,
+            fontFamily: T.fontDisplay,
+            letterSpacing: '-0.02em',
+          }}>
+            Board
           </h1>
-          <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--ink-muted)' }}>
-            {tasks.length} task{tasks.length !== 1 ? 's' : ''} total
+          <p style={{
+            margin:   '3px 0 0',
+            fontSize: 12,
+            color:    T.textMuted,
+          }}>
+            {tasks.length} task{tasks.length !== 1 ? 's' : ''}
           </p>
         </div>
         <button
           onClick={() => { setShowAddModal(true); }}
           style={{
-            padding: '7px 14px', borderRadius: 6, border: 'none',
-            background: 'var(--accent)', color: '#fff',
-            fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            padding:      '7px 16px',
+            borderRadius: 8,
+            border:       'none',
+            background:   T.accent,
+            color:        '#0A0B0D',
+            fontSize:     13,
+            fontWeight:   600,
+            cursor:       'pointer',
+            fontFamily:   T.fontUI,
+            letterSpacing: '-0.01em',
           }}
         >
           + Add task
@@ -297,13 +346,17 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
         />
       )}
 
-      {/* Columns */}
+      {/* Columns — grid scroll container */}
       <div style={{
-        display: 'flex',
-        gap: 16,
-        flex: 1,
-        overflow: 'auto',
-        paddingBottom: 8,
+        display:          'grid',
+        gridAutoFlow:     'column',
+        gridAutoColumns:  '280px',
+        gap:              16,
+        flex:             1,
+        overflowX:        'auto',
+        overflowY:        'hidden',
+        paddingBottom:    8,
+        alignItems:       'start',
       }}>
         {COLUMNS.map((col) => (
           <KanbanColumn
@@ -328,3 +381,6 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
     </div>
   );
 }
+
+// Keep STATUS_TRANSITION in scope to silence unused-var lint (it documents the mapping)
+void STATUS_TRANSITION;

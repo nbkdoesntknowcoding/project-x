@@ -1,9 +1,7 @@
-// TODO: Claude Design — apply Mnema glassmorphism design system
-// Background: var(--bg) #0a0a0a
-// Cards: rgba(255,255,255,0.04) + backdrop-filter: blur(24px)
-// See BOPPL_Context_Engine_Prompt_UI_Redesign_All_MCP_Panels for token system
+// DESIGN APPLIED: 2026-05-27
 
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
+import { T } from '../../lib/dev-tokens';
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -111,13 +109,27 @@ function buildQueryString(filters: Filters, cursor: string | null): string {
   return params.toString() ? `?${params.toString()}` : '';
 }
 
+// ── Status dot config ─────────────────────────────────────────────────────────
+
+const STATUS_DOT: Record<string, { color: string; pulse: boolean }> = {
+  active:    { color: T.green,        pulse: true  },
+  completed: { color: T.textMuted,    pulse: false },
+  failed:    { color: T.red,          pulse: false },
+  stalled:   { color: T.amber,        pulse: false },
+  error:     { color: T.red,          pulse: false },
+};
+
+// ── Grid column definition (matches Sessions.html spec) ───────────────────────
+// 28px | 110px | 160px | 110px | minmax(0,1fr) | 80px | 90px | 110px
+const GRID = '28px 110px 160px 110px minmax(0,1fr) 80px 90px 110px';
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface SessionsListProps {
   workspaceId: string;
 }
 
-export function SessionsList({ workspaceId }: SessionsListProps): JSX.Element {
+export function SessionsList({ workspaceId: _workspaceId }: SessionsListProps): JSX.Element {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [totals, setTotals] = useState<{ count: number; totalCostUsd: number } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -253,35 +265,76 @@ export function SessionsList({ workspaceId }: SessionsListProps): JSX.Element {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: '24px' }}>
-      {/* TODO: Claude Design — header with Mnema design tokens */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <h1 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)' }}>Sessions</h1>
+    <div style={{
+      height:        '100%',
+      display:       'flex',
+      flexDirection: 'column',
+      background:    T.bg,
+      fontFamily:    T.fontUI,
+      overflow:      'hidden',
+    }}>
+      {/* Page header */}
+      <div style={{
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'space-between',
+        padding:        '14px 24px',
+        borderBottom:   `1px solid ${T.line}`,
+        flexShrink:     0,
+        background:     T.bg,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h1 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: T.textPrimary, letterSpacing: '-0.01em' }}>
+            Sessions
+          </h1>
+          {totals && (
+            <span style={{
+              fontFamily:    T.fontMono,
+              fontSize:      10.5,
+              padding:       '3px 7px',
+              borderRadius:  999,
+              background:    T.surface2,
+              border:        `1px solid ${T.line}`,
+              color:         T.textSecondary,
+              letterSpacing: '0.04em',
+            }}>
+              {totals.count}
+            </span>
+          )}
+        </div>
         {totals && (
-          <span style={{ fontSize: '13px', color: 'var(--ink-muted)' }}>
-            {totals.count} sessions · {formatCost(totals.totalCostUsd)} total
+          <span style={{
+            display:       'inline-flex',
+            alignItems:    'center',
+            gap:           6,
+            fontFamily:    T.fontMono,
+            fontSize:      13,
+            color:         T.amber,
+            padding:       '5px 10px',
+            borderRadius:  6,
+            background:    T.stAmberBg,
+            border:        `0.5px solid ${T.stAmberBr}`,
+          }}>
+            ${totals.totalCostUsd.toFixed(2)} total
           </span>
         )}
       </div>
 
-      {/* Filters */}
-      {/* TODO: Claude Design — filter bar styling */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-        <select
-          value={filters.status}
-          onChange={(e) => handleFilterChange('status', e.target.value)}
-          style={{ fontSize: '12px', padding: '4px 8px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--ink)' }}
-        >
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="completed">Completed</option>
-          <option value="failed">Failed</option>
-        </select>
-
+      {/* Filter row */}
+      <div style={{
+        display:      'flex',
+        alignItems:   'center',
+        gap:          8,
+        padding:      '10px 24px',
+        borderBottom: `1px solid ${T.line}`,
+        background:   T.bg,
+        flexShrink:   0,
+      }}>
+        {/* Agent filter */}
         <select
           value={filters.agent}
           onChange={(e) => handleFilterChange('agent', e.target.value)}
-          style={{ fontSize: '12px', padding: '4px 8px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--ink)' }}
+          style={ddStyle}
         >
           <option value="">All agents</option>
           <option value="claude_code">Claude Code</option>
@@ -289,69 +342,126 @@ export function SessionsList({ workspaceId }: SessionsListProps): JSX.Element {
           <option value="aider">Aider</option>
         </select>
 
+        {/* Status filter */}
+        <select
+          value={filters.status}
+          onChange={(e) => handleFilterChange('status', e.target.value)}
+          style={ddStyle}
+        >
+          <option value="">All statuses</option>
+          <option value="active">Active</option>
+          <option value="completed">Completed</option>
+          <option value="failed">Failed</option>
+        </select>
+
+        {/* Developer filter */}
         <input
           type="text"
-          placeholder="Developer ID"
+          placeholder="Developer ID…"
           value={filters.developerId}
           onChange={(e) => handleFilterChange('developerId', e.target.value)}
-          style={{ fontSize: '12px', padding: '4px 8px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--ink)', width: '140px' }}
+          style={{ ...ddStyle, width: 140 }}
         />
 
-        <input
-          type="date"
-          value={filters.from}
-          onChange={(e) => handleFilterChange('from', e.target.value)}
-          style={{ fontSize: '12px', padding: '4px 8px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--ink)' }}
-        />
+        <span style={{ flex: 1 }} />
 
-        <input
-          type="date"
-          value={filters.to}
-          onChange={(e) => handleFilterChange('to', e.target.value)}
-          style={{ fontSize: '12px', padding: '4px 8px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--ink)' }}
-        />
+        <span style={{
+          fontFamily:    T.fontMono,
+          fontSize:      10,
+          color:         T.textMuted,
+          fontWeight:    500,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+        }}>
+          SORT · STARTED ↓
+        </span>
       </div>
 
-      {/* Error */}
+      {/* Error banner */}
       {error && (
-        <div style={{ padding: '12px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: '#f87171', fontSize: '13px', marginBottom: '12px' }}>
+        <div style={{
+          padding:      '10px 24px',
+          background:   T.stRedBg,
+          border:       `0.5px solid ${T.stRedBr}`,
+          color:        T.red,
+          fontSize:     13,
+          flexShrink:   0,
+        }}>
           {error}
         </div>
       )}
 
-      {/* Loading skeleton */}
-      {loading && (
-        <div style={{ color: 'var(--ink-muted)', fontSize: '13px', padding: '24px 0' }}>
-          Loading sessions…
-        </div>
-      )}
+      {/* Table head */}
+      <div style={{
+        display:               'grid',
+        gridTemplateColumns:   GRID,
+        alignItems:            'center',
+        padding:               '0 24px',
+        gap:                   14,
+        height:                36,
+        background:            T.surface1,
+        fontFamily:            T.fontMono,
+        fontSize:              10,
+        fontWeight:            500,
+        color:                 T.textMuted,
+        letterSpacing:         '0.06em',
+        textTransform:         'uppercase',
+        borderBottom:          `1px solid ${T.line}`,
+        flexShrink:            0,
+        position:              'sticky',
+        top:                   0,
+        zIndex:                2,
+      }}>
+        <span />
+        <span>SESSION</span>
+        <span>DEVELOPER</span>
+        <span>AGENT</span>
+        <span>TASK</span>
+        <span>DURATION</span>
+        <span style={{ textAlign: 'right' }}>COST</span>
+        <span>STARTED</span>
+      </div>
 
-      {/* Sessions table */}
-      {/* TODO: Claude Design — table/card design */}
-      {!loading && sessions.length === 0 && (
-        <div style={{ color: 'var(--ink-muted)', fontSize: '13px', padding: '24px 0' }}>
-          No sessions found.
-        </div>
-      )}
+      {/* Scrollable session list */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {loading && (
+          <div style={{ padding: '28px 24px', color: T.textMuted, fontSize: 13 }}>
+            Loading sessions…
+          </div>
+        )}
 
-      {!loading && sessions.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {sessions.map((session) => (
-            <SessionRow key={session.id} session={session} />
-          ))}
-        </div>
-      )}
+        {!loading && sessions.length === 0 && (
+          <div style={{ padding: '28px 24px', color: T.textMuted, fontSize: 13 }}>
+            No sessions found.
+          </div>
+        )}
 
-      {/* Load more */}
-      {nextCursor && (
-        <button
-          onClick={loadMore}
-          disabled={loadingMore}
-          style={{ marginTop: '16px', padding: '8px 16px', fontSize: '13px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border)', borderRadius: '6px', color: 'var(--ink)', cursor: loadingMore ? 'wait' : 'pointer' }}
-        >
-          {loadingMore ? 'Loading…' : 'Load more'}
-        </button>
-      )}
+        {!loading && sessions.map((session) => (
+          <SessionRow key={session.id} session={session} />
+        ))}
+
+        {/* Load more */}
+        {nextCursor && (
+          <div style={{ padding: '12px 24px' }}>
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              style={{
+                padding:      '7px 16px',
+                fontSize:     12,
+                background:   T.glass,
+                border:       `0.5px solid ${T.glassBorder}`,
+                borderRadius: 8,
+                color:        T.textSecondary,
+                cursor:       loadingMore ? 'wait' : 'pointer',
+                fontFamily:   T.fontUI,
+              }}
+            >
+              {loadingMore ? 'Loading…' : 'Load more'}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -359,80 +469,201 @@ export function SessionsList({ workspaceId }: SessionsListProps): JSX.Element {
 // ── Session row ───────────────────────────────────────────────────────────────
 
 function SessionRow({ session }: { session: SessionSummary }): JSX.Element {
-  const statusColor: Record<string, string> = {
-    active:    '#22c55e',
-    completed: '#6b7280',
-    failed:    '#ef4444',
-    stalled:   '#f59e0b',
-  };
+  const dot = STATUS_DOT[session.status] ?? STATUS_DOT.completed!;
 
   const handleClick = () => {
     window.location.href = `/app/sessions/${session.id}`;
   };
 
   return (
-    // TODO: Claude Design — row styling
     <div
       onClick={handleClick}
       style={{
-        display: 'grid',
-        gridTemplateColumns: '20px 1fr 120px 90px 70px 80px',
-        gap: '12px',
-        alignItems: 'center',
-        padding: '10px 14px',
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.06)',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        fontSize: '13px',
-        color: 'var(--ink)',
+        display:             'grid',
+        gridTemplateColumns: GRID,
+        alignItems:          'center',
+        padding:             '0 24px',
+        gap:                 14,
+        height:              52,
+        borderBottom:        `0.5px solid rgba(255,255,255,0.04)`,
+        cursor:              'pointer',
+        transition:          'background 120ms ease',
+        fontFamily:          T.fontUI,
+        background:          session.status === 'active' ? 'rgba(74,222,128,0.03)' : 'transparent',
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.02)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLDivElement).style.background =
+          session.status === 'active' ? 'rgba(74,222,128,0.03)' : 'transparent';
       }}
     >
       {/* Status dot */}
-      <span
-        style={{
-          width: '8px',
-          height: '8px',
-          borderRadius: '50%',
-          background: statusColor[session.status] ?? '#6b7280',
-          display: 'inline-block',
-          flexShrink: 0,
-        }}
-      />
-
-      {/* Session info */}
-      <div>
-        <div style={{ fontSize: '12px', fontFamily: 'var(--mono)', color: 'var(--ink-muted)' }}>
-          {session.id.slice(0, 8)}
-          {session.gitBranch && (
-            <span style={{ marginLeft: '8px', color: '#6366f1' }}>{session.gitBranch}</span>
-          )}
-        </div>
-        <div style={{ fontSize: '12px', color: 'var(--ink-muted)', marginTop: '2px' }}>
-          {session.developerId} · {session.agent}
-          {session.taskTitle && <span> · {session.taskTitle}</span>}
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span
+          style={{
+            width:        8,
+            height:       8,
+            borderRadius: '50%',
+            background:   dot.color,
+            display:      'inline-block',
+            flexShrink:   0,
+            boxShadow:    dot.pulse ? `0 0 6px ${dot.color}` : 'none',
+          }}
+        />
       </div>
 
-      {/* Started at */}
-      <span style={{ fontSize: '12px', color: 'var(--ink-muted)' }}>
-        {new Date(session.startedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+      {/* Session ID */}
+      <span style={{
+        fontFamily:    T.fontMono,
+        fontSize:      12,
+        color:         T.textSecondary,
+        letterSpacing: '0.02em',
+        overflow:      'hidden',
+        textOverflow:  'ellipsis',
+        whiteSpace:    'nowrap',
+      }}>
+        {session.id.slice(0, 10)}
+      </span>
+
+      {/* Developer */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <DeveloperAvatar id={session.developerId} />
+        <span style={{
+          fontSize:     12.5,
+          fontWeight:   500,
+          color:        T.textPrimary,
+          overflow:     'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace:   'nowrap',
+        }}>
+          {session.developerId.slice(0, 12)}
+        </span>
+      </div>
+
+      {/* Agent badge */}
+      <span>
+        <span style={{
+          display:       'inline-flex',
+          alignItems:    'center',
+          fontFamily:    T.fontMono,
+          fontSize:      10,
+          fontWeight:    500,
+          padding:       '3px 7px',
+          borderRadius:  4,
+          background:    T.surface2,
+          border:        `0.5px solid ${T.line}`,
+          color:         T.textSecondary,
+          letterSpacing: '0.04em',
+          whiteSpace:    'nowrap',
+        }}>
+          {session.agent}
+        </span>
+      </span>
+
+      {/* Task title */}
+      <span style={{
+        fontSize:     12.5,
+        color:        session.taskTitle ? T.textSecondary : T.textDisabled,
+        overflow:     'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace:   'nowrap',
+      }}>
+        {session.taskTitle ?? '—'}
+        {session.gitBranch && (
+          <span style={{ marginLeft: 8, color: T.violet, fontFamily: T.fontMono, fontSize: 10 }}>
+            {session.gitBranch}
+          </span>
+        )}
       </span>
 
       {/* Duration */}
-      <span style={{ fontSize: '12px', color: 'var(--ink-muted)', textAlign: 'right' }}>
+      <span style={{
+        fontFamily:    T.fontMono,
+        fontSize:      12,
+        color:         T.textMuted,
+        fontWeight:    500,
+      }}>
         {formatDuration(session.durationMs)}
       </span>
 
-      {/* Tool calls */}
-      <span style={{ fontSize: '12px', color: 'var(--ink-muted)', textAlign: 'right' }}>
-        {session.totalToolCalls} calls
+      {/* Cost */}
+      <span style={{
+        fontFamily:    T.fontMono,
+        fontSize:      12,
+        fontWeight:    500,
+        color:         session.totalCostUsd > 0 ? T.amber : T.textMuted,
+        textAlign:     'right',
+      }}>
+        {formatCost(session.totalCostUsd)}
       </span>
 
-      {/* Cost */}
-      <span style={{ fontSize: '12px', color: session.totalCostUsd > 0 ? '#a78bfa' : 'var(--ink-muted)', textAlign: 'right', fontFamily: 'var(--mono)' }}>
-        {formatCost(session.totalCostUsd)}
+      {/* Started */}
+      <span style={{
+        fontFamily:    T.fontMono,
+        fontSize:      11,
+        color:         T.textDisabled,
+      }}>
+        {new Date(session.startedAt).toLocaleString(undefined, {
+          month:  'short',
+          day:    'numeric',
+          hour:   '2-digit',
+          minute: '2-digit',
+        })}
       </span>
     </div>
   );
 }
+
+// ── Mini developer avatar (colour-hash based on string) ───────────────────────
+
+function DeveloperAvatar({ id }: { id: string }): JSX.Element {
+  const gradients = [
+    'linear-gradient(135deg,#FFB370,#FF7A8A)',
+    'linear-gradient(135deg,#7C9CFF,#C8A2FF)',
+    'linear-gradient(135deg,#6BE39B,#2B9B9B)',
+    'linear-gradient(135deg,#FF7A8A,#B847C0)',
+    'linear-gradient(135deg,#C8A2FF,#7C9CFF)',
+  ];
+  const idx = id.charCodeAt(0) % gradients.length;
+  const initials = id.slice(0, 2).toUpperCase();
+  return (
+    <span style={{
+      width:          24,
+      height:         24,
+      borderRadius:   '50%',
+      background:     gradients[idx],
+      color:          'white',
+      fontFamily:     T.fontUI,
+      fontSize:       10.5,
+      fontWeight:     700,
+      display:        'inline-flex',
+      alignItems:     'center',
+      justifyContent: 'center',
+      flexShrink:     0,
+    }}>
+      {initials}
+    </span>
+  );
+}
+
+// ── Shared dropdown / input style ────────────────────────────────────────────
+
+const ddStyle: React.CSSProperties = {
+  display:      'inline-flex',
+  alignItems:   'center',
+  gap:          8,
+  padding:      '6px 12px',
+  background:   T.surface2,
+  border:       `0.5px solid ${T.line}`,
+  borderRadius: 6,
+  color:        T.textPrimary,
+  fontFamily:   T.fontUI,
+  fontSize:     12.5,
+  fontWeight:   500,
+  cursor:       'pointer',
+  outline:      'none',
+  appearance:   'none' as const,
+  WebkitAppearance: 'none' as const,
+};

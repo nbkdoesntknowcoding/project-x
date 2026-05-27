@@ -1,9 +1,7 @@
-// TODO: Claude Design — apply Mnema glassmorphism design system
-// Background: var(--bg) #0a0a0a
-// Cards: rgba(255,255,255,0.04) + backdrop-filter: blur(24px)
-// See BOPPL_Context_Engine_Prompt_UI_Redesign_All_MCP_Panels for token system
+// DESIGN APPLIED: 2026-05-27
 
 import type { JSX } from 'react';
+import { T, glassCard } from '../../lib/dev-tokens';
 
 export interface Task {
   id: string;
@@ -32,67 +30,97 @@ interface TaskCardProps {
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
-  critical: '#ef4444',
-  high:     '#f97316',
-  medium:   '#eab308',
-  low:      '#6b7280',
+  critical: T.critical,
+  high:     T.high,
+  medium:   T.medium,
+  low:      T.low,
 };
 
 export function TaskCard({ task, isDragging }: TaskCardProps): JSX.Element {
   const priorityColor = PRIORITY_COLORS[task.priority] ?? PRIORITY_COLORS.medium!;
+  const statusColors = T.sbadge[task.status as keyof typeof T.sbadge] ?? T.sbadge.backlog;
 
   return (
     <div
       style={{
-        background: isDragging ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 8,
-        padding: '10px 12px',
-        cursor: 'grab',
-        opacity: isDragging ? 0.8 : 1,
+        ...glassCard,
+        position:  'relative',
+        padding:   '14px 16px 14px 19px',
+        cursor:    'grab',
+        opacity:   isDragging ? 0.7 : 1,
         userSelect: 'none',
+        background: isDragging ? T.glassHover : T.glass,
+        transition: 'opacity 0.15s ease',
+        fontFamily: T.fontUI,
       }}
     >
+      {/* Priority strip — replaces ::before */}
+      <div
+        style={{
+          position:    'absolute',
+          top:         12,
+          bottom:      12,
+          left:        8,
+          width:       3,
+          borderRadius: 2,
+          background:  priorityColor,
+          flexShrink:  0,
+        }}
+      />
+
       {/* Title */}
       <p style={{
-        margin: 0,
-        fontSize: 13,
-        fontWeight: 500,
-        color: 'var(--ink)',
-        display: '-webkit-box',
-        WebkitLineClamp: 2,
-        WebkitBoxOrient: 'vertical',
-        overflow: 'hidden',
+        margin:             0,
+        fontSize:           13,
+        fontWeight:         500,
+        color:              T.textPrimary,
+        display:            '-webkit-box',
+        WebkitLineClamp:    2,
+        WebkitBoxOrient:    'vertical',
+        overflow:           'hidden',
+        lineHeight:         '1.45',
+        marginBottom:       8,
       }}>
         {task.title}
       </p>
 
       {/* Meta row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-        {/* Priority badge */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        {/* Status badge */}
         <span style={{
-          fontSize: 10,
-          fontWeight: 600,
-          padding: '2px 6px',
-          borderRadius: 4,
-          background: `${priorityColor}22`,
-          color: priorityColor,
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
+          display:      'inline-flex',
+          alignItems:   'center',
+          padding:      '2px 7px',
+          borderRadius: 6,
+          fontSize:     11,
+          fontWeight:   500,
+          background:   statusColors.bg,
+          border:       `0.5px solid ${statusColors.border}`,
+          color:        statusColors.text,
+          lineHeight:   '1.6',
         }}>
-          {task.priority}
+          {task.status.replace('_', ' ')}
         </span>
 
         {/* Cost */}
         {task.estimatedCostUsd != null && (
-          <span style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
+          <span style={{
+            fontSize:   11,
+            color:      T.textMuted,
+            fontFamily: T.fontMono,
+          }}>
             ${task.estimatedCostUsd.toFixed(2)}
           </span>
         )}
 
         {/* Linked doc indicator */}
         {task.docId && (
-          <span title="Linked doc" style={{ fontSize: 11 }}>📄</span>
+          <span
+            title="Linked doc"
+            style={{ fontSize: 11, color: T.textMuted, lineHeight: 1 }}
+          >
+            📄
+          </span>
         )}
 
         {/* PR link */}
@@ -102,7 +130,12 @@ export function TaskCard({ task, isDragging }: TaskCardProps): JSX.Element {
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }}
+            style={{
+              fontSize:       11,
+              color:          T.accent,
+              textDecoration: 'none',
+              fontWeight:     500,
+            }}
             title="GitHub PR"
           >
             PR ↗
@@ -111,22 +144,29 @@ export function TaskCard({ task, isDragging }: TaskCardProps): JSX.Element {
 
         {/* Blocker badge */}
         {task.status === 'audit_fix' && task.blockerDescription && (
-          <span title={task.blockerDescription} style={{ color: '#ef4444', fontSize: 13 }}>⚠</span>
+          <span
+            title={task.blockerDescription}
+            style={{ color: T.red, fontSize: 13, lineHeight: 1 }}
+          >
+            ⚠
+          </span>
         )}
       </div>
 
       {/* Tags */}
       {task.tags && task.tags.length > 0 && (
-        <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
           {task.tags.slice(0, 3).map((tag) => (
             <span
               key={tag}
               style={{
-                fontSize: 10,
-                padding: '1px 5px',
-                borderRadius: 3,
-                background: 'rgba(255,255,255,0.06)',
-                color: 'var(--ink-muted)',
+                fontSize:     10,
+                padding:      '2px 6px',
+                borderRadius: 4,
+                background:   T.glass,
+                border:       `0.5px solid ${T.glassBorder}`,
+                color:        T.textMuted,
+                fontFamily:   T.fontMono,
               }}
             >
               {tag}

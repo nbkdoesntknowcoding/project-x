@@ -1,17 +1,10 @@
 ---
-// Phase 2 stub — AI optimization engine
 import AppLayout from '../../layouts/AppLayout.astro';
+import { OptimizationPage } from '../../components/dev/OptimizationPage';
 
 const auth = Astro.locals.auth;
-if (!auth) {
-  return Astro.redirect('/auth/login');
-}
+if (!auth) return Astro.redirect('/auth/login');
 ---
-
 <AppLayout title="Optimize">
-  <div style="padding: 40px; color: var(--ink-muted); font-family: var(--mono);">
-    <!-- TODO: Claude Design — apply Mnema glassmorphism design system -->
-    <h1 style="font-size: 18px; font-weight: 600; color: var(--ink);">Optimize</h1>
-    <p style="margin-top: 8px; font-size: 13px;">AI optimization engine and prompt refinement — available in Phase 2.</p>
-  </div>
+  <OptimizationPage client:load />
 </AppLayout>

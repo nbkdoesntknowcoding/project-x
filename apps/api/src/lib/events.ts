@@ -70,7 +70,8 @@ export type WorkspaceEvent =
   | { type: 'task_updated'; data: TaskUpdatedPayload }
   | { type: 'session_cost_updated'; data: SessionCostUpdatedPayload }
   | { type: 'session_started';      data: SessionStartedPayload }
-  | { type: 'session_ended';        data: SessionEndedPayload };
+  | { type: 'session_ended';        data: SessionEndedPayload }
+  | { type: 'optimization_findings_updated'; data: { newCount: number } };
 
 type WorkspaceEventListener = (event: WorkspaceEvent) => void;
 

@@ -1,0 +1,1145 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Mnema · How Mnema syncs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --canvas:        #0A0B0D;
+  --surface:       #121317;
+  --surface-2:     #181A1F;
+  --surface-3:     #22252B;
+  --line:          rgba(255,255,255,0.05);
+  --line-strong:   rgba(255,255,255,0.10);
+  --line-bright:   rgba(255,255,255,0.20);
+  --ink:           #F4F5F7;
+  --ink-soft:      #B0B4BC;
+  --ink-muted:     #707479;
+  --ink-faint:     #3D4046;
+
+  --accent-rgb:    255, 179, 112;
+  --accent:        rgb(var(--accent-rgb));
+  --accent-soft:   rgba(var(--accent-rgb), 0.13);
+  --accent-line:   rgba(var(--accent-rgb), 0.28);
+
+  --status-sync:   #6BE39B;
+  --status-edit:   #FFB370;
+  --status-warn:   #FF7A8A;
+
+  --on-ink:        #0A0B0D;
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --topbar-h: 40px;
+  --editor-bar-h: 38px;
+  --status-h: 24px;
+  --sidebar-w: 220px;
+  --rail-w: 340px;
+  --r-2: 4px; --r-3: 6px; --r-4: 8px;
+}
+[data-theme="light"] {
+  --canvas: #F5F5F3;
+  --surface: #FBFBFA;
+  --surface-2: #EEEEEB;
+  --surface-3: #E3E3DF;
+  --line: rgba(10,11,13,0.06);
+  --line-strong: rgba(10,11,13,0.12);
+  --line-bright: rgba(10,11,13,0.22);
+  --ink: #0A0B0D;
+  --ink-soft: #424650;
+  --ink-muted: #80858E;
+  --ink-faint: #B8BCC2;
+  --on-ink: #FFFFFF;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 12px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+  overflow: hidden;
+}
+button { font-family: inherit; }
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; }
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr var(--rail-w);
+  grid-template-rows: var(--topbar-h) var(--editor-bar-h) 1fr var(--status-h);
+  grid-template-areas:
+    "topbar topbar topbar"
+    "sidebar editbar rail"
+    "sidebar main rail"
+    "status status status";
+  height: 100vh;
+}
+.app[data-rail="off"] { grid-template-columns: var(--sidebar-w) 1fr 0; }
+.app[data-rail="off"] .rail { display: none; }
+
+/* ============================================================
+   TOPBAR
+   ============================================================ */
+.topbar {
+  grid-area: topbar;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.tb-left { display: flex; align-items: center; gap: 8px; }
+.brand {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: 600 12.5px/1 var(--sans); color: var(--ink); text-decoration: none;
+}
+.brand .glyph {
+  width: 20px; height: 20px; border-radius: 5px;
+  background: var(--ink); color: var(--on-ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 500 13px/1 var(--sans); padding-bottom: 1px;
+  position: relative;
+}
+.brand .glyph::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%); }
+.tb-sep { width: 1px; height: 14px; background: var(--line-strong); }
+.ws-switch {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 6px 3px 4px; border-radius: 5px;
+  background: transparent; border: 1px solid transparent;
+  cursor: pointer; color: var(--ink);
+  font: 500 12px/1 var(--sans);
+}
+.ws-switch:hover { background: var(--surface-2); border-color: var(--line); }
+.ws-avatar {
+  width: 14px; height: 14px; border-radius: 4px;
+  background: linear-gradient(135deg, #7C9CFF, #C8A2FF);
+  color: white; font-weight: 700; font-size: 8.5px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.ws-chev { color: var(--ink-muted); }
+
+.crumbs {
+  display: flex; align-items: center; gap: 6px;
+  font: 500 12px/1 var(--sans);
+  color: var(--ink-muted);
+  flex: 1; justify-content: center;
+}
+.crumbs .here { color: var(--ink); font-weight: 600; }
+.crumbs .sep { color: var(--ink-faint); font-size: 9px; }
+
+.tb-right { display: flex; align-items: center; gap: 2px; }
+.icon-btn {
+  width: 24px; height: 24px; border-radius: 4px;
+  background: transparent; border: 0;
+  color: var(--ink-muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+.share-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 8px; border-radius: 5px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--ink); cursor: pointer;
+  font: 500 11.5px/1 var(--sans);
+  margin-left: 3px;
+}
+.share-btn:hover { background: var(--surface-3); }
+.user-chip {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: linear-gradient(135deg, rgba(var(--accent-rgb),0.95), rgba(255,122,138,0.95));
+  color: var(--on-ink); font: 700 9.5px/1 var(--sans);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; margin-left: 4px;
+}
+
+/* ============================================================
+   SIDEBAR — TABLE OF CONTENTS
+   ============================================================ */
+.sidebar {
+  grid-area: sidebar;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  padding: 16px 12px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.toc-head {
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted);
+  padding: 0 6px 4px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.toc-head .progress {
+  font: 500 10px/1 var(--mono);
+  color: var(--ink-faint);
+}
+
+.toc {
+  display: flex; flex-direction: column;
+  position: relative;
+}
+.toc::before {
+  content: ""; position: absolute;
+  left: 9px; top: 6px; bottom: 6px;
+  width: 1px;
+  background: var(--line);
+}
+.toc-item {
+  position: relative;
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 5px 6px 5px 18px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink-muted);
+  font: 400 12px/1.4 var(--sans);
+  text-decoration: none;
+}
+.toc-item::before {
+  content: ""; position: absolute;
+  left: 7px; top: 11px;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  border: 1.5px solid var(--surface);
+  z-index: 1;
+}
+.toc-item:hover { color: var(--ink); background: var(--surface-2); }
+.toc-item.active { color: var(--ink); }
+.toc-item.active::before {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.18);
+}
+.toc-item.h2 { padding-left: 30px; font-size: 11.5px; }
+.toc-item.h2::before { left: 19px; width: 4px; height: 4px; background: var(--ink-faint); }
+.toc-item.h2.active::before { background: var(--accent); }
+
+.toc-divider {
+  height: 1px; background: var(--line); margin: 8px 0 4px;
+}
+.toc-foot {
+  margin-top: auto;
+  padding: 10px 8px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.toc-foot .meta-row {
+  display: flex; justify-content: space-between;
+  font: 500 10.5px/1 var(--mono);
+  color: var(--ink-muted);
+}
+.toc-foot .meta-row .v { color: var(--ink-soft); }
+
+/* ============================================================
+   EDITOR TOOLBAR (NEW)
+   ============================================================ */
+.editbar {
+  grid-area: editbar;
+  display: flex; align-items: center; gap: 2px;
+  padding: 0 16px;
+  background: var(--canvas);
+  border-bottom: 1px solid var(--line);
+}
+.eb-group { display: flex; align-items: center; gap: 1px; }
+.eb-sep { width: 1px; height: 16px; background: var(--line); margin: 0 6px; }
+
+.eb-btn {
+  height: 26px; min-width: 26px; padding: 0 6px;
+  border: 0; background: transparent;
+  border-radius: 4px;
+  color: var(--ink-muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  font: 500 12px/1 var(--sans);
+}
+.eb-btn:hover { background: var(--surface-2); color: var(--ink); }
+.eb-btn.active { background: var(--surface-2); color: var(--ink); }
+.eb-btn .lbl { color: inherit; }
+
+.eb-heading-pick {
+  height: 26px; padding: 0 8px 0 8px;
+  border: 0; background: transparent;
+  border-radius: 4px;
+  color: var(--ink); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 500 12px/1 var(--sans);
+}
+.eb-heading-pick:hover { background: var(--surface-2); }
+.eb-heading-pick svg { color: var(--ink-muted); }
+
+.eb-spacer { flex: 1; }
+.eb-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 8px 3px 7px;
+  border-radius: 999px;
+  background: rgba(107,227,155,0.08);
+  border: 1px solid rgba(107,227,155,0.22);
+  color: var(--status-sync);
+  font: 500 11px/1 var(--sans);
+}
+.eb-status.editing {
+  background: rgba(255,179,112,0.08);
+  border-color: rgba(255,179,112,0.22);
+  color: var(--status-edit);
+}
+.eb-status .sig {
+  width: 5px; height: 5px; border-radius: 50%; background: currentColor;
+  box-shadow: 0 0 5px currentColor;
+  opacity: 0.85;
+}
+.eb-ai {
+  height: 26px; padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface-2);
+  border-radius: 5px; cursor: pointer;
+  color: var(--ink);
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 500 11.5px/1 var(--sans);
+}
+.eb-ai:hover { background: var(--surface-3); border-color: var(--line-bright); }
+.eb-ai .acc {
+  color: var(--accent);
+}
+.eb-ai .shortcut {
+  font: 500 10px/1 var(--mono);
+  padding: 2px 4px; border-radius: 3px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  color: var(--ink-muted);
+}
+
+/* ============================================================
+   MAIN — DOC SURFACE
+   ============================================================ */
+.main {
+  grid-area: main;
+  overflow-y: auto;
+  position: relative;
+}
+.doc {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 42px 32px 160px;
+}
+.doc-meta {
+  display: flex; align-items: center; gap: 12px;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--ink-muted);
+  margin-bottom: 18px;
+}
+.doc-meta .avs { display: inline-flex; }
+.doc-meta .avs .av {
+  width: 16px; height: 16px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 700 8.5px var(--sans); color: white;
+  border: 1.5px solid var(--canvas);
+  margin-left: -5px;
+}
+.doc-meta .avs .av:first-child { margin-left: 0; }
+.doc-meta .avs .av.a { background: linear-gradient(135deg, #FFB370, #FF7A8A); }
+.doc-meta .avs .av.b { background: linear-gradient(135deg, #7C9CFF, #C8A2FF); }
+.doc-meta .avs .av.c { background: linear-gradient(135deg, #6BE39B, #2B9B9B); }
+
+.doc h1 {
+  margin: 0 0 24px;
+  font: 700 26px/1.2 var(--sans);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.doc h2 {
+  margin: 32px 0 10px;
+  font: 600 15px/1.35 var(--sans);
+  letter-spacing: -0.005em;
+}
+.doc h3 {
+  margin: 22px 0 8px;
+  font: 600 12.5px/1.4 var(--sans);
+}
+.doc p {
+  margin: 0 0 14px;
+  font: 400 13px/1.65 var(--sans);
+  color: var(--ink-soft);
+}
+.doc p strong { color: var(--ink); font-weight: 600; }
+.doc a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--ink-faint);
+  text-underline-offset: 3px;
+}
+.doc a:hover { text-decoration-color: var(--accent); }
+.doc code {
+  font: 500 11.5px/1 var(--mono);
+  padding: 2px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--ink);
+  vertical-align: 1px;
+}
+.doc ul { margin: 0 0 14px; padding-left: 18px; }
+.doc ul li {
+  font: 400 13px/1.65 var(--sans);
+  color: var(--ink-soft);
+  padding: 1px 0;
+}
+.doc ul li::marker { color: var(--ink-muted); }
+
+.callout {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin: 14px 0 18px; padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--status-edit);
+  border-radius: 6px;
+}
+.callout .av {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: linear-gradient(135deg, #7C9CFF, #C8A2FF);
+  color: white; font: 700 9.5px/1 var(--sans);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 1px;
+}
+.callout .body {
+  flex: 1;
+  font: 400 12px/1.5 var(--sans);
+  color: var(--ink-soft);
+}
+.callout .body b { color: var(--ink); font-weight: 600; }
+.callout .live {
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--status-edit);
+}
+
+.code-block {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 12px 0 18px;
+  overflow: hidden;
+}
+.code-block .head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  font: 500 10.5px/1 var(--mono);
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+  background: var(--surface-2);
+}
+.code-block .head button {
+  background: transparent; border: 0;
+  color: var(--ink-muted); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+  font: 500 10.5px/1 var(--mono);
+}
+.code-block .head button:hover { color: var(--ink); }
+.code-block pre {
+  margin: 0; padding: 11px 14px;
+  font: 500 11.5px/1.65 var(--mono);
+  color: var(--ink-soft);
+}
+.code-block .k { color: var(--accent); }
+.code-block .s { color: var(--status-sync); }
+.code-block .c { color: var(--ink-faint); font-style: italic; }
+.code-block .v { color: #7C9CFF; }
+
+.add-block {
+  margin: 18px 0 0;
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 10px; border-radius: 5px;
+  color: var(--ink-muted);
+  font: 400 12px/1 var(--sans);
+  cursor: text;
+}
+.add-block:hover { background: var(--surface); color: var(--ink-soft); }
+.add-block .plus {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--line);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* ============================================================
+   RIGHT RAIL — MODERN CHAT (Claude)
+   ============================================================ */
+.rail {
+  grid-area: rail;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.rail-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.rail-head .title {
+  display: flex; align-items: center; gap: 8px;
+}
+.rail-head .title .glyph {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: linear-gradient(135deg, #FFB370, #FF7A8A);
+  color: white; font: 700 11px/1 var(--sans);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.rail-head .title .name {
+  font: 600 13px/1 var(--sans); color: var(--ink);
+}
+.rail-head .title .name .model {
+  font: 500 10px/1 var(--mono);
+  color: var(--ink-muted); margin-left: 6px;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.rail-head .actions { display: flex; gap: 1px; }
+.rail-head .actions button {
+  width: 22px; height: 22px; border: 0; background: transparent;
+  border-radius: 4px; color: var(--ink-muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.rail-head .actions button:hover { background: var(--surface-2); color: var(--ink); }
+
+.rail-body {
+  flex: 1; overflow-y: auto;
+  padding: 16px 14px 16px;
+  display: flex; flex-direction: column; gap: 18px;
+}
+.day-divider {
+  text-align: center;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 4px 0;
+}
+
+/* USER MESSAGE — right-aligned bubble */
+.msg-user {
+  align-self: flex-end;
+  max-width: 80%;
+  background: var(--surface-2);
+  border-radius: 14px 14px 4px 14px;
+  padding: 8px 12px;
+  font: 400 12.5px/1.5 var(--sans);
+  color: var(--ink);
+}
+
+/* AI MESSAGE — left-aligned, no bubble */
+.msg-ai {
+  display: flex; gap: 10px;
+  max-width: 100%;
+}
+.msg-ai .av {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: linear-gradient(135deg, #FFB370, #FF7A8A);
+  color: white; font: 700 11px/1 var(--sans);
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.msg-ai .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.msg-ai .body p {
+  margin: 0;
+  font: 400 12.5px/1.55 var(--sans);
+  color: var(--ink-soft);
+}
+.msg-ai .body p strong { color: var(--ink); font-weight: 600; }
+.msg-ai .body a.cite {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--ink-faint);
+  text-underline-offset: 3px;
+}
+.msg-ai .body a.cite:hover { text-decoration-color: var(--accent); }
+.msg-ai .body em.quote {
+  display: block;
+  padding-left: 10px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink-muted);
+  font-style: italic;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* TOOL CALL — collapsible inline strip */
+.tc {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: 500 11px/1 var(--mono);
+  color: var(--ink-soft);
+  cursor: pointer;
+  user-select: none;
+}
+.tc:hover { border-color: var(--line-strong); }
+.tc .lbl {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--accent);
+}
+.tc .name { color: var(--ink); }
+.tc .arg { color: var(--ink-muted); }
+.tc .time {
+  margin-left: auto;
+  color: var(--ink-muted);
+  font-size: 10.5px;
+}
+.tc .check {
+  width: 12px; height: 12px;
+  color: var(--status-sync);
+}
+
+/* CITATIONS */
+.cites {
+  display: flex; flex-wrap: wrap; gap: 5px;
+  margin-top: 4px;
+}
+.cite-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px 3px 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font: 500 10.5px/1 var(--sans);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.cite-chip:hover { color: var(--ink); border-color: var(--line-strong); }
+.cite-chip .n {
+  width: 13px; height: 13px; border-radius: 50%;
+  background: var(--accent); color: var(--on-ink);
+  font: 700 8px/1 var(--sans);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+.msg-actions {
+  display: flex; gap: 2px; margin-top: 2px;
+}
+.msg-actions button {
+  width: 22px; height: 22px; border: 0;
+  background: transparent; cursor: pointer;
+  color: var(--ink-faint); border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.msg-actions button:hover { background: var(--surface-2); color: var(--ink-soft); }
+
+/* COMPOSER */
+.composer {
+  padding: 10px 14px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.composer-card {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 8px 6px;
+  transition: border-color 140ms ease;
+}
+.composer-card:focus-within { border-color: var(--accent-line); }
+.composer-card textarea {
+  width: 100%;
+  background: transparent; border: 0; outline: 0;
+  color: var(--ink);
+  font: 400 12.5px/1.45 var(--sans);
+  padding: 4px 6px 2px;
+  resize: none;
+  height: 22px; max-height: 100px;
+  overflow: hidden;
+  display: block;
+}
+.composer-card textarea::placeholder { color: var(--ink-muted); }
+.composer-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 2px 0;
+}
+.composer-row .lhs { display: flex; align-items: center; gap: 1px; }
+.composer-row .lhs button {
+  width: 26px; height: 26px; border: 0; background: transparent;
+  border-radius: 4px; color: var(--ink-muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.composer-row .lhs button:hover { background: var(--surface-3); color: var(--ink); }
+.model-pick {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 8px; border-radius: 5px;
+  border: 0; background: transparent;
+  color: var(--ink-soft); cursor: pointer;
+  font: 500 11px/1 var(--sans);
+}
+.model-pick:hover { background: var(--surface-3); color: var(--ink); }
+.model-pick svg { color: var(--ink-muted); }
+.send {
+  width: 28px; height: 28px; border-radius: 7px;
+  border: 0; background: var(--ink); color: var(--on-ink);
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 140ms ease;
+}
+.send:hover { background: rgba(255,255,255,0.92); }
+[data-theme="light"] .send:hover { background: #1A1B1F; }
+.composer-meta {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 6px;
+  font: 500 10.5px/1 var(--mono);
+  color: var(--ink-faint);
+  padding: 0 4px;
+}
+.composer-meta .ctx {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--ink-muted);
+}
+.composer-meta .ctx .sig {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--status-sync);
+  box-shadow: 0 0 4px var(--status-sync);
+}
+.composer-meta .ctx .v { color: var(--ink-soft); }
+
+/* ============================================================
+   STATUS BAR
+   ============================================================ */
+.statusbar {
+  grid-area: status;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  font: 500 10.5px/1 var(--mono);
+  color: var(--ink-muted);
+}
+.statusbar .left, .statusbar .right { display: flex; align-items: center; gap: 12px; }
+.statusbar .item { display: flex; align-items: center; gap: 5px; }
+.statusbar .sep { width: 1px; height: 11px; background: var(--line); }
+.statusbar .sig {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--status-sync);
+  box-shadow: 0 0 4px var(--status-sync);
+}
+.statusbar .v { color: var(--ink-soft); font-weight: 600; }
+
+/* ============================================================
+   TWEAKS
+   ============================================================ */
+.tweaks {
+  position: fixed; right: 14px; bottom: calc(var(--status-h) + 12px); z-index: 60;
+  width: 240px;
+  background: rgba(18,19,23,0.96);
+  backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  color: var(--ink); font-size: 11px;
+  display: none;
+}
+[data-theme="light"] .tweaks { background: rgba(255,255,255,0.96); border-color: rgba(10,11,13,0.08); }
+.tweaks.active { display: block; }
+.tweaks-hd { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+[data-theme="light"] .tweaks-hd { border-color: rgba(10,11,13,0.06); }
+.tweaks-hd b { font: 600 11.5px var(--sans); }
+.tweaks-close { border: 0; background: transparent; color: var(--ink-muted); width: 20px; height: 20px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+.tweaks-close:hover { background: rgba(255,255,255,0.05); color: var(--ink); }
+.tweaks-body { padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 11px; }
+.tweaks-section { display: flex; flex-direction: column; gap: 6px; }
+.tweaks-section h6 { margin: 4px 0 0; font: 500 9.5px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
+.tweaks .seg2 { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 5px; padding: 2px; }
+[data-theme="light"] .tweaks .seg2 { background: rgba(10,11,13,0.04); border-color: rgba(10,11,13,0.06); }
+.tweaks .seg2 button { border: 0; background: transparent; cursor: pointer; font: 500 11px var(--sans); padding: 4px 5px; border-radius: 4px; color: var(--ink-muted); }
+.tweaks .seg2 button.active { background: var(--ink); color: var(--on-ink); }
+.tweaks .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.tweaks .swatches button { aspect-ratio: 1; border-radius: 4px; cursor: pointer; border: 1px solid rgba(255,255,255,0.1); padding: 0; }
+.tweaks .swatches button.active { outline: 2px solid var(--ink); outline-offset: 2px; }
+.tweaks .toggle { display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: var(--ink); }
+.tweaks .sw { width: 28px; height: 16px; border-radius: 999px; background: rgba(255,255,255,0.1); cursor: pointer; position: relative; }
+[data-theme="light"] .tweaks .sw { background: rgba(10,11,13,0.1); }
+.tweaks .sw::after { content: ""; position: absolute; left: 2px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink-soft); transition: transform 140ms ease; }
+.tweaks .sw.on { background: var(--ink); }
+.tweaks .sw.on::after { transform: translateX(12px); background: var(--canvas); }
+</style>
+</head>
+<body>
+
+<div class="app" id="app" data-rail="on">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="tb-left">
+      <a href="#" class="brand"><span class="glyph">μ</span><span>Mnema</span></a>
+      <span class="tb-sep"></span>
+      <button class="ws-switch">
+        <span class="ws-avatar">B</span>
+        <span>boppl-design</span>
+        <svg class="ws-chev" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+    </div>
+    <div class="crumbs">
+      <span>General Knowledge</span>
+      <svg class="sep" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>
+      <span>Architecture</span>
+      <svg class="sep" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>
+      <span class="here">How Mnema syncs</span>
+    </div>
+    <div class="tb-right">
+      <button class="icon-btn" title="Search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+      <button class="icon-btn" title="History"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg></button>
+      <button class="share-btn"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><path d="M12 2v13"/></svg>Share</button>
+      <button class="user-chip" title="Kevin">K</button>
+    </div>
+  </header>
+
+  <!-- SIDEBAR — TABLE OF CONTENTS -->
+  <aside class="sidebar">
+    <div class="toc-head">
+      <span>On this page</span>
+      <span class="progress">3 / 5</span>
+    </div>
+    <div class="toc">
+      <a class="toc-item" href="#intro">Introduction</a>
+      <a class="toc-item active" href="#mcp-read">MCP read path</a>
+      <a class="toc-item h2" href="#search">Hybrid search</a>
+      <a class="toc-item h2" href="#snapshot">Snapshot serialisation</a>
+      <a class="toc-item" href="#matters">Why this matters</a>
+      <a class="toc-item" href="#audit">Audit log</a>
+    </div>
+
+    <div class="toc-divider"></div>
+
+    <div class="toc-head" style="padding-top: 4px;">
+      <span>Linked docs</span>
+    </div>
+    <div style="display:flex; flex-direction:column; gap: 1px; padding: 0 4px;">
+      <a class="toc-item" style="padding-left: 8px;" href="#">→ Yjs &amp; Hocuspocus</a>
+      <a class="toc-item" style="padding-left: 8px;" href="#">→ Rate limits</a>
+      <a class="toc-item" style="padding-left: 8px;" href="#">→ MCP tool ref</a>
+    </div>
+
+    <div class="toc-foot">
+      <div class="meta-row"><span>v427</span><span class="v">3 editors</span></div>
+      <div class="meta-row"><span>412 words</span><span class="v">5 blocks</span></div>
+    </div>
+  </aside>
+
+  <!-- EDITOR TOOLBAR -->
+  <div class="editbar">
+    <div class="eb-group">
+      <button class="eb-heading-pick" title="Block type">
+        <span>Heading 1</span>
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+    </div>
+    <span class="eb-sep"></span>
+    <div class="eb-group">
+      <button class="eb-btn" title="Bold (⌘B)"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h7a4 4 0 0 1 3 6.7A4 4 0 0 1 14 18H7zm2 2v4h5a2 2 0 1 0 0-4zm0 6v4h5a2 2 0 1 0 0-4z"/></svg></button>
+      <button class="eb-btn" title="Italic"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg></button>
+      <button class="eb-btn" title="Underline"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4v7a6 6 0 0 0 12 0V4"/><line x1="5" y1="21" x2="19" y2="21"/></svg></button>
+      <button class="eb-btn" title="Strikethrough"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M16 4H9a3 3 0 0 0-2.8 4M14 12a4 4 0 0 1 0 8H6"/><line x1="4" y1="12" x2="20" y2="12"/></svg></button>
+      <button class="eb-btn" title="Inline code"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>
+    </div>
+    <span class="eb-sep"></span>
+    <div class="eb-group">
+      <button class="eb-btn" title="Link"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-2 2"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l2-2"/></svg></button>
+      <button class="eb-btn" title="Bulleted list"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1" fill="currentColor" stroke="none"/></svg></button>
+      <button class="eb-btn" title="Numbered list"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="10" y1="6" x2="20" y2="6"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="10" y1="18" x2="20" y2="18"/><path d="M4 6h1v4M4 10h2M5 14H3.5a1.5 1.5 0 1 1 1.5 2.5L3 19h3"/></svg></button>
+      <button class="eb-btn" title="Quote"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z"/></svg></button>
+      <button class="eb-btn" title="Code block"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m10 9-3 3 3 3M14 9l3 3-3 3"/></svg></button>
+    </div>
+    <span class="eb-sep"></span>
+    <button class="eb-btn" title="Comment"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+
+    <div class="eb-spacer"></div>
+
+    <button class="eb-ai">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="color:var(--accent);"><path d="M12 2 9.4 8.6 2 9.5l6 4.6L6 22l6-3.6L18 22l-2-7.9 6-4.6L14.6 8.6z"/></svg>
+      Ask μ
+      <span class="shortcut">⌘ K</span>
+    </button>
+  </div>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="doc">
+      <div class="doc-meta">
+        <span class="avs">
+          <span class="av a">K</span><span class="av b">A</span><span class="av c">M</span>
+        </span>
+        <span>Last edit by Maya · 2s ago</span>
+      </div>
+
+      <h1>How Mnema syncs</h1>
+
+      <p id="intro">Every edit is captured by <a href="#">Yjs</a> and broadcast through <a href="#">Hocuspocus</a> to all connected clients within <strong>50ms</strong>. Persistence flushes to Postgres on a 3-second debounce, batching rapid edits without losing intermediate state.</p>
+
+      <p>Claude reads from this same surface through MCP. Because there is no upload step, the doc Claude reads at 3:14pm is the doc your teammate edited at 3:13pm.</p>
+
+      <div class="callout">
+        <span class="av">A</span>
+        <div class="body"><b>Anton</b> is editing this paragraph</div>
+        <span class="live">● LIVE</span>
+      </div>
+
+      <h2 id="mcp-read">MCP read path</h2>
+      <p>Claude calls <code>get_doc</code> on the MCP server, which returns the markdown of the doc as it exists right now — no caching, no staleness window. The server reads the latest Yjs snapshot from Postgres and serialises it on the wire.</p>
+
+      <h3 id="search">Hybrid search</h3>
+      <p>Search uses a hybrid scorer: <strong>BM25 over titles</strong> plus a <strong>cosine match over chunk embeddings</strong>. The MCP tool <code>search_workspace</code> returns top-k results with surrounding context.</p>
+
+      <div class="code-block">
+        <div class="head">
+          <span>MCP CALL · search_workspace</span>
+          <button><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy</button>
+        </div>
+<pre><span class="c">// returns top-5 results with citations</span>
+<span class="k">POST</span> /mcp/tools/<span class="v">search_workspace</span>
+{
+  <span class="s">"query"</span>: <span class="s">"rate limiting"</span>,
+  <span class="s">"k"</span>: <span class="v">5</span>,
+  <span class="s">"include_chunks"</span>: <span class="v">true</span>
+}</pre>
+      </div>
+
+      <h2 id="matters">Why this matters</h2>
+      <p>Static doc uploads break the moment you edit them. Claude is reading from a snapshot taken whenever you last clicked sync. With Mnema, sync <em>is</em> the read path — there is no upload step to forget.</p>
+
+      <ul>
+        <li>Edits propagate in under 50ms</li>
+        <li>Claude reads the live state, not a copy</li>
+        <li>No re-indexing, no re-uploading</li>
+        <li>Audit log shows every MCP call against your workspace</li>
+      </ul>
+
+      <div class="add-block">
+        <span class="plus"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+        <span>Click to add a block — press <code style="font-size:10.5px;padding:1px 4px;">/</code> for options</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT RAIL — MODERN CLAUDE CHAT -->
+  <aside class="rail">
+    <div class="rail-head">
+      <div class="title">
+        <span class="glyph">C</span>
+        <span class="name">Claude<span class="model">SONNET 4.5</span></span>
+      </div>
+      <div class="actions">
+        <button title="New chat"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button title="History"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg></button>
+        <button title="More"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+      </div>
+    </div>
+
+    <div class="rail-body">
+
+      <div class="day-divider">Today · 3:14 PM</div>
+
+      <div class="msg-user">How long does a doc edit take to reach Claude?</div>
+
+      <div class="msg-ai">
+        <span class="av">C</span>
+        <div class="body">
+          <div class="tc">
+            <span class="lbl"><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>tool</span>
+            <span class="name">get_doc</span>
+            <span class="arg">arch_sync_001</span>
+            <span class="time">52ms</span>
+            <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <p>Edits propagate in <strong>under 50ms</strong> through your MCP connector. From <a class="cite" href="#">How Mnema syncs</a>:</p>
+          <p><em class="quote">Yjs broadcasts to all clients, then persistence flushes to Postgres on a 3-second debounce.</em></p>
+          <p>Because there's no upload step, the doc Claude reads <em>right now</em> is the doc your team edited two seconds ago.</p>
+          <div class="cites">
+            <a class="cite-chip"><span class="n">1</span>How Mnema syncs</a>
+            <a class="cite-chip"><span class="n">2</span>MCP read path</a>
+          </div>
+          <div class="msg-actions">
+            <button title="Copy"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+            <button title="Good"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88z"/></svg></button>
+            <button title="Bad"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88z"/></svg></button>
+            <button title="Regenerate"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="day-divider">Earlier · 2:48 PM</div>
+
+      <div class="msg-user">What's our rate-limit policy on the MCP server?</div>
+
+      <div class="msg-ai">
+        <span class="av">C</span>
+        <div class="body">
+          <div class="tc">
+            <span class="lbl"><svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>tool</span>
+            <span class="name">search_workspace</span>
+            <span class="arg">"rate limiting" · k=3</span>
+            <span class="time">68ms</span>
+            <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <p>Per the <a class="cite" href="#">Rate limits</a> doc: <strong>5,000 calls / month</strong> on Pro, with bursts up to 60 RPS. Free tier is capped at 500/month.</p>
+          <div class="cites">
+            <a class="cite-chip"><span class="n">1</span>Rate limits</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="composer">
+      <div class="composer-card">
+        <textarea placeholder="Ask Claude about this doc…" rows="1"></textarea>
+        <div class="composer-row">
+          <div class="lhs">
+            <button title="Attach"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+            <button class="model-pick"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>Sonnet 4.5<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+          </div>
+          <button class="send" title="Send"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4z"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- STATUS BAR -->
+  <footer class="statusbar">
+    <div class="left">
+      <span class="item">MCP <span class="v">v2025-11-25</span></span>
+    </div>
+    <div class="right">
+      <span class="item">P50 <span class="v">52ms</span></span>
+    </div>
+  </footer>
+</div>
+
+<aside class="tweaks" id="tweaks">
+  <div class="tweaks-hd">
+    <b>Tweaks · Doc Editor</b>
+    <button class="tweaks-close" id="tweaks-close">×</button>
+  </div>
+  <div class="tweaks-body">
+    <div class="tweaks-section">
+      <h6>Font</h6>
+      <div class="seg2" data-tweak="font">
+        <button data-val="Inter">Inter</button>
+        <button data-val="Geist">Geist</button>
+        <button data-val="IBM Plex Sans">Plex</button>
+        <button data-val="system">System</button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Theme</h6>
+      <div class="seg2" data-tweak="theme">
+        <button data-val="dark">Dark</button>
+        <button data-val="light">Light</button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Accent</h6>
+      <div class="swatches" data-tweak="accent">
+        <button data-val="244,245,247" style="background:#F4F5F7"></button>
+        <button data-val="107,227,155" style="background:#6BE39B"></button>
+        <button data-val="124,156,255" style="background:#7C9CFF"></button>
+        <button data-val="200,162,255" style="background:#C8A2FF"></button>
+        <button data-val="255,179,112" style="background:#FFB370"></button>
+        <button data-val="255,122,138" style="background:#FF7A8A"></button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Claude panel</h6>
+      <div class="toggle"><span>Show right panel</span><div class="sw" data-tweak="rail"></div></div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Doc width</h6>
+      <input type="range" min="600" max="900" step="20" data-tweak="docWidth" />
+    </div>
+  </div>
+</aside>
+
+<script>
+const TWEAKS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "accent": "255,179,112",
+  "font": "Inter",
+  "rail": true,
+  "docWidth": 760
+}/*EDITMODE-END*/;
+
+function applyTweaks() {
+  const root = document.documentElement;
+  root.setAttribute('data-theme', TWEAKS.theme);
+  root.style.setProperty('--accent-rgb', TWEAKS.accent);
+  const fontStack = TWEAKS.font === 'system'
+    ? '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif'
+    : `"${TWEAKS.font}", ui-sans-serif, system-ui, sans-serif`;
+  root.style.setProperty('--sans', fontStack);
+  document.querySelectorAll('.doc').forEach(d => d.style.maxWidth = TWEAKS.docWidth + 'px');
+  document.getElementById('app').setAttribute('data-rail', TWEAKS.rail ? 'on' : 'off');
+
+  document.querySelectorAll('[data-tweak]').forEach(el => {
+    const k = el.dataset.tweak; const v = TWEAKS[k];
+    if (el.classList.contains('seg2') || el.classList.contains('swatches')) {
+      el.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.val === v));
+    } else if (el.classList.contains('sw')) {
+      el.classList.toggle('on', !!v);
+    } else if (el.type === 'range') {
+      el.value = v;
+    }
+  });
+}
+function setTweak(k, v) {
+  TWEAKS[k] = v; applyTweaks();
+  try { window.parent.postMessage({type:'__edit_mode_set_keys', edits:{[k]:v}}, '*'); } catch(e){}
+}
+document.querySelectorAll('.seg2[data-tweak], .swatches[data-tweak]').forEach(el => {
+  el.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    setTweak(el.dataset.tweak, b.dataset.val);
+  });
+});
+document.querySelectorAll('.sw[data-tweak]').forEach(el => {
+  el.addEventListener('click', () => setTweak(el.dataset.tweak, !TWEAKS[el.dataset.tweak]));
+});
+document.querySelectorAll('input[type=range][data-tweak]').forEach(el => {
+  el.addEventListener('input', () => setTweak(el.dataset.tweak, parseInt(el.value, 10)));
+});
+
+(function() {
+  const panel = document.getElementById('tweaks');
+  const close = document.getElementById('tweaks-close');
+  window.addEventListener('message', e => {
+    const m = e.data; if (!m || !m.type) return;
+    if (m.type === '__activate_edit_mode') panel.classList.add('active');
+    if (m.type === '__deactivate_edit_mode') {
+      panel.classList.remove('active');
+      try { window.parent.postMessage({type:'__edit_mode_dismissed'}, '*'); } catch(e){}
+    }
+  });
+  close.addEventListener('click', () => {
+    panel.classList.remove('active');
+    try { window.parent.postMessage({type:'__edit_mode_dismissed'}, '*'); } catch(e){}
+  });
+  try { window.parent.postMessage({type:'__edit_mode_available'}, '*'); } catch(e){}
+})();
+
+// Click-to-scroll on TOC, with active state
+document.querySelectorAll('.toc-item').forEach(a => {
+  a.addEventListener('click', e => {
+    const href = a.getAttribute('href');
+    if (!href || href === '#') return;
+    e.preventDefault();
+    const target = document.querySelector(href);
+    if (target) {
+      document.querySelector('.main').scrollTo({ top: target.offsetTop - 40, behavior: 'smooth' });
+      document.querySelectorAll('.toc-item').forEach(x => x.classList.remove('active'));
+      a.classList.add('active');
+    }
+  });
+});
+
+applyTweaks();
+</script>
+</body>
+</html>

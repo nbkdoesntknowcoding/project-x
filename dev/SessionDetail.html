@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Mnema · Session detail</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet" />
+<style>
+:root {
+  /* Match Settings.html (canon Mnema tokens) */
+  --canvas:        #0A0B0D;
+  --surface:       #121317;
+  --surface-2:     #181A1F;
+  --surface-3:     #22252B;
+  --line:          rgba(255,255,255,0.05);
+  --line-strong:   rgba(255,255,255,0.10);
+  --line-bright:   rgba(255,255,255,0.20);
+  --ink:           #F4F5F7;
+  --ink-soft:      #B0B4BC;
+  --ink-muted:     #707479;
+  --ink-faint:     #3D4046;
+
+  --accent-rgb:    255, 179, 112;
+  --accent:        rgb(var(--accent-rgb));
+  --accent-soft:   rgba(var(--accent-rgb), 0.13);
+  --accent-line:   rgba(var(--accent-rgb), 0.28);
+
+  /* Spec status palette */
+  --st-amber:      #fbbf24;
+  --st-amber-bg:   rgba(234,179,8,0.10);
+  --st-amber-br:   rgba(234,179,8,0.22);
+  --st-purple:     #a78bfa;
+  --st-purple-bg:  rgba(139,92,246,0.10);
+  --st-purple-br:  rgba(139,92,246,0.22);
+  --st-red:        #f87171;
+  --st-red-bg:     rgba(239,68,68,0.10);
+  --st-red-br:     rgba(239,68,68,0.22);
+  --st-green:      #4ade80;
+  --st-green-bg:   rgba(34,197,94,0.08);
+  --st-green-br:   rgba(34,197,94,0.18);
+  --st-grey-bg:    rgba(255,255,255,0.05);
+  --st-grey-br:    rgba(255,255,255,0.10);
+
+  --prio-crit:     #ef4444;
+  --prio-high:     #f97316;
+  --prio-med:      #fbbf24;
+  --prio-low:      #a1a1aa;
+
+  --status-sync:   #6BE39B;
+  --status-edit:   #FFB370;
+  --status-warn:   #FF7A8A;
+
+  --on-ink:        #0A0B0D;
+
+  /* Fonts — sidebar uses Inter (matches Settings); main uses Geist */
+  --sans-ui:       "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --sans:          "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono:          "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --serif:         "Instrument Serif", Georgia, serif;
+
+  --topbar-h: 40px;
+  --status-h: 24px;
+  --sidebar-w: 220px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--canvas); color: var(--ink); font-family: var(--sans);
+  font-size: 13px; line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+body::before {
+  /* radial accent vignette for glass refraction */
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse 60% 40% at 50% 20%, rgba(255,255,255,0.025) 0%, transparent 70%);
+}
+button { font-family: inherit; }
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.10) transparent; }
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 4px; }
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: var(--topbar-h) 1fr var(--status-h);
+  grid-template-areas: "topbar topbar" "sidebar main" "status status";
+  height: 100vh; position: relative; z-index: 1;
+}
+
+/* ---------- TOPBAR (from Settings.html) ---------- */
+.topbar { grid-area: topbar; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--line); font-family: var(--sans-ui); }
+.tb-left { display: flex; align-items: center; gap: 8px; }
+.brand { display: inline-flex; align-items: center; gap: 7px; font: 600 12.5px/1 var(--sans-ui); color: var(--ink); text-decoration: none; }
+.brand .glyph { width: 20px; height: 20px; border-radius: 5px; background: var(--ink); color: var(--on-ink); display: inline-flex; align-items: center; justify-content: center; font: 500 13px/1 var(--sans-ui); padding-bottom: 1px; position: relative; }
+.brand .glyph::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%); }
+.tb-sep { width: 1px; height: 14px; background: var(--line-strong); }
+.ws-switch { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 4px; border-radius: 5px; background: transparent; border: 1px solid transparent; cursor: pointer; color: var(--ink); font: 500 12px/1 var(--sans-ui); }
+.ws-switch:hover { background: var(--surface-2); border-color: var(--line); }
+.ws-avatar { width: 14px; height: 14px; border-radius: 4px; background: linear-gradient(135deg, #7C9CFF, #C8A2FF); color: white; font-weight: 700; font-size: 8.5px; display: inline-flex; align-items: center; justify-content: center; }
+.crumbs { display: flex; align-items: center; gap: 6px; font: 500 12px/1 var(--sans-ui); color: var(--ink-muted); flex: 1; justify-content: center; }
+.crumbs .here { color: var(--ink); font-weight: 600; }
+.crumbs .sep { color: var(--ink-faint); font-size: 9px; }
+.tb-right { display: flex; align-items: center; gap: 2px; }
+.icon-btn { width: 24px; height: 24px; border-radius: 4px; background: transparent; border: 0; color: var(--ink-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+.user-chip { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, rgba(var(--accent-rgb),0.95), rgba(255,122,138,0.95)); color: var(--on-ink); font: 700 9.5px/1 var(--sans-ui); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; margin-left: 4px; }
+
+/* ---------- SIDEBAR (Settings.html pattern, expanded for dev-mode) ---------- */
+.sidebar { grid-area: sidebar; background: var(--surface); border-right: 1px solid var(--line); padding: 14px 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; font-family: var(--sans-ui); }
+.sb-section h6 { margin: 0 0 4px; padding: 0 8px; font: 500 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+.sb-list { display: flex; flex-direction: column; gap: 1px; }
+.sb-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-radius: 5px; cursor: pointer; color: var(--ink-soft); font: 500 12px/1 var(--sans-ui); position: relative; text-decoration: none; }
+.sb-item:hover { background: var(--surface-2); color: var(--ink); }
+.sb-item.active { background: var(--surface-2); color: var(--ink); }
+.sb-item.active::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; background: var(--accent); border-radius: 2px; }
+.sb-item.locked { cursor: not-allowed; color: var(--ink-muted); opacity: 0.7; }
+.sb-item.locked:hover { background: transparent; color: var(--ink-muted); }
+.sb-item .l { display: flex; align-items: center; gap: 9px; }
+.sb-item .l svg { color: var(--ink-muted); }
+.sb-item.active .l svg { color: var(--accent); }
+.sb-item .pill { font: 500 9.5px/1 var(--mono); padding: 2px 5px; border-radius: 3px; background: var(--surface-3); color: var(--ink-muted); letter-spacing: 0.04em; }
+.sb-item .pill.acc { background: var(--accent-soft); color: var(--accent); }
+.sb-item .pill.live { background: rgba(107,227,155,0.12); color: var(--status-sync); }
+.sb-foot { margin-top: auto; padding: 10px; border-top: 1px solid var(--line); }
+.plan-card { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.plan-card .row { display: flex; align-items: center; justify-content: space-between; }
+.plan-card .name { font: 600 12px var(--sans-ui); }
+.plan-card .badge { font: 500 9px var(--mono); padding: 2px 6px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); letter-spacing: 0.04em; }
+.plan-card .bar { margin: 8px 0 4px; height: 3px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow: hidden; }
+.plan-card .bar > span { display: block; height: 100%; width: 56%; background: var(--accent); border-radius: 999px; }
+.plan-card .meta { font: 500 10.5px var(--mono); color: var(--ink-muted); display: flex; justify-content: space-between; margin-top: 4px; }
+
+/* ---------- MAIN AREA ---------- */
+.main { grid-area: main; overflow: hidden; display: flex; flex-direction: column; }
+
+/* page header inside main */
+.page-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px; border-bottom: 1px solid var(--line);
+  flex-shrink: 0; background: var(--canvas);
+  position: relative; z-index: 2;
+}
+.page-head .ph-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.page-head h1 { margin: 0; font: 600 16px/1 var(--sans); letter-spacing: -0.01em; color: var(--ink); }
+.page-head .sub { font: 400 12.5px/1 var(--sans-ui); color: var(--ink-muted); }
+.page-head .count-badge { font: 500 10.5px/1 var(--mono); padding: 3px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-soft); letter-spacing: 0.04em; }
+.page-head .ph-right { display: flex; align-items: center; gap: 10px; }
+
+/* shared button shapes used in main */
+.btn { font: 500 12px/1 var(--sans); padding: 7px 12px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; display: inline-flex; align-items: center; gap: 6px; }
+.btn-ink { background: var(--ink); color: var(--on-ink); }
+.btn-ink:hover { background: rgba(255,255,255,0.92); }
+.btn-secondary { background: var(--surface); color: var(--ink); border-color: var(--line-strong); }
+.btn-secondary:hover { background: var(--surface-2); border-color: var(--line-bright); }
+.btn-ghost { background: transparent; color: var(--ink-soft); padding: 7px 12px; border-radius: 6px; }
+.btn-ghost:hover { background: var(--surface-2); color: var(--ink); }
+.btn-accent { background: var(--accent); color: var(--on-ink); }
+.btn-accent:hover { background: rgba(var(--accent-rgb), 0.88); }
+
+/* glass card (for hero metric tiles, modal etc) */
+.glass {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 0.5px solid rgba(255,255,255,0.10);
+  border-radius: 16px;
+}
+.glass-strong {
+  background: rgba(255,255,255,0.07);
+  border: 0.5px solid rgba(255,255,255,0.18);
+}
+
+/* status badges (spec) */
+.sbadge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font: 500 10.5px/1 var(--mono);
+  padding: 4px 9px; border-radius: 6px;
+  border: 0.5px solid var(--st-grey-br);
+  background: var(--st-grey-bg); color: #a1a1aa;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.sbadge.backlog { background: var(--st-grey-bg); border-color: var(--st-grey-br); color: #a1a1aa; }
+.sbadge.progress { background: var(--st-amber-bg); border-color: var(--st-amber-br); color: var(--st-amber); }
+.sbadge.review { background: var(--st-purple-bg); border-color: var(--st-purple-br); color: var(--st-purple); }
+.sbadge.audit { background: var(--st-red-bg); border-color: var(--st-red-br); color: var(--st-red); }
+.sbadge.done { background: var(--st-green-bg); border-color: var(--st-green-br); color: var(--st-green); }
+
+/* doc/agent badges used in cells */
+.tag-mono {
+  display: inline-flex; align-items: center;
+  font: 500 10px/1 var(--mono);
+  padding: 3px 7px; border-radius: 4px;
+  background: var(--surface-2);
+  border: 0.5px solid var(--line);
+  color: var(--ink-soft);
+  letter-spacing: 0.04em;
+}
+.tag-mono.purple { background: var(--st-purple-bg); border-color: var(--st-purple-br); color: var(--st-purple); }
+
+/* avatar */
+.av-sm { width: 24px; height: 24px; border-radius: 50%; background: var(--surface-3); color: var(--ink); font: 600 10.5px/1 var(--sans); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.av-sm.a { background: linear-gradient(135deg, #FFB370, #FF7A8A); color: white; }
+.av-sm.b { background: linear-gradient(135deg, #7C9CFF, #C8A2FF); color: white; }
+.av-sm.c { background: linear-gradient(135deg, #6BE39B, #2B9B9B); color: white; }
+.av-sm.d { background: linear-gradient(135deg, #FF7A8A, #B847C0); color: white; }
+.av-sm.e { background: linear-gradient(135deg, #C8A2FF, #7C9CFF); color: white; }
+
+/* status dots */
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.status-dot.active { background: var(--st-green); box-shadow: 0 0 6px var(--st-green); animation: dot-pulse 2s ease-in-out infinite; }
+.status-dot.completed { background: var(--ink-muted); }
+.status-dot.failed { background: var(--st-red); }
+.status-dot.stalled { background: var(--st-amber); }
+@keyframes dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.5); }
+  50% { box-shadow: 0 0 0 5px rgba(74,222,128,0); }
+}
+
+/* mono cost */
+.mono-cost { font-family: var(--mono); color: var(--st-amber); font-weight: 500; }
+.mono-num { font-family: var(--mono); color: var(--ink-soft); }
+.mono-label { font: 500 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+
+/* STATUS BAR */
+.statusbar { grid-area: status; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; background: var(--surface); border-top: 1px solid var(--line); font: 500 10.5px/1 var(--mono); color: var(--ink-muted); }
+.statusbar .left, .statusbar .right { display: flex; align-items: center; gap: 12px; }
+.statusbar .v { color: var(--ink-soft); font-weight: 600; }
+.statusbar .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--st-green); box-shadow: 0 0 5px var(--st-green); display: inline-block; margin-right: 5px; }
+
+.sd-layout {
+  flex: 1; overflow: hidden;
+  display: grid;
+  grid-template-columns: 280px 1fr 320px;
+  gap: 0;
+  background: var(--canvas);
+}
+.sd-panel { overflow-y: auto; padding: 18px 18px 28px; min-width: 0; }
+.sd-left { border-right: 1px solid var(--line); background: var(--canvas); }
+.sd-mid { background: var(--canvas); }
+.sd-right { border-left: 1px solid var(--line); background: var(--canvas); }
+
+.sd-card { background: rgba(255,255,255,0.04); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 0.5px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 14px 16px; }
+.sd-section { display: flex; flex-direction: column; gap: 10px; padding: 14px 0; }
+.sd-section + .sd-section { border-top: 0.5px solid var(--line); }
+.sd-label { font: 500 10px/1 var(--mono); color: var(--ink-muted); letter-spacing: 0.06em; text-transform: uppercase; }
+
+.sd-meta-stack { display: flex; flex-direction: column; gap: 8px; }
+.sd-meta-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sd-id { font: 500 11px/1 var(--mono); color: var(--ink-muted); letter-spacing: 0.02em; }
+.sd-ts { font: 400 11.5px/1.4 var(--mono); color: var(--ink-faint); }
+.sd-bigcost { font: 500 22px/1 var(--mono); color: var(--st-amber); letter-spacing: -0.01em; margin: 6px 0 2px; }
+.sd-dur { font: 500 11.5px/1 var(--mono); color: var(--ink-soft); }
+.sd-dev { display: flex; align-items: center; gap: 10px; }
+.sd-dev .meta { display: flex; flex-direction: column; gap: 2px; }
+.sd-dev .name { font: 500 12.5px/1 var(--sans-ui); color: var(--ink); }
+.sd-dev .did { font: 500 10.5px/1 var(--mono); color: var(--ink-muted); }
+.sd-task-row { display: flex; align-items: flex-start; gap: 8px; }
+.sd-task-row svg { color: var(--ink-muted); flex-shrink: 0; margin-top: 1px; }
+.sd-task-row .ttext { font: 500 12.5px/1.4 var(--sans-ui); color: var(--ink); }
+.sd-link { font: 500 11.5px/1 var(--sans-ui); color: var(--ink-soft); display: inline-flex; gap: 4px; align-items: center; background: transparent; border: 0; padding: 0; cursor: pointer; }
+.sd-link:hover { color: var(--accent); }
+.sd-git { font: 400 12px/1.4 var(--mono); color: var(--ink-soft); display: flex; flex-direction: column; gap: 5px; }
+.sd-git .row { display: flex; gap: 8px; }
+.sd-git .k { color: var(--ink-muted); width: 56px; flex-shrink: 0; }
+.sd-export {
+  width: 100%; margin-top: 8px;
+  font: 500 12px/1 var(--sans); padding: 9px 12px; border-radius: 6px;
+  background: transparent; border: 0.5px solid var(--line-strong); color: var(--ink-soft);
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.sd-export:hover { color: var(--ink); border-color: var(--line-bright); background: var(--surface-2); }
+
+/* MIDDLE TIMELINE */
+.sd-mid-head { display: flex; align-items: center; gap: 8px; padding: 0 4px 14px; }
+.sd-mid-head .count-badge { font: 500 10px/1 var(--mono); padding: 2px 6px; border-radius: 999px; background: var(--surface-2); border: 0.5px solid var(--line); color: var(--ink-soft); }
+
+.timeline { position: relative; padding-left: 60px; }
+.timeline::before { content: ""; position: absolute; left: 50px; top: 4px; bottom: 4px; width: 1px; background: var(--surface-3); }
+.tl-item { position: relative; margin-bottom: 10px; }
+.tl-item .ts { position: absolute; left: -60px; top: 11px; width: 42px; text-align: right; font: 500 10.5px/1 var(--mono); color: var(--ink-muted); letter-spacing: 0.02em; }
+.tl-item .ts::after { content: ""; position: absolute; right: -12px; top: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--surface-3); border: 2px solid var(--canvas); }
+.tl-item .card2 {
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-radius: 8px;
+  border: 0.5px solid var(--line);
+}
+.tl-item.error .card2 { background: rgba(239,68,68,0.05); border-color: rgba(239,68,68,0.18); }
+.tc-row1 { display: flex; align-items: center; gap: 10px; }
+.tc-tool { font: 500 13px/1 var(--mono); color: var(--ink); }
+.tc-dur {
+  font: 500 10px/1 var(--mono); color: var(--ink-soft);
+  padding: 3px 6px; border-radius: 4px; background: var(--surface-3); border: 0.5px solid var(--line);
+  letter-spacing: 0.04em;
+}
+.tc-tok { margin-left: auto; font: 500 10.5px/1 var(--mono); color: var(--ink-muted); }
+.tc-file { margin-top: 4px; font: 400 11px/1.4 var(--mono); color: var(--ink-soft); word-break: break-all; }
+.tc-err { margin-top: 6px; font: 400 11.5px/1.4 var(--sans-ui); color: var(--st-red); }
+.tc-expand {
+  margin-top: 8px;
+  background: #111111; border: 0.5px solid var(--line); border-radius: 6px;
+  padding: 10px 12px; overflow-x: auto;
+  font: 400 11px/1.55 var(--mono); color: var(--ink-soft);
+}
+.tc-expand .key { color: var(--st-purple); }
+.tc-expand .str { color: var(--st-green); }
+.tc-expand .num { color: var(--st-amber); }
+
+/* RIGHT — files */
+.file-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 6px;
+  cursor: pointer;
+}
+.file-row:hover { background: var(--surface-2); }
+.file-row.active { background: var(--surface-2); }
+.file-row .fp { font: 400 11.5px/1.4 var(--mono); color: var(--ink-soft); flex: 1; min-width: 0; word-break: break-all; }
+.file-row .add { font: 500 10.5px/1 var(--mono); color: var(--st-green); }
+.file-row .rem { font: 500 10.5px/1 var(--mono); color: var(--st-red); }
+
+.diff {
+  margin: 8px 0 12px;
+  background: #0d1117; border: 0.5px solid var(--line); border-radius: 8px;
+  max-height: 300px; overflow: auto;
+  padding: 8px 0;
+}
+.diff-line { display: grid; grid-template-columns: 36px 16px 1fr; gap: 4px; padding: 1px 8px 1px 0; font: 400 11px/1.5 var(--mono); white-space: pre; }
+.diff-line.add { background: rgba(34,197,94,0.08); color: var(--st-green); }
+.diff-line.rem { background: rgba(239,68,68,0.08); color: var(--st-red); }
+.diff-line .ln { text-align: right; color: #3f3f46; }
+.diff-line .mk { color: inherit; }
+.diff-line .ctx { color: var(--ink-faint); }
+.diff-line.ctx { color: var(--ink-muted); }
+
+</style>
+</head>
+<body>
+<div class="app">
+
+<header class="topbar">
+  <div class="tb-left">
+    <a href="#" class="brand"><span class="glyph">μ</span><span>Mnema</span></a>
+    <span class="tb-sep"></span>
+    <button class="ws-switch"><span class="ws-avatar">B</span><span>boppl-design</span><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+  </div>
+  <div class="crumbs">
+    <span>Developer Mode</span>
+    <svg class="sep" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>
+    <span class="here">s_8f2c4a91</span>
+  </div>
+  <div class="tb-right">
+    <button class="icon-btn" title="Search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+    <button class="icon-btn" title="Help"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.1 9.1a3 3 0 1 1 4.4 4l-1.5 1.4M12 17.5h.01"/></svg></button>
+    <button class="user-chip" title="Kevin">K</button>
+  </div>
+</header>
+
+<aside class="sidebar">
+  <div class="sb-section">
+    <h6>Workspace</h6>
+    <div class="sb-list">
+      <a class="sb-item" href="#"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Workspace</span></a>
+      <a class="sb-item" href="#"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Members</span><span class="pill">5</span></a>
+      <a class="sb-item" href="#"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg>Knowledge bases</span></a>
+    </div>
+  </div>
+  <div class="sb-section">
+    <h6>Developer Mode</h6>
+    <div class="sb-list">
+      <a class="sb-item" href="Kanban.html"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg>Kanban</span><span class="pill ">12</span></a>
+      <a class="sb-item active" href="Sessions.html"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>Sessions</span><span class="pill live">LIVE</span></a>
+      <a class="sb-item" href="Cost.html"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Cost</span></a>
+      <div class="sb-item locked"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Team</span><span class="pill" style="display:inline-flex;align-items:center;gap:4px;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>SOON</span></span></div>
+      <a class="sb-item" href="Optimize.html"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m13 2-3 9h6l-3 9"/><path d="M3 12h2M19 12h2"/></svg>Optimize</span><span class="pill ">6</span></a>
+    </div>
+  </div>
+  <div class="sb-section">
+    <h6>Developer</h6>
+    <div class="sb-list">
+      <a class="sb-item" href="#"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>MCP server</span><span class="pill live">LIVE</span></a>
+      <a class="sb-item" href="#"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="8" cy="12" r="1.5"/><path d="M14 12h6"/></svg>API keys</span></a>
+      <a class="sb-item" href="#"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>Audit log</span></a>
+    </div>
+  </div>
+  <div class="sb-section">
+    <h6>Account</h6>
+    <div class="sb-list">
+      <a class="sb-item" href="#"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.38 8.38 0 0 1 13 0"/></svg>Profile</span></a>
+      <a class="sb-item" href="../Settings.html"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Billing</span></a>
+      <a class="sb-item" href="../Settings.html"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</span></a>
+    </div>
+  </div>
+  <div class="sb-foot">
+    <div class="plan-card">
+      <div class="row"><span class="name">Pro</span><span class="badge">CURRENT</span></div>
+      <div class="bar"><span></span></div>
+      <div class="meta"><span>2,840 / 5,000 calls</span><span>9d left</span></div>
+    </div>
+  </div>
+</aside>
+<main class="main">
+
+<div class="page-head">
+  <div class="ph-left">
+    <h1>Session</h1>
+    <span class="sd-id">s_8f2c4a91e3</span>
+    <span class="sbadge progress" style="margin-left:6px;">In&nbsp;Progress</span>
+  </div>
+  <div class="ph-right">
+    <button class="btn btn-secondary">← Back to sessions</button>
+  </div>
+</div>
+
+<div class="sd-layout">
+  <!-- LEFT PANEL -->
+  <aside class="sd-panel sd-left">
+    <div class="sd-card">
+      <div class="sd-meta-row">
+        <span class="sbadge progress">In&nbsp;Progress</span>
+        <span class="tag-mono purple">claude_code</span>
+      </div>
+      <div class="sd-meta-stack" style="margin-top:12px;">
+        <span class="sd-id">s_8f2c4a91e3b9d4a0</span>
+        <span class="sd-ts">Started · 27 May 14:02 IST</span>
+        <span class="sd-ts">Ended · —</span>
+      </div>
+      <div class="sd-bigcost">$0.84</div>
+      <span class="sd-dur">4m 32s elapsed · ↑ 5,628 / ↓ 1,016 tok</span>
+    </div>
+
+    <div class="sd-section">
+      <span class="sd-label">Developer</span>
+      <div class="sd-dev">
+        <span class="av-sm a">KR</span>
+        <div class="meta">
+          <span class="name">Kevin Reyes</span>
+          <span class="did">dev_kr_8e21</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sd-section">
+      <span class="sd-label">Linked task</span>
+      <div class="sd-task-row">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-3"/></svg>
+        <span class="ttext">Migrate sessions table to TimescaleDB</span>
+      </div>
+      <div class="sd-meta-row"><span class="sbadge progress">In&nbsp;Progress</span><button class="sd-link">Open in Kanban →</button></div>
+    </div>
+
+    <div class="sd-section">
+      <span class="sd-label">Git</span>
+      <div class="sd-git">
+        <div class="row"><span class="k">BRANCH</span><span>kr/timescale-migration</span></div>
+        <div class="row"><span class="k">COMMIT</span><span>e3b9d4a · WIP: hypertable scaffold</span></div>
+      </div>
+    </div>
+
+    <button class="sd-export">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      Export to Markdown
+    </button>
+  </aside>
+
+  <!-- CENTRE PANEL -->
+  <section class="sd-panel sd-mid">
+    <div class="sd-mid-head">
+      <span class="sd-label">Tool Calls</span>
+      <span class="count-badge">9</span>
+      <span style="flex:1;"></span>
+      <span class="mono-label">↑ 5,628 / ↓ 1,016 TOK</span>
+    </div>
+    <div class="timeline">
+      
+<div class="tl-item">
+  <span class="ts">+0:00</span>
+  <div class="card2">
+    <div class="tc-row1">
+      <span class="tc-tool">SessionStart</span>
+      <span class="tc-dur">12ms</span>
+      
+    </div>
+    
+  </div>
+</div>
+
+<div class="tl-item">
+  <span class="ts">+0:04</span>
+  <div class="card2">
+    <div class="tc-row1">
+      <span class="tc-tool">Read</span>
+      <span class="tc-dur">89ms</span>
+      <span class="tc-tok">↑ 412 / ↓ 0</span>
+    </div>
+    <div class="tc-file">apps/api/src/migrations/2025_05_27_timescale.sql</div>
+  </div>
+</div>
+
+<div class="tl-item">
+  <span class="ts">+0:11</span>
+  <div class="card2">
+    <div class="tc-row1">
+      <span class="tc-tool">Bash</span>
+      <span class="tc-dur">1.42s</span>
+      <span class="tc-tok">↑ 318 / ↓ 64</span>
+    </div>
+    <div class="tc-file">$ pg_dump --schema-only mnema_prod | head -200</div>
+  </div>
+</div>
+
+<div class="tl-item">
+  <span class="ts">+0:34</span>
+  <div class="card2">
+    <div class="tc-row1">
+      <span class="tc-tool">Write</span>
+      <span class="tc-dur">234ms</span>
+      <span class="tc-tok">↑ 1,204 / ↓ 342</span>
+    </div>
+    <div class="tc-file">apps/api/src/migrations/2025_05_27_timescale.sql</div><pre class="tc-expand"><span class="key">"path"</span>: <span class="str">"apps/api/src/migrations/2025_05_27_timescale.sql"</span>,
+<span class="key">"content"</span>: <span class="str">"-- Up\nCREATE EXTENSION IF NOT EXISTS timescaledb;\nSELECT create_hypertable('sessions', 'started_at');"</span>,
+<span class="key">"bytes_written"</span>: <span class="num">3214</span></pre>
+  </div>
+</div>
+
+<div class="tl-item error">
+  <span class="ts">+0:58</span>
+  <div class="card2">
+    <div class="tc-row1">
+      <span class="tc-tool">Bash</span>
+      <span class="tc-dur">5.21s</span>
+      <span class="tc-tok">↑ 287 / ↓ 0</span>
+    </div>
+    <div class="tc-file">$ pnpm migrate --dry-run</div><div class="tc-err">⚠ ERROR: hypertable conversion blocked — extension `timescaledb` not in shared_preload_libraries</div>
+  </div>
+</div>
+
+<div class="tl-item">
+  <span class="ts">+1:23</span>
+  <div class="card2">
+    <div class="tc-row1">
+      <span class="tc-tool">Read</span>
+      <span class="tc-dur">71ms</span>
+      <span class="tc-tok">↑ 528 / ↓ 0</span>
+    </div>
+    <div class="tc-file">infra/terraform/rds.tf</div>
+  </div>
+</div>
+
+<div class="tl-item">
+  <span class="ts">+1:41</span>
+  <div class="card2">
+    <div class="tc-row1">
+      <span class="tc-tool">Edit</span>
+      <span class="tc-dur">182ms</span>
+      <span class="tc-tok">↑ 612 / ↓ 198</span>
+    </div>
+    <div class="tc-file">infra/terraform/rds.tf</div>
+  </div>
+</div>
+
+<div class="tl-item">
+  <span class="ts">+2:08</span>
+  <div class="card2">
+    <div class="tc-row1">
+      <span class="tc-tool">Bash</span>
+      <span class="tc-dur">2.04s</span>
+      <span class="tc-tok">↑ 234 / ↓ 0</span>
+    </div>
+    <div class="tc-file">$ terraform plan -target=aws_db_parameter_group.mnema</div>
+  </div>
+</div>
+
+<div class="tl-item">
+  <span class="ts">+2:51</span>
+  <div class="card2">
+    <div class="tc-row1">
+      <span class="tc-tool">Write</span>
+      <span class="tc-dur">198ms</span>
+      <span class="tc-tok">↑ 1,841 / ↓ 412</span>
+    </div>
+    <div class="tc-file">apps/api/src/migrations/2025_05_27_timescale_v2.sql</div>
+  </div>
+</div>
+    </div>
+    <!-- JS: click a tool-call card to toggle .tc-expand visibility (input/output JSON). -->
+  </section>
+
+  <!-- RIGHT PANEL -->
+  <aside class="sd-panel sd-right">
+    <div class="sd-mid-head"><span class="sd-label">Files Changed</span><span class="count-badge">3</span></div>
+
+    <div class="file-row active">
+      <span class="fp">apps/api/src/migrations/2025_05_27_timescale_v2.sql</span>
+      <span class="add">+62</span><span class="rem">−14</span>
+    </div>
+    <div class="diff">
+      <div class="diff-line ctx"><span class="ln">12</span><span class="mk"> </span><span> -- sessions table → hypertable</span></div>
+      <div class="diff-line rem"><span class="ln">13</span><span class="mk">−</span><span> SELECT create_hypertable('sessions', 'started_at');</span></div>
+      <div class="diff-line add"><span class="ln">13</span><span class="mk">+</span><span> SELECT create_hypertable(</span></div>
+      <div class="diff-line add"><span class="ln">14</span><span class="mk">+</span><span>   'sessions','started_at',</span></div>
+      <div class="diff-line add"><span class="ln">15</span><span class="mk">+</span><span>   chunk_time_interval => INTERVAL '7 days',</span></div>
+      <div class="diff-line add"><span class="ln">16</span><span class="mk">+</span><span>   if_not_exists => TRUE);</span></div>
+      <div class="diff-line ctx"><span class="ln">17</span><span class="mk"> </span><span></span></div>
+      <div class="diff-line ctx"><span class="ln">18</span><span class="mk"> </span><span> -- retention policy: 180 days</span></div>
+      <div class="diff-line add"><span class="ln">19</span><span class="mk">+</span><span> SELECT add_retention_policy('sessions', INTERVAL '180 days');</span></div>
+      <div class="diff-line ctx"><span class="ln">20</span><span class="mk"> </span><span></span></div>
+      <div class="diff-line rem"><span class="ln">21</span><span class="mk">−</span><span> CREATE INDEX ix_sessions_dev ON sessions(developer_id);</span></div>
+      <div class="diff-line add"><span class="ln">21</span><span class="mk">+</span><span> CREATE INDEX ix_sessions_dev_started ON sessions(developer_id, started_at DESC);</span></div>
+    </div>
+
+    <div class="file-row">
+      <span class="fp">infra/terraform/rds.tf</span>
+      <span class="add">+8</span><span class="rem">−2</span>
+    </div>
+    <div class="file-row">
+      <span class="fp">apps/api/src/migrations/2025_05_27_timescale.sql</span>
+      <span class="rem">−42</span>
+    </div>
+  </aside>
+</div>
+</main>
+
+<footer class="statusbar">
+  <div class="left">
+    <span class="item"><span class="dot"></span>2 agents active</span>
+    <span class="item">MCP <span class="v">v2025-11-25</span></span>
+  </div>
+  <div class="right">
+    
+    <span class="item">boppl-design · <span class="v">Pro</span></span>
+  </div>
+</footer>
+</div>
+
+</body>
+</html>

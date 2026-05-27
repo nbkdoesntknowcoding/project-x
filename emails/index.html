@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mnema · Email Templates</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --cream: #EDE8E0;
+    --ink: #1A1A1A;
+    --muted: #6E6E68;
+    --line: rgba(26,26,26,0.08);
+    --sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--cream);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+
+  /* TOP BAR */
+  .topbar {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--cream);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner {
+    max-width: 1480px; margin: 0 auto;
+    padding: 18px 40px;
+    display: flex; align-items: baseline; gap: 24px;
+  }
+  .brand {
+    font-weight: 600; font-size: 15px; letter-spacing: 0.02em;
+  }
+  .brand .dot { color: var(--muted); margin: 0 10px; }
+  .crumb { font-size: 13px; color: var(--muted); }
+  .topbar-right {
+    margin-left: auto; font-family: var(--mono);
+    font-size: 11px; color: var(--muted); letter-spacing: 0.06em;
+  }
+
+  /* HERO */
+  .hero {
+    max-width: 1480px; margin: 0 auto;
+    padding: 64px 40px 24px;
+  }
+  .hero h1 {
+    font-size: 56px; line-height: 1.04; letter-spacing: -0.025em;
+    font-weight: 700; margin: 0 0 16px;
+    max-width: 760px;
+  }
+  .hero p {
+    max-width: 620px; font-size: 17px;
+    color: var(--muted); margin: 0;
+  }
+  .hero-meta {
+    display: flex; gap: 32px; margin-top: 36px;
+    padding-top: 24px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11px;
+    color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .hero-meta span strong { color: var(--ink); font-weight: 500; }
+
+  /* PALETTE STRIP */
+  .palette {
+    max-width: 1480px; margin: 32px auto 0; padding: 0 40px;
+  }
+  .palette-row {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .swatch {
+    display: flex; flex-direction: column;
+    padding: 14px 16px; border-radius: 12px;
+    min-width: 132px; flex: 1;
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--ink); letter-spacing: 0.04em;
+  }
+  .swatch .name { font-weight: 500; text-transform: uppercase; opacity: 0.7; }
+  .swatch .hex  { margin-top: 18px; font-weight: 500; }
+
+  /* GRID */
+  .gallery {
+    max-width: 1480px; margin: 0 auto;
+    padding: 56px 40px 96px;
+  }
+  .gallery-head {
+    display: flex; align-items: baseline; gap: 16px;
+    margin-bottom: 32px;
+  }
+  .gallery-head h2 {
+    margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em;
+  }
+  .gallery-head .count {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--muted); letter-spacing: 0.1em;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 28px;
+  }
+  .tile {
+    display: flex; flex-direction: column;
+    background: transparent;
+  }
+  .tile-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 12px;
+    padding: 0 4px;
+  }
+  .tile-num {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--muted); letter-spacing: 0.12em;
+  }
+  .tile-name {
+    font-size: 14px; font-weight: 600; letter-spacing: -0.005em;
+  }
+  .tile-subject {
+    padding: 0 4px;
+    font-size: 12.5px; color: var(--muted);
+    margin-bottom: 14px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .tile-frame {
+    position: relative;
+    background: var(--cream);
+    border-radius: 18px;
+    overflow: hidden;
+    aspect-ratio: 3 / 4;
+    border: 1px solid var(--line);
+  }
+  .tile-frame iframe {
+    border: 0;
+    /* scale 600px design into tile width */
+    width: 600px;
+    height: 800px;
+    transform-origin: top left;
+    background: var(--cream);
+  }
+  .tile-foot {
+    display: flex; gap: 8px; align-items: center;
+    margin-top: 12px;
+    padding: 0 4px;
+    font-family: var(--mono); font-size: 10.5px;
+    color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .tile-foot a {
+    color: var(--ink);
+    text-decoration: none;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(26,26,26,0.06);
+  }
+  .tile-foot a:hover { background: rgba(26,26,26,0.12); }
+  .tile-chip {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    border: 1px solid var(--line);
+  }
+
+  /* FOOTER */
+  .pagefoot {
+    max-width: 1480px; margin: 0 auto;
+    padding: 24px 40px 48px;
+    border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: var(--mono); font-size: 11px;
+    color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">mnema <span class="dot">/</span> <span style="font-weight:500;">transactional email</span></div>
+    <div class="crumb">10 templates · production-ready HTML</div>
+    <div class="topbar-right">v1.0 · MAY 2026</div>
+  </div>
+</div>
+
+<section class="hero" data-screen-label="Gallery">
+  <h1>A complete set of transactional emails for Mnema.</h1>
+  <p>Single warm-cream stage, one card per message, a distinct accent per intent. Each file is standalone HTML with inline CSS, DM Sans linked from Google Fonts, and a light-mode-first colour stack with a quiet dark-mode override.</p>
+  <div class="hero-meta">
+    <span><strong>10</strong> &nbsp;templates</span>
+    <span><strong>520</strong>&nbsp;px card width</span>
+    <span><strong>600</strong>&nbsp;px wrapper</span>
+    <span><strong>DM Sans</strong> &nbsp;type</span>
+    <span><strong>Inline</strong> &nbsp;CSS only</span>
+  </div>
+</section>
+
+<section class="palette">
+  <div class="palette-row">
+    <div class="swatch" style="background:#EDE8E0;"><span class="name">Stage</span><span class="hex">#EDE8E0</span></div>
+    <div class="swatch" style="background:#FFFFFF;"><span class="name">Welcome</span><span class="hex">#FFFFFF</span></div>
+    <div class="swatch" style="background:#F2C4B8;"><span class="name">Invitation</span><span class="hex">#F2C4B8</span></div>
+    <div class="swatch" style="background:#C4D9C4;"><span class="name">Accepted</span><span class="hex">#C4D9C4</span></div>
+    <div class="swatch" style="background:#F5E0D6;"><span class="name">Pay · OK</span><span class="hex">#F5E0D6</span></div>
+    <div class="swatch" style="background:#F0D0CC;"><span class="name">Pay · Fail</span><span class="hex">#F0D0CC</span></div>
+    <div class="swatch" style="background:#D8D8D8;"><span class="name">Cancelled</span><span class="hex">#D8D8D8</span></div>
+    <div class="swatch" style="background:#F5E8C0;"><span class="name">Login</span><span class="hex">#F5E8C0</span></div>
+    <div class="swatch" style="background:#F5D0C0;"><span class="name">Trial</span><span class="hex">#F5D0C0</span></div>
+    <div class="swatch" style="background:#D8D0E8;"><span class="name">Renewal</span><span class="hex">#D8D0E8</span></div>
+    <div class="swatch" style="background:#C4E0D8;"><span class="name">MCP</span><span class="hex">#C4E0D8</span></div>
+  </div>
+</section>
+
+<section class="gallery">
+  <div class="gallery-head">
+    <h2>The set</h2>
+    <span class="count">01 — 10</span>
+  </div>
+  <div class="grid" id="grid"></div>
+</section>
+
+<div class="pagefoot">
+  <span>Mnema · theboringpeople.in</span>
+  <span>Email System v1.0</span>
+</div>
+
+<script>
+  const TEMPLATES = [
+    { num: "01", name: "Welcome",               file: "01-welcome.html",               subject: "Welcome to Mnema, {{first_name}}",                color: "#FFFFFF" },
+    { num: "02", name: "Workspace Invitation",  file: "02-invitation.html",            subject: "{{inviter_name}} invited you to {{workspace_name}}", color: "#F2C4B8" },
+    { num: "03", name: "Invitation Accepted",   file: "03-invitation-accepted.html",   subject: "{{invitee_name}} joined {{workspace_name}}",      color: "#C4D9C4" },
+    { num: "04", name: "Payment Successful",    file: "04-payment-success.html",       subject: "Payment confirmed — {{plan_name}} plan",          color: "#F5E0D6" },
+    { num: "05", name: "Payment Failed",        file: "05-payment-failed.html",        subject: "Action needed — payment failed",                  color: "#F0D0CC" },
+    { num: "06", name: "Subscription Cancelled",file: "06-subscription-cancelled.html",subject: "Your Mnema subscription has been cancelled",      color: "#D8D8D8" },
+    { num: "07", name: "Login Security Alert",  file: "07-login-alert.html",           subject: "New sign-in to your Mnema account",               color: "#F5E8C0" },
+    { num: "08", name: "Trial Ending Soon",     file: "08-trial-ending.html",          subject: "Your trial ends in {{days_remaining}} days",      color: "#F5D0C0" },
+    { num: "09", name: "Renewal Reminder",      file: "09-renewal-reminder.html",      subject: "Your Mnema subscription renews in 7 days",        color: "#D8D0E8" },
+    { num: "10", name: "MCP Connected",         file: "10-mcp-connected.html",         subject: "Claude is connected to {{workspace_name}}",       color: "#C4E0D8" },
+  ];
+
+  const grid = document.getElementById('grid');
+
+  function buildTile(t) {
+    const tile = document.createElement('article');
+    tile.className = 'tile';
+    tile.innerHTML = `
+      <div class="tile-head">
+        <span class="tile-name">${t.name}</span>
+        <span class="tile-num">${t.num}</span>
+      </div>
+      <div class="tile-subject" title="${t.subject}">${t.subject}</div>
+      <div class="tile-frame">
+        <iframe src="${t.file}" loading="lazy" scrolling="no" title="${t.name}"></iframe>
+      </div>
+      <div class="tile-foot">
+        <span class="tile-chip" style="background:${t.color};"></span>
+        <span>${t.color}</span>
+        <span style="margin-left:auto;"><a href="${t.file}" target="_blank">open ↗</a></span>
+      </div>
+    `;
+    return tile;
+  }
+
+  TEMPLATES.forEach(t => grid.appendChild(buildTile(t)));
+
+  // After tiles mount, scale each iframe to fit its frame width
+  function fitFrames() {
+    document.querySelectorAll('.tile-frame').forEach(frame => {
+      const iframe = frame.querySelector('iframe');
+      if (!iframe) return;
+      const w = frame.clientWidth;
+      const scale = w / 600;
+      iframe.style.transform = `scale(${scale})`;
+      iframe.style.width = `${600}px`;
+      iframe.style.height = `${frame.clientHeight / scale}px`;
+    });
+  }
+  window.addEventListener('load', fitFrames);
+  window.addEventListener('resize', fitFrames);
+  setTimeout(fitFrames, 100);
+  setTimeout(fitFrames, 500);
+</script>
+
+</body>
+</html>

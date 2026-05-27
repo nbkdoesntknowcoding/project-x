@@ -165,10 +165,11 @@ Then update `MCP_BASE_URL` to your stable custom domain — no token rotation ne
 
 ## Vercel deployment status
 
-- Latest deployment: `https://project-l7x31i9no-nbkdoesntknowcodings-projects.vercel.app` — **Ready**
-- Note: The deployment returns `401` because **Vercel SSO Protection** is enabled on this project in the Vercel dashboard. The app itself built successfully. To access the deployed app, disable protection in Vercel → Project Settings → Deployment Protection.
-- WorkOS redirect must also be added in the WorkOS dashboard: `https://project-l7x31i9no-nbkdoesntknowcodings-projects.vercel.app/auth/callback`
-- Once SSO protection is lifted, add the Vercel domain to `CORS_ORIGINS` env var for cross-origin API calls.
+- Production URL: **`https://project-x-sandy-alpha.vercel.app`** — ✅ Live, app rendering correctly
+- Root fix: switched to `@astrojs/vercel` adapter (was `@astrojs/node` which Vercel can't run). Root Directory set to `apps/web` in Vercel project settings.
+- Vercel SSO Protection: ✅ Disabled
+- **Pending**: Add `https://project-x-sandy-alpha.vercel.app/auth/callback` to WorkOS dashboard → redirects allowlist (auth flow will fail until done)
+- **Pending**: Add `https://project-x-sandy-alpha.vercel.app` to `CORS_ORIGINS` Vercel env var so the web app can reach the API tunnel
 
 ---
 

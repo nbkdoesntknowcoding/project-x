@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1000" />
+<title>Mnema MCP · write_doc</title>
+<link rel="stylesheet" href="_mcp.css" />
+<style>
+/* ============================================================
+   DOC WRITE PREVIEW
+   ============================================================ */
+.dw-summary {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.dw-doc-icon {
+  width: 32px; height: 38px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--ink-muted);
+  flex-shrink: 0;
+  position: relative;
+}
+.dw-doc-icon::after {
+  content: "MD";
+  position: absolute; right: -6px; bottom: -3px;
+  font: 700 7.5px/1 var(--mono);
+  padding: 2px 4px; border-radius: 3px;
+  background: var(--accent); color: var(--on-accent);
+  letter-spacing: 0.04em;
+}
+.dw-summary .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.dw-summary .ttl { font: 500 16px/1.2 var(--sans); color: var(--ink); letter-spacing: -0.01em; }
+.dw-summary .path { font: 400 11.5px/1.3 var(--mono); color: var(--ink-muted); }
+.dw-summary .stats {
+  display: inline-flex; gap: 14px;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.04em;
+}
+.dw-summary .stats .add { color: var(--status-sync); }
+.dw-summary .stats .rm { color: var(--status-error); }
+.dw-summary .stats .keep { color: var(--ink-muted); }
+
+/* DIFF */
+.dw-diff {
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font: 500 12.5px/1.6 var(--mono);
+}
+.dw-diff-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line);
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.dw-diff-head .where {
+  font: 500 11px/1 var(--mono);
+  color: var(--ink);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.dw-diff-head .copy-btn {
+  width: 22px; height: 22px; border-radius: 4px; border: 0;
+  background: transparent; color: var(--ink-muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.dw-diff-head .copy-btn:hover { background: var(--surface-3); color: var(--ink); }
+
+.dw-line {
+  display: grid;
+  grid-template-columns: 36px 14px 1fr;
+  align-items: stretch;
+  padding: 0;
+}
+.dw-line .ln {
+  font: 500 10.5px/1.7 var(--mono);
+  color: var(--ink-faint);
+  padding: 2px 8px 2px 14px;
+  text-align: right;
+  user-select: none;
+}
+.dw-line .sigil {
+  font: 600 13px/1.7 var(--mono);
+  text-align: center;
+  user-select: none;
+}
+.dw-line .code {
+  padding: 2px 14px 2px 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 500 12.5px/1.7 var(--mono);
+  color: var(--ink-soft);
+}
+.dw-line.context { background: transparent; }
+.dw-line.context .sigil { color: var(--ink-faint); }
+
+.dw-line.add { background: rgba(107,227,155,0.05); }
+.dw-line.add .ln { color: rgba(107,227,155,0.55); }
+.dw-line.add .sigil { color: var(--status-sync); }
+.dw-line.add .code { color: var(--ink); }
+
+.dw-line.rm  { background: rgba(255,122,138,0.05); }
+.dw-line.rm  .ln { color: rgba(255,122,138,0.55); }
+.dw-line.rm  .sigil { color: var(--status-error); }
+.dw-line.rm  .code { color: var(--ink-soft); text-decoration: line-through; text-decoration-color: rgba(255,122,138,0.5); }
+
+.dw-line.hunk {
+  background: var(--surface-3);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.dw-line.hunk .ln, .dw-line.hunk .code { color: var(--ink-muted); font-style: italic; }
+.dw-line.hunk .code { padding-top: 4px; padding-bottom: 4px; }
+
+.dw-tabs { display: flex; gap: 4px; padding: 12px 22px 0; }
+.dw-tab {
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 8px 11px;
+  border-radius: 5px 5px 0 0;
+  color: var(--ink-muted);
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+}
+.dw-tab.active {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+  border-bottom-color: var(--surface);
+  margin-bottom: -1px;
+}
+.dw-tab:hover:not(.active) { color: var(--ink-soft); }
+</style>
+</head>
+<body>
+
+<div class="claude-msg">
+  <div class="claude-msg-head">
+    <span class="claude-bullet"></span>
+    <span>Requesting approval</span>
+    <span class="toolname"><span class="mu">μ</span>mnema.write_doc</span>
+    <span class="arrow">→</span>
+    <span class="summary">edit · How Mnema syncs.md · +12 / −4</span>
+  </div>
+
+  <div class="m-card">
+    <div class="m-head">
+      <div class="left">
+        <span class="glyph">μ</span>
+        <span class="sep"></span>
+        <span class="tool">write_doc<span class="args">("d_4f2a", mode: "edit")</span></span>
+      </div>
+      <div class="meta">
+        <span class="pill change">PENDING APPROVAL</span>
+      </div>
+    </div>
+
+    <div class="dw-summary">
+      <div class="dw-doc-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+      </div>
+      <div class="body">
+        <div class="ttl">How Mnema syncs.md</div>
+        <div class="path">/general-knowledge/How Mnema syncs.md  ·  d_4f2a</div>
+      </div>
+      <div class="stats">
+        <span class="add">+12 added</span>
+        <span class="rm">−4 removed</span>
+        <span class="keep">38 unchanged</span>
+      </div>
+    </div>
+
+    <div class="dw-tabs">
+      <button class="dw-tab active">DIFF</button>
+      <button class="dw-tab">PROPOSED</button>
+      <button class="dw-tab">CURRENT</button>
+    </div>
+
+    <div class="m-body" style="padding-top: 0;">
+      <div class="dw-diff">
+        <div class="dw-diff-head">
+          <span class="where">How Mnema syncs.md  ·  @ section "MCP read path"</span>
+          <button class="copy-btn" title="Copy diff">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+        </div>
+
+        <div class="dw-line hunk">
+          <span class="ln"></span>
+          <span class="sigil">@</span>
+          <span class="code">@@ -34,6 +34,14 @@  MCP read path</span>
+        </div>
+
+        <div class="dw-line context">
+          <span class="ln">34</span><span class="sigil"> </span>
+          <span class="code">## MCP read path</span>
+        </div>
+        <div class="dw-line context">
+          <span class="ln">35</span><span class="sigil"> </span>
+          <span class="code"></span>
+        </div>
+        <div class="dw-line rm">
+          <span class="ln">36</span><span class="sigil">−</span>
+          <span class="code">Claude calls `get_doc` on the MCP server and gets back the markdown.</span>
+        </div>
+        <div class="dw-line rm">
+          <span class="ln">37</span><span class="sigil">−</span>
+          <span class="code">No caching is involved.</span>
+        </div>
+        <div class="dw-line add">
+          <span class="ln">36</span><span class="sigil">+</span>
+          <span class="code">Claude calls `get_doc` on the MCP server, which returns the markdown of the doc as it exists right now — no caching, no staleness window. The server reads the latest Yjs snapshot from Postgres and serialises it on the wire.</span>
+        </div>
+        <div class="dw-line add">
+          <span class="ln">37</span><span class="sigil">+</span>
+          <span class="code"></span>
+        </div>
+        <div class="dw-line add">
+          <span class="ln">38</span><span class="sigil">+</span>
+          <span class="code">Edits propagate in **under 50ms** through your MCP connector. The connector keeps a single open WebSocket and pushes diffs as they arrive — no polling, no re-fetch.</span>
+        </div>
+        <div class="dw-line context">
+          <span class="ln">39</span><span class="sigil"> </span>
+          <span class="code"></span>
+        </div>
+
+        <div class="dw-line hunk">
+          <span class="ln"></span>
+          <span class="sigil">@</span>
+          <span class="code">@@ -52,2 +60,8 @@  Audit log</span>
+        </div>
+
+        <div class="dw-line context">
+          <span class="ln">52</span><span class="sigil"> </span>
+          <span class="code">## Audit log</span>
+        </div>
+        <div class="dw-line add">
+          <span class="ln">53</span><span class="sigil">+</span>
+          <span class="code">- Every MCP call is logged against your workspace</span>
+        </div>
+        <div class="dw-line add">
+          <span class="ln">54</span><span class="sigil">+</span>
+          <span class="code">- Each entry carries the tool name, the caller, and the doc IDs returned</span>
+        </div>
+        <div class="dw-line add">
+          <span class="ln">55</span><span class="sigil">+</span>
+          <span class="code">- Logs are queryable from Settings → Audit</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="m-foot">
+      <div class="left">
+        <span class="kbd-hint"><kbd>⌘</kbd><kbd>↩</kbd>approve</span>
+        <span class="kbd-hint"><kbd>esc</kbd>reject</span>
+      </div>
+      <div class="right">
+        <button class="btn btn-ghost">Open in editor</button>
+        <button class="btn btn-secondary">Reject</button>
+        <button class="btn btn-primary">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+          Approve &amp; write
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="claude-msg-after">
+    <p>I'm tightening the MCP-read section with specifics — the staleness wording, the Yjs/Postgres detail, and the under-50ms claim — and adding the audit-log bullets you asked for.</p>
+    <p class="dim">Approve to write, or reject to iterate.</p>
+  </div>
+</div>
+
+</body>
+</html>

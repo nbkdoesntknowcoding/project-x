@@ -1,9 +1,7 @@
-// TODO: Claude Design — apply Mnema glassmorphism design system
-// Background: var(--bg) #0a0a0a
-// Cards: rgba(255,255,255,0.04) + backdrop-filter: blur(24px)
-// See BOPPL_Context_Engine_Prompt_UI_Redesign_All_MCP_Panels for token system
+// DESIGN APPLIED: 2026-05-27
 
 import type { JSX } from 'react';
+import { T } from '../../lib/dev-tokens';
 import { TaskCard, type Task } from './TaskCard';
 
 interface KanbanColumnProps {
@@ -41,29 +39,68 @@ export function KanbanColumn({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       style={{
-        flex: '0 0 220px',
-        display: 'flex',
+        display:       'flex',
         flexDirection: 'column',
-        gap: 8,
-        minHeight: 200,
+        minHeight:     200,
+        fontFamily:    T.fontUI,
       }}
     >
       {/* Column header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <div style={{
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'space-between',
+        marginBottom:   12,
+        paddingLeft:    2,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          {/* Colour dot */}
+          <span style={{
+            width:       7,
+            height:      7,
+            borderRadius: '50%',
+            background:  color,
+            flexShrink:  0,
+            boxShadow:   `0 0 6px ${color}80`,
+          }} />
+          {/* Label */}
+          <span style={{
+            fontSize:      11,
+            fontWeight:    600,
+            color:         T.textSecondary,
+            textTransform: 'uppercase',
+            letterSpacing: '0.07em',
+          }}>
             {label}
           </span>
-          <span style={{ fontSize: 11, color: 'var(--ink-muted)' }}>{tasks.length}</span>
+          {/* Count */}
+          <span style={{
+            fontSize:     11,
+            color:        T.textDisabled,
+            fontFamily:   T.fontMono,
+          }}>
+            {tasks.length}
+          </span>
         </div>
+
+        {/* Add button — backlog only */}
         {id === 'backlog' && onAddTask && (
           <button
             onClick={onAddTask}
             style={{
-              width: 20, height: 20, borderRadius: 4, border: '1px solid var(--line)',
-              background: 'transparent', color: 'var(--ink-muted)', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
+              width:          22,
+              height:         22,
+              borderRadius:   6,
+              border:         `0.5px solid ${T.glassBorder}`,
+              background:     T.glass,
+              color:          T.textMuted,
+              cursor:         'pointer',
+              display:        'flex',
+              alignItems:     'center',
+              justifyContent: 'center',
+              fontSize:       16,
+              lineHeight:     1,
+              flexShrink:     0,
             }}
             title="Add task"
           >
@@ -72,8 +109,8 @@ export function KanbanColumn({
         )}
       </div>
 
-      {/* Task cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+      {/* Task cards list */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
         {tasks.map((task) => (
           <div
             key={task.id}
@@ -90,12 +127,13 @@ export function KanbanColumn({
         {/* Drop zone hint when empty */}
         {tasks.length === 0 && (
           <div style={{
-            border: '1px dashed rgba(255,255,255,0.1)',
-            borderRadius: 8,
-            padding: '16px 12px',
-            textAlign: 'center',
-            color: 'var(--ink-faint)',
-            fontSize: 12,
+            border:      `1px dashed ${T.glassBorder}`,
+            borderRadius: 12,
+            padding:     '18px 12px',
+            textAlign:   'center',
+            color:       T.textDisabled,
+            fontSize:    12,
+            background:  'rgba(255,255,255,0.01)',
           }}>
             Drop here
           </div>

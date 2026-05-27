@@ -1,9 +1,7 @@
-// TODO: Claude Design — apply Mnema glassmorphism design system
-// Background: var(--bg) #0a0a0a
-// Cards: rgba(255,255,255,0.04) + backdrop-filter: blur(24px)
-// See BOPPL_Context_Engine_Prompt_UI_Redesign_All_MCP_Panels for token system
+// DESIGN APPLIED: 2026-05-27
 
 import { type JSX, useState } from 'react';
+import { T, glassCard } from '../../lib/dev-tokens';
 
 interface DevSetupBannerProps {
   workspaceId: string;
@@ -41,37 +39,49 @@ export function DevSetupBanner({ workspaceId, hookToken, onDismiss }: DevSetupBa
 
   return (
     <div style={{
-      background: 'rgba(99,102,241,0.08)',
-      border: '1px solid rgba(99,102,241,0.3)',
-      borderRadius: 12,
-      padding: 20,
+      ...glassCard,
+      background:   'rgba(255,179,112,0.05)',
+      border:       `0.5px solid rgba(255,179,112,0.25)`,
+      borderRadius: 16,
+      padding:      '20px 22px',
       marginBottom: 20,
+      fontFamily:   T.fontUI,
     }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
         <div style={{ flex: 1 }}>
-          <h3 style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
-            🚀 Dev Project workspace created
-          </h3>
-          <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--ink-muted)' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 15 }}>🚀</span>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: T.textPrimary }}>
+              Dev Project workspace created
+            </h3>
+          </div>
+          <p style={{ margin: '0 0 16px', fontSize: 12, color: T.textMuted }}>
             Copy your hook token now — it won't be shown again.
           </p>
 
           {/* Hook token */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--ink-muted)', marginBottom: 4 }}>
-              Hook Token (copy now — shown once)
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: T.textMuted, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Hook Token (shown once)
             </label>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <code style={{
-                flex: 1, padding: '6px 10px', borderRadius: 6,
-                background: 'rgba(0,0,0,0.4)', border: '1px solid var(--line)',
-                fontSize: 12, color: '#10b981', wordBreak: 'break-all',
+                flex:       1,
+                padding:    '7px 10px',
+                borderRadius: 10,
+                background: T.surface2,
+                border:     `0.5px solid ${T.glassBorder}`,
+                fontSize:   12,
+                color:      T.green,
+                wordBreak:  'break-all',
+                fontFamily: T.fontMono,
               }}>
                 {hookToken}
               </code>
               <button
                 onClick={() => void copyText(hookToken, 'token')}
-                style={{ ...copyBtnStyle, background: copied === 'token' ? '#10b981' : undefined }}
+                style={{ ...copyBtnStyle, background: copied === 'token' ? `${T.green}30` : T.glass, color: copied === 'token' ? T.green : T.textMuted }}
               >
                 {copied === 'token' ? '✓' : 'Copy'}
               </button>
@@ -80,20 +90,26 @@ export function DevSetupBanner({ workspaceId, hookToken, onDismiss }: DevSetupBa
 
           {/* Install command */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--ink-muted)', marginBottom: 4 }}>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: T.textMuted, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               Install hooks in Claude Code
             </label>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
               <code style={{
-                flex: 1, padding: '6px 10px', borderRadius: 6,
-                background: 'rgba(0,0,0,0.4)', border: '1px solid var(--line)',
-                fontSize: 11, color: 'var(--ink-soft)', wordBreak: 'break-all',
+                flex:       1,
+                padding:    '7px 10px',
+                borderRadius: 10,
+                background: T.surface2,
+                border:     `0.5px solid ${T.glassBorder}`,
+                fontSize:   11,
+                color:      T.textSecondary,
+                wordBreak:  'break-all',
+                fontFamily: T.fontMono,
               }}>
                 {installCommand}
               </code>
               <button
                 onClick={() => void copyText(installCommand, 'install')}
-                style={{ ...copyBtnStyle, background: copied === 'install' ? '#10b981' : undefined }}
+                style={{ ...copyBtnStyle, background: copied === 'install' ? `${T.green}30` : T.glass, color: copied === 'install' ? T.green : T.textMuted }}
               >
                 {copied === 'install' ? '✓' : 'Copy'}
               </button>
@@ -101,21 +117,28 @@ export function DevSetupBanner({ workspaceId, hookToken, onDismiss }: DevSetupBa
           </div>
 
           {/* MCP config snippet */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--ink-muted)', marginBottom: 4 }}>
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ display: 'block', fontSize: 10, fontWeight: 600, color: T.textMuted, marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
               MCP Config (~/.claude/mcp.json)
             </label>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
               <pre style={{
-                flex: 1, margin: 0, padding: '6px 10px', borderRadius: 6,
-                background: 'rgba(0,0,0,0.4)', border: '1px solid var(--line)',
-                fontSize: 11, color: 'var(--ink-soft)', overflow: 'auto',
+                flex:       1,
+                margin:     0,
+                padding:    '7px 10px',
+                borderRadius: 10,
+                background: T.surface2,
+                border:     `0.5px solid ${T.glassBorder}`,
+                fontSize:   11,
+                color:      T.textSecondary,
+                overflow:   'auto',
+                fontFamily: T.fontMono,
               }}>
                 {mcpSnippet}
               </pre>
               <button
                 onClick={() => void copyText(mcpSnippet, 'mcp')}
-                style={{ ...copyBtnStyle, background: copied === 'mcp' ? '#10b981' : undefined }}
+                style={{ ...copyBtnStyle, background: copied === 'mcp' ? `${T.green}30` : T.glass, color: copied === 'mcp' ? T.green : T.textMuted }}
               >
                 {copied === 'mcp' ? '✓' : 'Copy'}
               </button>
@@ -125,9 +148,15 @@ export function DevSetupBanner({ workspaceId, hookToken, onDismiss }: DevSetupBa
           <button
             onClick={handleDismiss}
             style={{
-              padding: '7px 16px', borderRadius: 6,
-              background: 'rgba(99,102,241,0.2)', border: '1px solid rgba(99,102,241,0.4)',
-              color: '#818cf8', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              padding:      '8px 18px',
+              borderRadius: 10,
+              background:   'rgba(255,179,112,0.12)',
+              border:       `0.5px solid rgba(255,179,112,0.30)`,
+              color:        T.accent,
+              fontSize:     12,
+              fontWeight:   600,
+              cursor:       'pointer',
+              fontFamily:   T.fontUI,
             }}
           >
             I've copied my token
@@ -139,8 +168,12 @@ export function DevSetupBanner({ workspaceId, hookToken, onDismiss }: DevSetupBa
 }
 
 const copyBtnStyle: React.CSSProperties = {
-  padding: '5px 10px', borderRadius: 5,
-  border: '1px solid var(--line)', background: 'var(--surface-2)',
-  color: 'var(--ink-muted)', fontSize: 11, cursor: 'pointer', flexShrink: 0,
-  transition: 'background 0.2s',
+  padding:      '6px 11px',
+  borderRadius: 8,
+  border:       `0.5px solid ${T.glassBorder}`,
+  fontSize:     11,
+  cursor:       'pointer',
+  flexShrink:   0,
+  transition:   'all 0.15s ease',
+  fontFamily:   T.fontUI,
 };

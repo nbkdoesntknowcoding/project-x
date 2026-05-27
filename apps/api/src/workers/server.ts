@@ -12,6 +12,8 @@
 import { startEmbeddingsWorker } from './embeddings/worker.js';
 import { startEmailWorker } from './email/worker.js';
 import { startHookEventsWorker } from './hook-events/worker.js';
+import { startRetryWorker } from './retry/worker.js';
+import { startCronWorkers } from './cron.js';
 
 const embeddings = startEmbeddingsWorker();
 // eslint-disable-next-line no-console
@@ -25,12 +27,22 @@ const hookEventsWorker = startHookEventsWorker();
 // eslint-disable-next-line no-console
 console.log('[workers] hook-events worker started');
 
+const retryWorker = startRetryWorker();
+// eslint-disable-next-line no-console
+console.log('[workers] retry worker started');
+
+const cronWorkers = startCronWorkers();
+// eslint-disable-next-line no-console
+console.log('[workers] cron workers started');
+
 const shutdown = async (signal: string): Promise<void> => {
   // eslint-disable-next-line no-console
   console.log(`[workers] ${signal} received, draining and shutting down`);
   await embeddings.close();
   await emailWorker.close();
   await hookEventsWorker.close();
+  await retryWorker.close();
+  await cronWorkers.close();
   process.exit(0);
 };
 

@@ -1,0 +1,1158 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Mnema · Settings · Members</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --canvas:        #0A0B0D;
+  --surface:       #121317;
+  --surface-2:     #181A1F;
+  --surface-3:     #22252B;
+  --line:          rgba(255,255,255,0.05);
+  --line-strong:   rgba(255,255,255,0.10);
+  --line-bright:   rgba(255,255,255,0.20);
+  --ink:           #F4F5F7;
+  --ink-soft:      #B0B4BC;
+  --ink-muted:     #707479;
+  --ink-faint:     #3D4046;
+
+  --accent-rgb:    255, 179, 112;
+  --accent:        rgb(var(--accent-rgb));
+  --accent-soft:   rgba(var(--accent-rgb), 0.13);
+  --accent-line:   rgba(var(--accent-rgb), 0.28);
+
+  --status-sync:   #6BE39B;
+  --status-edit:   #FFB370;
+  --status-warn:   #FF7A8A;
+
+  --on-ink:        #0A0B0D;
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --topbar-h: 40px;
+  --status-h: 24px;
+  --sidebar-w: 220px;
+}
+[data-theme="light"] {
+  --canvas: #F5F5F3; --surface: #FBFBFA; --surface-2: #EEEEEB; --surface-3: #E3E3DF;
+  --line: rgba(10,11,13,0.06); --line-strong: rgba(10,11,13,0.12); --line-bright: rgba(10,11,13,0.22);
+  --ink: #0A0B0D; --ink-soft: #424650; --ink-muted: #80858E; --ink-faint: #B8BCC2; --on-ink: #FFFFFF;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body { background: var(--canvas); color: var(--ink); font-family: var(--sans); font-size: 12px; line-height: 1.45; -webkit-font-smoothing: antialiased; overflow: hidden; }
+button { font-family: inherit; }
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; }
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: var(--topbar-h) 1fr var(--status-h);
+  grid-template-areas: "topbar topbar" "sidebar main" "status status";
+  height: 100vh;
+}
+
+/* TOPBAR */
+.topbar { grid-area: topbar; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.tb-left { display: flex; align-items: center; gap: 8px; }
+.brand { display: inline-flex; align-items: center; gap: 7px; font: 600 12.5px/1 var(--sans); color: var(--ink); text-decoration: none; }
+.brand .glyph { width: 20px; height: 20px; border-radius: 5px; background: var(--ink); color: var(--on-ink); display: inline-flex; align-items: center; justify-content: center; font: 500 13px/1 var(--sans); padding-bottom: 1px; position: relative; }
+.brand .glyph::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%); }
+.tb-sep { width: 1px; height: 14px; background: var(--line-strong); }
+.ws-switch { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 4px; border-radius: 5px; background: transparent; border: 1px solid transparent; cursor: pointer; color: var(--ink); font: 500 12px/1 var(--sans); }
+.ws-switch:hover { background: var(--surface-2); border-color: var(--line); }
+.ws-avatar { width: 14px; height: 14px; border-radius: 4px; background: linear-gradient(135deg, #7C9CFF, #C8A2FF); color: white; font-weight: 700; font-size: 8.5px; display: inline-flex; align-items: center; justify-content: center; }
+.crumbs { display: flex; align-items: center; gap: 6px; font: 500 12px/1 var(--sans); color: var(--ink-muted); flex: 1; justify-content: center; }
+.crumbs .here { color: var(--ink); font-weight: 600; }
+.crumbs .sep { color: var(--ink-faint); font-size: 9px; }
+.tb-right { display: flex; align-items: center; gap: 2px; }
+.icon-btn { width: 24px; height: 24px; border-radius: 4px; background: transparent; border: 0; color: var(--ink-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+.user-chip { width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, rgba(var(--accent-rgb),0.95), rgba(255,122,138,0.95)); color: var(--on-ink); font: 700 9.5px/1 var(--sans); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; margin-left: 4px; }
+
+/* SIDEBAR — settings categories */
+.sidebar { grid-area: sidebar; background: var(--surface); border-right: 1px solid var(--line); padding: 14px 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.sb-section h6 { margin: 0 0 4px; padding: 0 8px; font: 500 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+.sb-list { display: flex; flex-direction: column; gap: 1px; }
+.sb-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; border-radius: 5px; cursor: pointer; color: var(--ink-soft); font: 500 12px/1 var(--sans); position: relative; }
+.sb-item:hover { background: var(--surface-2); color: var(--ink); }
+.sb-item.active { background: var(--surface-2); color: var(--ink); }
+.sb-item.active::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; background: var(--accent); border-radius: 2px; }
+.sb-item .l { display: flex; align-items: center; gap: 9px; }
+.sb-item .l svg { color: var(--ink-muted); }
+.sb-item.active .l svg { color: var(--accent); }
+.sb-item .pill { font: 500 9.5px/1 var(--mono); padding: 2px 5px; border-radius: 3px; background: var(--surface-3); color: var(--ink-muted); letter-spacing: 0.04em; }
+.sb-item .pill.acc { background: var(--accent-soft); color: var(--accent); }
+
+.sb-foot { margin-top: auto; padding: 10px; border-top: 1px solid var(--line); }
+.plan-card { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.plan-card .row { display: flex; align-items: center; justify-content: space-between; }
+.plan-card .name { font: 600 12px var(--sans); }
+.plan-card .badge { font: 500 9px var(--mono); padding: 2px 6px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); letter-spacing: 0.04em; }
+.plan-card .bar { margin: 8px 0 4px; height: 3px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow: hidden; }
+[data-theme="light"] .plan-card .bar { background: rgba(10,11,13,0.06); }
+.plan-card .bar > span { display: block; height: 100%; width: 56%; background: var(--accent); border-radius: 999px; }
+.plan-card .meta { font: 500 10.5px var(--mono); color: var(--ink-muted); display: flex; justify-content: space-between; margin-top: 4px; }
+
+/* MAIN */
+.main { grid-area: main; overflow-y: auto; }
+.main-wrap { max-width: 720px; margin: 0 auto; padding: 36px 32px 100px; }
+
+/* WORKSPACE TAB — identity/avatar/plan/data/danger */
+.page-head .pre-label { margin: 0 0 6px; font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
+.ws-section { margin-top: 28px; }
+.ws-sec-label { display: flex; align-items: center; gap: 12px; font: 500 11px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 14px; }
+.ws-sec-label::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.ws-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.ws-field label { font: 500 12.5px/1 var(--sans); color: var(--ink); }
+.ws-input-wrap { display: flex; align-items: stretch; border-radius: 7px; background: rgba(255,255,255,0.025); border: 1px solid var(--line-strong); transition: border-color 140ms ease, box-shadow 140ms ease; }
+[data-theme="light"] .ws-input-wrap { background: rgba(10,11,13,0.025); }
+.ws-input-wrap:focus-within { border-color: var(--accent-line); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ws-input-wrap .prefix { display: inline-flex; align-items: center; padding: 0 11px; border-right: 1px solid var(--line); font: 500 12.5px/1 var(--mono); color: var(--ink-muted); }
+.ws-input-wrap input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--ink); font: 400 13.5px/1 var(--sans); padding: 10px 12px; }
+.ws-helper { font: 400 11.5px/1.45 var(--sans); color: var(--ink-muted); }
+.ws-helper strong { color: var(--ink-soft); font-weight: 500; }
+
+.avatar-row { display: flex; align-items: center; gap: 18px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.avatar-big { width: 64px; height: 64px; border-radius: 16px; color: white; font: 700 28px/1 var(--sans); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; position: relative; }
+.avatar-big::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%); }
+.avatar-actions { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.avatar-buttons { display: flex; gap: 6px; }
+.avatar-swatches { display: none; gap: 6px; padding-top: 6px; }
+.avatar-swatches.active { display: flex; }
+.swatch { width: 26px; height: 26px; border-radius: 8px; cursor: pointer; border: 1.5px solid transparent; padding: 0; }
+.swatch.selected { border-color: var(--accent); }
+.av-tab { font: 500 12px/1 var(--sans); padding: 6px 10px; border-radius: 5px; cursor: pointer; background: transparent; border: 1px solid transparent; color: var(--ink-soft); }
+.av-tab:hover { background: var(--surface-2); color: var(--ink); }
+.av-tab.active { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
+
+.plan-card2 { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+.plan-row1 { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.plan-name { font: 500 22px/1 var(--sans); letter-spacing: -0.02em; }
+.plan-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px 3px 7px; border-radius: 999px; background: rgba(107,227,155,0.10); border: 1px solid rgba(107,227,155,0.28); color: var(--status-sync); font: 500 10.5px/1 var(--sans); }
+.plan-badge .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.plan-row2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
+.plan-tile { background: var(--surface-2); border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; }
+.plan-tile .k { font: 500 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+.plan-tile .v { font: 500 16px/1 var(--sans); letter-spacing: -0.01em; margin-top: 6px; }
+.plan-tile .v small { font: 500 11px var(--mono); color: var(--ink-muted); margin-left: 3px; }
+.plan-bar { height: 3px; background: rgba(255,255,255,0.06); border-radius: 999px; margin-top: 8px; overflow: hidden; }
+[data-theme="light"] .plan-bar { background: rgba(10,11,13,0.06); }
+.plan-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.plan-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+.plan-foot a { font: 500 12px/1 var(--sans); color: var(--ink-soft); display: inline-flex; align-items: center; gap: 4px; }
+.plan-foot a:hover { color: var(--accent); }
+
+.data-rows { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.data-row { display: grid; grid-template-columns: 140px 1fr; padding: 11px 14px; border-top: 1px solid var(--line); font: 400 13px/1.4 var(--sans); }
+.data-row:first-child { border-top: 0; }
+.data-row .k { font: 500 11px/1.3 var(--mono); color: var(--ink-muted); letter-spacing: 0.04em; text-transform: uppercase; align-self: center; }
+.data-row .v { color: var(--ink); }
+.data-mono { font-family: var(--mono); color: var(--ink-soft); }
+
+.ws-danger { margin-top: 36px; padding-top: 18px; border-top: 1px solid rgba(255,122,138,0.22); }
+.ws-danger .danger-label { color: var(--status-error); }
+.danger-row { display: flex; align-items: center; gap: 16px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; margin-bottom: 6px; }
+.danger-row .info { flex: 1; min-width: 0; }
+.danger-row h3 { margin: 0 0 3px; font: 500 13.5px/1.3 var(--sans); color: var(--ink); }
+.danger-row p { margin: 0; font: 400 12.5px/1.45 var(--sans); color: var(--ink-muted); }
+.btn-danger { background: rgba(255,122,138,0.10); color: var(--status-error); border-color: rgba(255,122,138,0.30); }
+.btn-danger:hover { background: rgba(255,122,138,0.18); border-color: var(--status-error); }
+
+.savebar { position: fixed; left: var(--sidebar-w); right: 0; bottom: var(--status-h); height: 52px; background: var(--surface-2); border-top: 1px solid var(--line); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 -16px 32px -16px rgba(0,0,0,0.4); z-index: 40; transform: translateY(110%); transition: transform 220ms cubic-bezier(0.16,1,0.3,1); }
+.savebar.active { transform: translateY(0); }
+.savebar .label { display: flex; align-items: center; gap: 8px; font: 500 11px/1 var(--mono); letter-spacing: 0.06em; color: var(--status-edit); }
+.savebar .label .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--status-edit); box-shadow: 0 0 6px rgba(255,179,112,0.55); animation: sigPulse 2.4s ease-in-out infinite; }
+@keyframes sigPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,179,112,0.5); } 50% { box-shadow: 0 0 0 5px rgba(255,179,112,0); } }
+.savebar .actions { display: flex; gap: 8px; }
+.btn-ghost { background: transparent; color: var(--ink-soft); padding: 7px 12px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; font: 500 12.5px var(--sans); }
+.btn-ghost:hover { background: var(--surface-3); color: var(--ink); }
+
+.confirm-overlay { position: fixed; inset: 0; background: rgba(10,11,13,0.80); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; z-index: 60; }
+.confirm-overlay.active { display: flex; }
+.confirm { width: 100%; max-width: 460px; background: var(--surface); border: 1px solid rgba(255,122,138,0.32); border-radius: 12px; box-shadow: 0 30px 80px -20px rgba(0,0,0,0.7); overflow: hidden; }
+.confirm-head { padding: 16px 20px 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); }
+.confirm-head .ic { width: 28px; height: 28px; border-radius: 7px; background: rgba(255,122,138,0.14); border: 1px solid rgba(255,122,138,0.32); color: var(--status-error); display: inline-flex; align-items: center; justify-content: center; }
+.confirm-head h3 { margin: 0; font: 500 14.5px/1 var(--sans); color: var(--ink); }
+.confirm-body { padding: 16px 20px 18px; }
+.confirm-body p { margin: 0 0 12px; font: 400 13px/1.55 var(--sans); color: var(--ink-soft); }
+.confirm-body p strong { color: var(--ink); font-weight: 600; }
+.confirm-body .echo { display: inline-block; padding: 1px 7px; border-radius: 4px; font: 500 12.5px/1 var(--mono); background: rgba(255,255,255,0.04); border: 1px solid var(--line); color: var(--ink); }
+[data-theme="light"] .confirm-body .echo { background: rgba(10,11,13,0.04); }
+.confirm-foot { padding: 12px 20px; display: flex; justify-content: flex-end; gap: 8px; background: var(--surface-2); border-top: 1px solid var(--line); }
+
+.panel { display: block; }
+.panel.hidden { display: none; }
+.profile-preview { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; }
+.pp-label { margin: 0 0 8px; font: 500 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+.pp-thread { display: flex; gap: 10px; }
+.pp-av { width: 26px; height: 26px; border-radius: 50%; background: linear-gradient(135deg,#FFB370,#FF7A8A); color: white; font: 700 11px/1 var(--sans); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.pp-body { flex: 1; min-width: 0; }
+.pp-row { display: flex; align-items: baseline; gap: 8px; }
+.pp-name { font: 500 13px/1 var(--sans); color: var(--ink); }
+.pp-ts { font: 500 11px/1 var(--mono); color: var(--ink-muted); }
+.pp-text { margin-top: 4px; font: 400 13px/1.5 var(--sans); color: var(--ink-soft); }
+.email-row { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.email-addr { font: 500 13.5px/1 var(--sans); color: var(--ink); }
+.managed-pill { font: 500 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; padding: 3px 7px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-muted); }
+.pref-label { margin: 0 0 8px; font: 500 12px/1 var(--sans); color: var(--ink); }
+.theme-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.theme-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; text-align: left; }
+.theme-card:hover { background: var(--surface-2); border-color: var(--line-strong); }
+.theme-card.active { background: var(--accent-soft); border-color: var(--accent-line); }
+.theme-card .tc-ic { width: 24px; height: 24px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-soft); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 6px; }
+.theme-card.active .tc-ic { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+.theme-card .tc-name { font: 500 13px/1 var(--sans); color: var(--ink); }
+.theme-card .tc-desc { font: 400 11.5px/1 var(--sans); color: var(--ink-muted); }
+.select-row { display: flex; align-items: center; gap: 10px; }
+.select-wrap { position: relative; flex: 0 0 220px; }
+.select-wrap select { width: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); font: 400 13px/1 var(--sans); padding: 10px 32px 10px 12px; appearance: none; cursor: pointer; }
+.select-chev { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--ink-muted); pointer-events: none; }
+.radio-row { display: flex; gap: 6px; }
+.radio-pill { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 7px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); cursor: pointer; font: 500 12.5px/1 var(--sans); }
+.radio-pill:hover { background: var(--surface-2); border-color: var(--line-strong); }
+.radio-pill .r-circle { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--line-strong); flex-shrink: 0; }
+.radio-pill.active { background: var(--accent-soft); border-color: var(--accent-line); }
+.radio-pill.active .r-circle { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 3px var(--canvas); }
+[data-theme="light"] .radio-pill.active .r-circle { box-shadow: inset 0 0 0 3px white; }
+.radio-pill .r-eg { color: var(--ink-muted); font: 500 11.5px/1 var(--mono); }
+.sessions { display: flex; flex-direction: column; gap: 6px; }
+.session-row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.sess-ic { width: 28px; height: 28px; border-radius: 7px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-soft); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.sess-body { flex: 1; min-width: 0; }
+.sess-title { font: 500 13px/1.3 var(--sans); color: var(--ink); }
+.sess-meta { font: 400 11.5px/1.3 var(--sans); color: var(--ink-muted); margin-top: 2px; }
+.sess-signout { font: 500 11.5px/1 var(--sans); padding: 5px 10px; background: transparent; border: 1px solid var(--line); border-radius: 5px; color: var(--ink-soft); cursor: pointer; }
+.sess-signout:hover { color: var(--ink); border-color: var(--line-strong); background: var(--surface-2); }
+.current-pill { font: 500 10px/1 var(--mono); letter-spacing: 0.06em; padding: 4px 8px; border-radius: 4px; background: rgba(107,227,155,0.10); border: 1px solid rgba(107,227,155,0.28); color: var(--status-sync); }
+.signout-all { margin-top: 10px; font: 500 12px/1 var(--sans); background: transparent; border: 0; color: var(--status-error); cursor: pointer; padding: 6px 0; display: inline-flex; align-items: center; gap: 6px; }
+.signout-all:hover { text-decoration: underline; }
+
+/* BILLING */
+.plan-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 22px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.plan-hero .lhs { flex: 1; min-width: 0; }
+.plan-name-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.plan-big-name { font: 500 22px/1 var(--sans); letter-spacing: -0.02em; color: var(--ink); }
+.plan-price { font: 500 36px/1 var(--sans); letter-spacing: -0.025em; color: var(--ink); margin-bottom: 10px; }
+.plan-price span { font: 500 13px/1 var(--sans); color: var(--ink-muted); margin-left: 6px; letter-spacing: 0; }
+.plan-sub { font: 400 13px/1.5 var(--sans); color: var(--ink-muted); }
+.plan-sub.mono { font-family: var(--mono); font-size: 12px; }
+.plan-sub strong { color: var(--ink); font-weight: 500; }
+.plan-hero .rhs { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.btn-ghost { background: transparent; color: var(--ink-soft); padding: 8px 12px; border-radius: 6px; border: 1px solid transparent; cursor: pointer; font: 500 12.5px var(--sans); }
+.btn-ghost:hover { background: var(--surface-2); color: var(--ink); }
+
+.usage-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+.usage-row { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.usage-row:last-of-type { border-bottom: 0; padding-bottom: 4px; }
+.usage-meta { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.u-key { font: 500 12.5px/1 var(--sans); color: var(--ink); }
+.u-val { font: 500 13px/1 var(--mono); color: var(--ink); }
+.u-tot { color: var(--ink-muted); }
+.usage-bar { height: 4px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow: hidden; }
+[data-theme="light"] .usage-bar { background: rgba(10,11,13,0.06); }
+.u-fill { display: block; height: 100%; border-radius: 999px; }
+.u-fill.info { background: var(--status-info); }
+.u-fill.warn { background: var(--status-edit); }
+.u-fill.err { background: var(--status-error); }
+.usage-no-bar { font: 500 11.5px/1 var(--mono); color: var(--ink-muted); }
+.period-reset { font: 500 10.5px/1 var(--mono); letter-spacing: 0.06em; color: var(--ink-muted); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.period-reset span { color: var(--ink-soft); }
+
+.payment-row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; }
+.card-ic { width: 36px; height: 24px; border-radius: 4px; background: linear-gradient(135deg,#1A1A1F,#0E0F12); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid var(--line); }
+.pm-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.pm-num { font: 500 13.5px/1 var(--mono); color: var(--ink); letter-spacing: 0.04em; }
+.pm-meta { font: 500 11px/1 var(--mono); color: var(--ink-muted); letter-spacing: 0.04em; }
+.pm-brand { color: var(--ink-soft); }
+
+.inv-tbl { background: var(--surface); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.inv-row { display: grid; grid-template-columns: 110px 1fr 90px 90px 100px; align-items: center; padding: 11px 16px; border-top: 1px solid var(--line); gap: 12px; }
+.inv-row.head { border-top: 0; background: var(--surface-2); padding: 10px 16px; font: 500 10px/1 var(--mono); color: var(--ink-muted); letter-spacing: 0.06em; }
+.inv-row:not(.head):hover { background: var(--surface-2); }
+.i-date { font: 500 12.5px/1 var(--mono); color: var(--ink); }
+.i-num { font: 500 11.5px/1 var(--mono); color: var(--ink-muted); }
+.i-amt { font: 500 13px/1 var(--mono); color: var(--ink); }
+.i-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 7px; border-radius: 999px; font: 500 10.5px/1 var(--sans); }
+.i-pill .dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.i-pill.paid { background: rgba(107,227,155,0.10); border: 1px solid rgba(107,227,155,0.28); color: var(--status-sync); }
+.i-pill.pending { background: rgba(255,179,112,0.10); border: 1px solid rgba(255,179,112,0.28); color: var(--status-edit); }
+.i-pill.failed { background: rgba(255,122,138,0.10); border: 1px solid rgba(255,122,138,0.28); color: var(--status-error); }
+.i-acts { display: flex; justify-content: flex-end; gap: 4px; }
+.i-act { width: 26px; height: 26px; border-radius: 5px; background: transparent; border: 0; color: var(--ink-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.i-act:hover { background: var(--surface-3); color: var(--ink); }
+.i-link { background: transparent; border: 0; color: var(--ink-soft); cursor: pointer; font: 500 12px/1 var(--sans); padding: 6px 8px; border-radius: 5px; }
+.i-link:hover { color: var(--ink); background: var(--surface-3); }
+.inv-download-all { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; font: 500 12px/1 var(--sans); color: var(--ink-soft); }
+.inv-download-all:hover { color: var(--ink); }
+
+.tax-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px; }
+.tax-rows { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 0; }
+.tax-row { display: grid; grid-template-columns: 130px 1fr; gap: 12px; font: 400 13px/1.5 var(--sans); }
+.tax-row .k { font: 500 10.5px/1.5 var(--mono); color: var(--ink-muted); letter-spacing: 0.06em; }
+.tax-row .v { color: var(--ink); }
+.tax-row .v.mono { font-family: var(--mono); font-size: 12px; }
+
+.plans-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.plan-compare { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.plan-compare.current { border-color: var(--accent-line); background: linear-gradient(180deg, var(--accent-soft), var(--surface) 30%); }
+.pc-head { display: flex; align-items: center; justify-content: space-between; }
+.pc-tier { font: 500 11px/1 var(--mono); color: var(--ink); letter-spacing: 0.08em; }
+.pc-tag { font: 500 9.5px/1 var(--mono); padding: 3px 6px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); color: var(--ink-muted); letter-spacing: 0.06em; }
+.pc-tag.current { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+.pc-tag.up { background: rgba(107,227,155,0.10); border-color: rgba(107,227,155,0.28); color: var(--status-sync); }
+.pc-price { font: 500 22px/1 var(--sans); color: var(--ink); letter-spacing: -0.02em; }
+.pc-price span { font: 400 12px/1 var(--sans); color: var(--ink-muted); margin-left: 4px; }
+.pc-diff { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.pc-diff li { font: 400 12px/1.45 var(--sans); color: var(--ink-soft); }
+.pc-diff li.up { color: var(--status-sync); }
+.pc-diff li.down { color: var(--status-error); opacity: 0.85; }
+.pc-diff li.keep { color: var(--ink-muted); }
+.pc-btn { margin-top: 6px; width: 100%; justify-content: center; }
+
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 22px; }
+.page-head h1 { margin: 0; font: 600 22px/1.2 var(--sans); letter-spacing: -0.02em; }
+.page-head .sub { margin: 4px 0 0; color: var(--ink-muted); font-size: 12.5px; }
+.head-actions { display: flex; gap: 8px; }
+
+.btn { font: 500 12px/1 var(--sans); padding: 7px 12px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; display: inline-flex; align-items: center; gap: 6px; }
+.btn-ink { background: var(--ink); color: var(--on-ink); }
+.btn-ink:hover { background: rgba(255,255,255,0.92); }
+[data-theme="light"] .btn-ink:hover { background: #1A1B1F; }
+.btn-secondary { background: var(--surface); color: var(--ink); border-color: var(--line-strong); }
+.btn-secondary:hover { background: var(--surface-2); border-color: var(--line-bright); }
+.btn-ghost { background: transparent; color: var(--ink-soft); }
+.btn-ghost:hover { background: var(--surface-2); color: var(--ink); }
+
+.tabs { display: flex; gap: 18px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+.tab { padding: 8px 0 10px; font: 500 12.5px/1 var(--sans); color: var(--ink-muted); cursor: pointer; border: 0; background: transparent; position: relative; }
+.tab:hover { color: var(--ink); }
+.tab.active { color: var(--ink); }
+.tab.active::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1.5px; background: var(--accent); border-radius: 1px; }
+.tab .ct { color: var(--ink-faint); font: 500 11px/1 var(--mono); margin-left: 6px; }
+
+/* Filter bar */
+.filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.search-input { position: relative; flex: 1; max-width: 320px; }
+.search-input svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; color: var(--ink-muted); }
+.search-input input { width: 100%; padding: 7px 10px 7px 28px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); font: 400 12px/1 var(--sans); outline: none; }
+.search-input input:focus { border-color: var(--accent-line); }
+.filter-chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border-radius: 6px; background: var(--surface); border: 1px solid var(--line); font: 500 11.5px/1 var(--sans); color: var(--ink-soft); cursor: pointer; }
+.filter-chip:hover { color: var(--ink); border-color: var(--line-strong); }
+.filter-chip svg { color: var(--ink-muted); }
+
+/* TABLE */
+.tbl { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.tbl-row { display: grid; grid-template-columns: minmax(0,1fr) 110px 110px 110px 28px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--line); gap: 12px; }
+.tbl-row.head { border-top: 0; padding: 9px 14px; background: var(--surface-2); font: 500 10px/1 var(--mono); color: var(--ink-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.tbl-row:not(.head):hover { background: var(--surface-2); }
+.member-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.av { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font: 700 11px/1 var(--sans); color: white; flex-shrink: 0; }
+.av.a { background: linear-gradient(135deg, #FFB370, #FF7A8A); }
+.av.b { background: linear-gradient(135deg, #7C9CFF, #C8A2FF); }
+.av.c { background: linear-gradient(135deg, #6BE39B, #2B9B9B); }
+.av.d { background: linear-gradient(135deg, #FF7A8A, #B847C0); }
+.av.e { background: linear-gradient(135deg, #C8A2FF, #7C9CFF); }
+.member-meta { min-width: 0; }
+.member-meta .name { font: 500 13px/1.25 var(--sans); color: var(--ink); display: flex; align-items: center; gap: 5px; }
+.member-meta .name .me { font: 500 9px var(--mono); padding: 1px 4px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); letter-spacing: 0.04em; }
+.member-meta .email { font: 400 11.5px/1.3 var(--sans); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.role-select { display: inline-flex; align-items: center; gap: 5px; padding: 4px 7px 4px 8px; border-radius: 5px; background: transparent; border: 1px solid transparent; cursor: pointer; font: 500 12px/1 var(--sans); color: var(--ink); }
+.role-select:hover { background: var(--surface-3); border-color: var(--line); }
+.role-select svg { color: var(--ink-muted); }
+.role-select.locked { cursor: default; color: var(--ink-soft); }
+.role-select.locked:hover { background: transparent; border-color: transparent; }
+
+.status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 7px; border-radius: 999px; font: 500 11px/1 var(--sans); }
+.status-pill .sig { width: 5px; height: 5px; border-radius: 50%; background: currentColor; box-shadow: 0 0 5px currentColor; opacity: 0.85; }
+.status-pill.online { background: rgba(107,227,155,0.08); border: 1px solid rgba(107,227,155,0.22); color: var(--status-sync); }
+.status-pill.away { background: rgba(255,179,112,0.08); border: 1px solid rgba(255,179,112,0.22); color: var(--status-edit); }
+.status-pill.offline { background: var(--surface-3); border: 1px solid var(--line); color: var(--ink-muted); }
+.status-pill.offline .sig { background: var(--ink-faint); box-shadow: none; opacity: 1; }
+
+.dt { color: var(--ink-muted); font: 500 11.5px/1 var(--sans); }
+
+.row-action { width: 24px; height: 24px; border: 0; background: transparent; border-radius: 4px; color: var(--ink-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.row-action:hover { background: var(--surface-3); color: var(--ink); }
+
+/* Pending invites */
+.section-title { display: flex; align-items: center; justify-content: space-between; margin: 26px 0 10px; }
+.section-title h2 { margin: 0; font: 500 11px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+.section-title .count { font: 500 11px/1 var(--mono); color: var(--ink-faint); }
+
+.invite-row { display: grid; grid-template-columns: minmax(0,1fr) 110px 110px 28px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--line); gap: 12px; }
+.invite-row.head { border-top: 0; background: var(--surface-2); padding: 9px 14px; font: 500 10px/1 var(--mono); color: var(--ink-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.invite-row .em { display: flex; align-items: center; gap: 10px; font: 400 12.5px var(--sans); color: var(--ink); }
+.invite-row .em svg { color: var(--ink-muted); }
+.invite-row .actions { display: flex; gap: 4px; }
+.tbtn { font: 500 11.5px/1 var(--sans); padding: 5px 9px; border-radius: 5px; background: transparent; border: 1px solid var(--line); color: var(--ink-soft); cursor: pointer; }
+.tbtn:hover { color: var(--ink); border-color: var(--line-strong); background: var(--surface-2); }
+.tbtn.danger:hover { color: var(--status-warn); border-color: var(--status-warn); }
+
+/* Stats strip */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 20px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.stat .l { font: 500 10px/1 var(--mono); color: var(--ink-muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.stat .v { font: 600 18px/1 var(--sans); letter-spacing: -0.02em; margin-top: 6px; }
+.stat .v small { font: 500 10.5px var(--mono); color: var(--ink-muted); margin-left: 4px; }
+
+/* STATUS BAR */
+.statusbar { grid-area: status; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; background: var(--surface); border-top: 1px solid var(--line); font: 500 10.5px/1 var(--mono); color: var(--ink-muted); }
+.statusbar .left, .statusbar .right { display: flex; align-items: center; gap: 12px; }
+.statusbar .v { color: var(--ink-soft); font-weight: 600; }
+
+/* TWEAKS */
+.tweaks { position: fixed; right: 14px; bottom: calc(var(--status-h) + 12px); z-index: 60; width: 240px; background: rgba(18,19,23,0.96); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; color: var(--ink); font-size: 11px; display: none; }
+[data-theme="light"] .tweaks { background: rgba(255,255,255,0.96); border-color: rgba(10,11,13,0.08); }
+.tweaks.active { display: block; }
+.tweaks-hd { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+[data-theme="light"] .tweaks-hd { border-color: rgba(10,11,13,0.06); }
+.tweaks-hd b { font: 600 11.5px var(--sans); }
+.tweaks-close { border: 0; background: transparent; color: var(--ink-muted); width: 20px; height: 20px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+.tweaks-close:hover { background: rgba(255,255,255,0.05); color: var(--ink); }
+.tweaks-body { padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 11px; }
+.tweaks-section { display: flex; flex-direction: column; gap: 6px; }
+.tweaks-section h6 { margin: 4px 0 0; font: 500 9.5px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
+.tweaks .seg2 { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 5px; padding: 2px; }
+[data-theme="light"] .tweaks .seg2 { background: rgba(10,11,13,0.04); border-color: rgba(10,11,13,0.06); }
+.tweaks .seg2 button { border: 0; background: transparent; cursor: pointer; font: 500 11px var(--sans); padding: 4px 5px; border-radius: 4px; color: var(--ink-muted); }
+.tweaks .seg2 button.active { background: var(--ink); color: var(--on-ink); }
+.tweaks .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.tweaks .swatches button { aspect-ratio: 1; border-radius: 4px; cursor: pointer; border: 1px solid rgba(255,255,255,0.1); padding: 0; }
+.tweaks .swatches button.active { outline: 2px solid var(--ink); outline-offset: 2px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="topbar">
+    <div class="tb-left">
+      <a href="#" class="brand"><span class="glyph">μ</span><span>Mnema</span></a>
+      <span class="tb-sep"></span>
+      <button class="ws-switch"><span class="ws-avatar">B</span><span>boppl-design</span><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+    </div>
+    <div class="crumbs">
+      <span>Settings</span>
+      <svg class="sep" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>
+      <span class="here" id="crumb-here">Billing</span>
+    </div>
+    <div class="tb-right">
+      <button class="icon-btn" title="Search"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+      <button class="icon-btn" title="Help"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.1 9.1a3 3 0 1 1 4.4 4l-1.5 1.4M12 17.5h.01"/></svg></button>
+      <button class="user-chip" title="Kevin">K</button>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <div class="sb-section">
+      <h6>Workspace</h6>
+      <div class="sb-list">
+        <div class="sb-item" data-panel="workspace"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Workspace</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Members</span><span class="pill">5</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg>Knowledge bases</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>Integrations</span><span class="pill">3</span></div>
+      </div>
+    </div>
+    <div class="sb-section">
+      <h6>Developer</h6>
+      <div class="sb-list">
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>MCP server</span><span class="pill" style="background:rgba(107,227,155,0.12);color:var(--status-sync);">LIVE</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="8" cy="12" r="1.5"/><path d="M14 12h6"/></svg>API keys</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>Audit log</span></div>
+      </div>
+    </div>
+    <div class="sb-section">
+      <h6>Account</h6>
+      <div class="sb-list">
+        <div class="sb-item" data-panel="account"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.38 8.38 0 0 1 13 0"/></svg>Profile</span></div>
+        <div class="sb-item active" data-panel="billing"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Billing</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Security</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>Notifications</span></div>
+      </div>
+    </div>
+
+    <div class="sb-foot">
+      <div class="plan-card">
+        <div class="row"><span class="name">Pro</span><span class="badge">CURRENT</span></div>
+        <div class="bar"><span></span></div>
+        <div class="meta"><span>2,840 / 5,000 calls</span><span>9d left</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="main-wrap">
+
+      <!-- BILLING PANEL -->
+      <div class="panel" data-panel="billing">
+        <div class="page-head">
+          <div>
+            <p class="pre-label">SETTINGS</p>
+            <h1>Billing</h1>
+            <p class="sub">Your plan, usage, and invoices for this workspace.</p>
+          </div>
+        </div>
+
+        <!-- CURRENT PLAN -->
+        <div class="ws-section">
+          <div class="plan-hero">
+            <div class="lhs">
+              <p class="ws-sec-label" style="margin-bottom:10px;">CURRENT PLAN</p>
+              <div class="plan-name-row">
+                <span class="plan-big-name">Pro</span>
+                <span class="plan-badge"><span class="dot"></span>Active</span>
+              </div>
+              <div class="plan-price">$15 <span>per seat / month</span></div>
+              <div class="plan-sub">Renews on <strong>14 June 2025</strong></div>
+              <div class="plan-sub mono">5 seats × $15 = $75 / month</div>
+            </div>
+            <div class="rhs">
+              <button class="btn btn-secondary">Manage plan</button>
+              <button class="btn btn-ghost">Cancel subscription</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- USAGE -->
+        <div class="ws-section">
+          <div class="usage-card">
+            <p class="ws-sec-label" style="margin-bottom:14px;">USAGE THIS PERIOD</p>
+            <div class="usage-row">
+              <div class="usage-meta"><span class="u-key">MCP calls</span><span class="u-val">1,247 <span class="u-tot">/ 5,000</span></span></div>
+              <div class="usage-bar"><span class="u-fill info" style="width:25%;"></span></div>
+            </div>
+            <div class="usage-row">
+              <div class="usage-meta"><span class="u-key">Members</span><span class="u-val">4 <span class="u-tot">/ 5</span></span></div>
+              <div class="usage-bar"><span class="u-fill warn" style="width:80%;"></span></div>
+            </div>
+            <div class="usage-row">
+              <div class="usage-meta"><span class="u-key">Documents</span><span class="u-val">127 <span class="u-tot">/ unlimited</span></span></div>
+              <div class="usage-no-bar">no limit on Pro</div>
+            </div>
+            <div class="period-reset">PERIOD RESETS · <span>14 JUNE 2025</span></div>
+          </div>
+        </div>
+
+        <!-- PAYMENT METHOD -->
+        <div class="ws-section">
+          <div class="ws-sec-label">PAYMENT METHOD</div>
+          <div class="payment-row">
+            <span class="card-ic"><svg width="22" height="14" viewBox="0 0 36 22" fill="none"><circle cx="14" cy="11" r="8" fill="#EB001B"/><circle cx="22" cy="11" r="8" fill="#F79E1B" opacity="0.85"/></svg></span>
+            <div class="pm-info">
+              <span class="pm-num">•••• •••• •••• 4242</span>
+              <span class="pm-meta"><span class="pm-brand">MASTERCARD</span> · EXPIRES 12/27 · Kevin Reyes</span>
+            </div>
+            <button class="btn btn-secondary">Update</button>
+          </div>
+        </div>
+
+        <!-- INVOICES -->
+        <div class="ws-section">
+          <div class="ws-sec-label">INVOICES</div>
+          <div class="inv-tbl">
+            <div class="inv-row head">
+              <span>DATE</span>
+              <span>INVOICE</span>
+              <span>AMOUNT</span>
+              <span>STATUS</span>
+              <span></span>
+            </div>
+            <div class="inv-row">
+              <span class="i-date">14 May 2025</span>
+              <span class="i-num">INV-2025-0514-B0PP1</span>
+              <span class="i-amt">$75.00</span>
+              <span><span class="i-pill paid"><span class="dot"></span>Paid</span></span>
+              <span class="i-acts">
+                <button class="i-act" title="Download"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></button>
+                <button class="i-link">View</button>
+              </span>
+            </div>
+            <div class="inv-row">
+              <span class="i-date">14 Apr 2025</span>
+              <span class="i-num">INV-2025-0414-B0PP1</span>
+              <span class="i-amt">$75.00</span>
+              <span><span class="i-pill paid"><span class="dot"></span>Paid</span></span>
+              <span class="i-acts">
+                <button class="i-act" title="Download"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></button>
+                <button class="i-link">View</button>
+              </span>
+            </div>
+            <div class="inv-row">
+              <span class="i-date">14 Mar 2025</span>
+              <span class="i-num">INV-2025-0314-B0PP1</span>
+              <span class="i-amt">$45.00</span>
+              <span><span class="i-pill paid"><span class="dot"></span>Paid</span></span>
+              <span class="i-acts">
+                <button class="i-act" title="Download"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></button>
+                <button class="i-link">View</button>
+              </span>
+            </div>
+            <div class="inv-row">
+              <span class="i-date">14 Feb 2025</span>
+              <span class="i-num">INV-2025-0214-B0PP1</span>
+              <span class="i-amt">$30.00</span>
+              <span><span class="i-pill pending"><span class="dot"></span>Pending</span></span>
+              <span class="i-acts">
+                <button class="i-act" title="Download"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></button>
+                <button class="i-link">View</button>
+              </span>
+            </div>
+          </div>
+          <a href="#" class="inv-download-all"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Download all invoices</a>
+        </div>
+
+        <!-- TAX INFO -->
+        <div class="ws-section">
+          <div class="ws-sec-label">TAX INFORMATION</div>
+          <div class="tax-card">
+            <div class="tax-rows">
+              <div class="tax-row"><span class="k">TAX ID</span><span class="v mono">GSTIN 29ABCDE1234F1Z5</span></div>
+              <div class="tax-row"><span class="k">LEGAL NAME</span><span class="v">Boppl Technologies Pvt Ltd</span></div>
+              <div class="tax-row"><span class="k">BILLING ADDRESS</span><span class="v">3rd Floor, 91 Springboard<br/>Indiranagar, Bengaluru, KA 560038<br/>India</span></div>
+            </div>
+            <button class="btn btn-secondary">Update tax info</button>
+          </div>
+        </div>
+
+        <!-- CHANGE PLAN -->
+        <div class="ws-section">
+          <div class="ws-sec-label">CHANGE PLAN</div>
+          <div class="plans-row">
+            <div class="plan-compare downgrade">
+              <div class="pc-head">
+                <span class="pc-tier">FREE</span>
+                <span class="pc-tag">DOWNGRADE</span>
+              </div>
+              <div class="pc-price">$0 <span>forever</span></div>
+              <ul class="pc-diff">
+                <li class="down">− Up to 3 teammates (you'd remove 2)</li>
+                <li class="down">− 100 docs limit (you have 127)</li>
+                <li class="down">− 500 MCP calls/mo</li>
+                <li class="keep">· Hybrid search</li>
+              </ul>
+              <button class="btn btn-ghost pc-btn">Switch to Free</button>
+            </div>
+            <div class="plan-compare current">
+              <div class="pc-head">
+                <span class="pc-tier">PRO</span>
+                <span class="pc-tag current">CURRENT</span>
+              </div>
+              <div class="pc-price">$15 <span>per seat / mo</span></div>
+              <ul class="pc-diff">
+                <li class="keep">· Up to 5 teammates</li>
+                <li class="keep">· Unlimited docs</li>
+                <li class="keep">· 5,000 MCP calls/mo</li>
+                <li class="keep">· Version history</li>
+              </ul>
+              <button class="btn btn-ghost pc-btn" disabled style="opacity:0.5;cursor:not-allowed;">You're on this plan</button>
+            </div>
+            <div class="plan-compare upgrade">
+              <div class="pc-head">
+                <span class="pc-tier">TEAM</span>
+                <span class="pc-tag up">UPGRADE</span>
+              </div>
+              <div class="pc-price">$25 <span>per seat / mo</span></div>
+              <ul class="pc-diff">
+                <li class="up">+ Unlimited teammates</li>
+                <li class="up">+ Unlimited MCP calls</li>
+                <li class="up">+ Priority support</li>
+                <li class="up">+ SSO + SCIM</li>
+              </ul>
+              <button class="btn btn-ink pc-btn">Upgrade to Team</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- DANGER -->
+        <div class="ws-danger">
+          <div class="ws-sec-label danger-label">DANGER ZONE</div>
+          <div class="danger-row">
+            <div class="info">
+              <h3>Cancel subscription</h3>
+              <p>Cancel your Pro subscription. Your workspace will revert to Free at the end of the current billing period — you'll keep access until then.</p>
+            </div>
+            <button class="btn btn-danger" id="cancel-sub-btn"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>Cancel subscription</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCOUNT PANEL -->
+      <div class="panel hidden" data-panel="account">
+        <div class="page-head">
+          <div>
+            <p class="pre-label">SETTINGS</p>
+            <h1>Account</h1>
+            <p class="sub">Your personal account, applies across all workspaces.</p>
+          </div>
+        </div>
+
+        <div class="ws-section">
+          <div class="ws-sec-label">PROFILE</div>
+          <div class="ws-field" style="margin-bottom:14px;">
+            <label for="acct-name">Display name</label>
+            <div class="ws-input-wrap"><input id="acct-name" type="text" value="Kevin Reyes" /></div>
+          </div>
+          <div class="profile-preview">
+            <div class="pp-label">HOW OTHERS SEE YOU</div>
+            <div class="pp-thread">
+              <span class="pp-av">K</span>
+              <div class="pp-body">
+                <div class="pp-row"><span class="pp-name" id="pp-name">Kevin Reyes</span><span class="pp-ts">commented · 2m ago</span></div>
+                <div class="pp-text">Looks good — let's ship.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ws-section">
+          <div class="ws-sec-label">EMAIL</div>
+          <div class="email-row">
+            <span class="email-addr">kevin@boppl.in</span>
+            <span class="managed-pill">MANAGED BY WORKOS</span>
+          </div>
+          <p class="ws-helper" style="margin-top:10px;">To change your email, contact support.</p>
+        </div>
+
+        <div class="ws-section">
+          <div class="ws-sec-label">AVATAR</div>
+          <div class="avatar-row">
+            <div class="avatar-big" id="acct-avatar" style="background:linear-gradient(135deg,#FFB370,#FF7A8A);">K</div>
+            <div class="avatar-actions">
+              <div class="avatar-buttons">
+                <button class="av-tab">Upload image</button>
+                <button class="av-tab">Pick emoji</button>
+                <button class="av-tab active" id="acct-use-color">Use color</button>
+              </div>
+              <div class="avatar-swatches active" id="acct-swatches">
+                <button class="swatch selected" data-grad="linear-gradient(135deg,#FFB370,#FF7A8A)" style="background:linear-gradient(135deg,#FFB370,#FF7A8A);"></button>
+                <button class="swatch" data-grad="linear-gradient(135deg,#7C9CFF,#C8A2FF)" style="background:linear-gradient(135deg,#7C9CFF,#C8A2FF);"></button>
+                <button class="swatch" data-grad="linear-gradient(135deg,#6BE39B,#2B9B9B)" style="background:linear-gradient(135deg,#6BE39B,#2B9B9B);"></button>
+                <button class="swatch" data-grad="linear-gradient(135deg,#FF7A8A,#B847C0)" style="background:linear-gradient(135deg,#FF7A8A,#B847C0);"></button>
+                <button class="swatch" data-grad="linear-gradient(135deg,#C8A2FF,#7C9CFF)" style="background:linear-gradient(135deg,#C8A2FF,#7C9CFF);"></button>
+                <button class="swatch" data-grad="linear-gradient(135deg,#FFD66B,#FFB370)" style="background:linear-gradient(135deg,#FFD66B,#FFB370);"></button>
+                <button class="swatch" data-grad="linear-gradient(135deg,#1E1F23,#3D4046)" style="background:linear-gradient(135deg,#1E1F23,#3D4046);"></button>
+                <button class="swatch" data-grad="linear-gradient(135deg,#2B9B9B,#265F8C)" style="background:linear-gradient(135deg,#2B9B9B,#265F8C);"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ws-section">
+          <div class="ws-sec-label">PREFERENCES</div>
+          <p class="pref-label">Theme</p>
+          <div class="theme-cards" id="theme-cards">
+            <button class="theme-card" data-theme="system">
+              <span class="tc-ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+              <span class="tc-name">System</span>
+              <span class="tc-desc">Match OS</span>
+            </button>
+            <button class="theme-card" data-theme="light">
+              <span class="tc-ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg></span>
+              <span class="tc-name">Light</span>
+              <span class="tc-desc">Warm cream surface</span>
+            </button>
+            <button class="theme-card active" data-theme="dark">
+              <span class="tc-ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg></span>
+              <span class="tc-name">Dark</span>
+              <span class="tc-desc">Pure black</span>
+            </button>
+          </div>
+          <p class="pref-label" style="margin-top:18px;">Language</p>
+          <div class="select-row">
+            <div class="ws-input-wrap select-wrap">
+              <select id="lang-select">
+                <option>English</option>
+                <option disabled>Hindi — coming soon</option>
+                <option disabled>Japanese — coming soon</option>
+                <option disabled>Spanish — coming soon</option>
+              </select>
+              <span class="select-chev"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+            <span class="managed-pill" style="background:var(--accent-soft);color:var(--accent);border-color:var(--accent-line);">MORE COMING SOON</span>
+          </div>
+          <p class="pref-label" style="margin-top:18px;">Time format</p>
+          <div class="radio-row" id="time-row">
+            <button class="radio-pill" data-time="12"><span class="r-circle"></span>12-hour <span class="r-eg">3:24 PM</span></button>
+            <button class="radio-pill active" data-time="24"><span class="r-circle"></span>24-hour <span class="r-eg">15:24</span></button>
+          </div>
+        </div>
+
+        <div class="ws-section">
+          <div class="ws-sec-label">ACTIVE SESSIONS</div>
+          <div class="sessions">
+            <div class="session-row">
+              <span class="sess-ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+              <div class="sess-body">
+                <div class="sess-title">Mac · Chrome 124</div>
+                <div class="sess-meta">Bengaluru, IN · active now</div>
+              </div>
+              <span class="current-pill">CURRENT</span>
+            </div>
+            <div class="session-row">
+              <span class="sess-ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
+              <div class="sess-body">
+                <div class="sess-title">iPhone 15 · Safari</div>
+                <div class="sess-meta">Bengaluru, IN · 2 hours ago</div>
+              </div>
+              <button class="sess-signout">Sign out</button>
+            </div>
+            <div class="session-row">
+              <span class="sess-ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+              <div class="sess-body">
+                <div class="sess-title">Windows · Firefox 122</div>
+                <div class="sess-meta">Mumbai, IN · 3 days ago</div>
+              </div>
+              <button class="sess-signout">Sign out</button>
+            </div>
+          </div>
+          <button class="signout-all">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+            Sign out of all other sessions
+          </button>
+        </div>
+
+        <div class="ws-section">
+          <div class="ws-sec-label">CONNECTED ACCOUNTS</div>
+          <div class="sessions">
+            <div class="session-row">
+              <span class="sess-ic" style="background:white;border-color:rgba(10,11,13,0.1);"><svg width="14" height="14" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A10.99 10.99 0 0 0 12 23z" fill="#34A853"/><path d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.44.34-2.1V7.07H2.18A11 11 0 0 0 1 12c0 1.78.43 3.46 1.18 4.93l3.66-2.83z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.07l3.66 2.83C6.71 7.31 9.14 5.38 12 5.38z" fill="#EA4335"/></svg></span>
+              <div class="sess-body">
+                <div class="sess-title">Google</div>
+                <div class="sess-meta">kevin@boppl.in · connected 14 Mar</div>
+              </div>
+              <button class="sess-signout">Disconnect</button>
+            </div>
+            <div class="session-row">
+              <span class="sess-ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.54 2.87 8.39 6.84 9.75.5.09.69-.22.69-.49 0-.24-.01-.88-.01-1.73-2.78.61-3.37-1.36-3.37-1.36-.46-1.18-1.11-1.49-1.11-1.49-.91-.63.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.89 1.55 2.34 1.1 2.91.84.09-.66.35-1.1.63-1.36-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05A9.34 9.34 0 0 1 12 6.96c.85 0 1.71.12 2.5.34 1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.48-.01 2.82 0 .27.18.59.69.49C19.13 20.64 22 16.79 22 12.25 22 6.58 17.52 2 12 2z"/></svg></span>
+              <div class="sess-body">
+                <div class="sess-title">GitHub</div>
+                <div class="sess-meta">kevin-r · connected 28 Mar</div>
+              </div>
+              <button class="sess-signout">Disconnect</button>
+            </div>
+          </div>
+          <button class="signout-all" style="color:var(--ink-soft);">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            Add another provider
+          </button>
+        </div>
+
+        <div class="ws-danger">
+          <div class="ws-sec-label danger-label">DANGER ZONE</div>
+          <div class="danger-row">
+            <div class="info">
+              <h3>Delete account</h3>
+              <p>Permanently delete your Mnema account. You'll lose access to all workspaces you own. This cannot be undone.</p>
+            </div>
+            <button class="btn btn-danger" id="delete-acct-btn"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete account</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- WORKSPACE PANEL -->
+      <div class="panel hidden" data-panel="workspace">
+      <div class="page-head">
+        <div>
+          <p class="pre-label">SETTINGS</p>
+          <h1>Workspace</h1>
+          <p class="sub">Workspace-level preferences and metadata.</p>
+        </div>
+      </div>
+
+      <div class="ws-section">
+        <div class="ws-sec-label">IDENTITY</div>
+        <div class="ws-field">
+          <label for="ws-name">Workspace name</label>
+          <div class="ws-input-wrap"><input id="ws-name" type="text" value="boppl-design" /></div>
+          <p class="ws-helper">Shown in the sidebar and email invitations.</p>
+        </div>
+        <div class="ws-field" style="margin-bottom:0;">
+          <label for="ws-slug">Workspace URL</label>
+          <div class="ws-input-wrap"><span class="prefix">mnema.app /</span><input id="ws-slug" type="text" value="boppl-design" /></div>
+          <p class="ws-helper">Lowercase letters, numbers, hyphens. <strong>Changing this breaks existing links. Be cautious.</strong></p>
+        </div>
+      </div>
+
+      <div class="ws-section">
+        <div class="ws-sec-label">AVATAR</div>
+        <div class="avatar-row">
+          <div class="avatar-big" id="avatar-preview" style="background:linear-gradient(135deg,#7C9CFF,#C8A2FF);">B</div>
+          <div class="avatar-actions">
+            <div class="avatar-buttons">
+              <button class="av-tab">Upload image</button>
+              <button class="av-tab">Pick emoji</button>
+              <button class="av-tab active" id="use-color-btn">Use color</button>
+            </div>
+            <div class="avatar-swatches active" id="swatches">
+              <button class="swatch selected" data-grad="linear-gradient(135deg, #7C9CFF, #C8A2FF)" style="background:linear-gradient(135deg,#7C9CFF,#C8A2FF);"></button>
+              <button class="swatch" data-grad="linear-gradient(135deg, #FFB370, #FF7A8A)" style="background:linear-gradient(135deg,#FFB370,#FF7A8A);"></button>
+              <button class="swatch" data-grad="linear-gradient(135deg, #6BE39B, #2B9B9B)" style="background:linear-gradient(135deg,#6BE39B,#2B9B9B);"></button>
+              <button class="swatch" data-grad="linear-gradient(135deg, #FF7A8A, #B847C0)" style="background:linear-gradient(135deg,#FF7A8A,#B847C0);"></button>
+              <button class="swatch" data-grad="linear-gradient(135deg, #C8A2FF, #7C9CFF)" style="background:linear-gradient(135deg,#C8A2FF,#7C9CFF);"></button>
+              <button class="swatch" data-grad="linear-gradient(135deg, #FFD66B, #FFB370)" style="background:linear-gradient(135deg,#FFD66B,#FFB370);"></button>
+              <button class="swatch" data-grad="linear-gradient(135deg, #1E1F23, #3D4046)" style="background:linear-gradient(135deg,#1E1F23,#3D4046);"></button>
+              <button class="swatch" data-grad="linear-gradient(135deg, #2B9B9B, #265F8C)" style="background:linear-gradient(135deg,#2B9B9B,#265F8C);"></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ws-section">
+        <div class="plan-card2">
+          <div class="ws-sec-label" style="margin-bottom:10px;">CURRENT PLAN</div>
+          <div class="plan-row1"><span class="plan-name">Pro</span><span class="plan-badge"><span class="dot"></span>Active</span></div>
+          <div class="plan-row2">
+            <div class="plan-tile"><div class="k">Members</div><div class="v">4 <small>/ 5</small></div></div>
+            <div class="plan-tile"><div class="k">Documents</div><div class="v">127</div></div>
+            <div class="plan-tile">
+              <div class="k">MCP calls · 30d</div>
+              <div class="v">2,840 <small>/ 5,000</small></div>
+              <div class="plan-bar"><span style="width:57%;"></span></div>
+            </div>
+          </div>
+          <div class="plan-foot"><a href="#">Manage plan <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></a></div>
+        </div>
+      </div>
+
+      <div class="ws-section">
+        <div class="ws-sec-label">DATA</div>
+        <div class="data-rows">
+          <div class="data-row"><div class="k">REGION</div><div class="v">Mumbai <span class="data-mono">(ap-south-1)</span></div></div>
+          <div class="data-row"><div class="k">STORAGE</div><div class="v">Neon Postgres</div></div>
+          <div class="data-row"><div class="k">CREATED</div><div class="v">14 March 2025 <span class="data-mono">· 2 months ago</span></div></div>
+          <div class="data-row"><div class="k">WORKSPACE ID</div><div class="v"><span class="data-mono">ws_b0pp1_d3s1gn_a1f4e9</span></div></div>
+        </div>
+      </div>
+
+      <div class="ws-danger">
+        <div class="ws-sec-label danger-label">DANGER ZONE</div>
+        <div class="danger-row">
+          <div class="info"><h3>Transfer ownership</h3><p>Transfer this workspace to another member. They become the sole owner.</p></div>
+          <button class="btn btn-secondary">Transfer →</button>
+        </div>
+        <div class="danger-row">
+          <div class="info"><h3>Delete workspace</h3><p>Permanently delete this workspace and all its docs, flows, and connections. This cannot be undone.</p></div>
+          <button class="btn btn-danger" id="delete-btn"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete workspace</button>
+        </div>
+      </div>
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="statusbar">
+    <div class="left"><span class="item">MCP <span class="v">v2025-11-25</span></span></div>
+    <div class="right"><span class="item">boppl-design · <span class="v">Pro</span></span></div>
+  </footer>
+</div>
+
+<div class="savebar" id="savebar">
+  <div class="label"><span class="dot"></span>UNSAVED CHANGES</div>
+  <div class="actions">
+    <button class="btn-ghost" id="discard-btn">Discard</button>
+    <button class="btn btn-ink" id="save-btn">Save changes</button>
+  </div>
+</div>
+
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm">
+    <div class="confirm-head">
+      <span class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+      <h3>Delete workspace?</h3>
+    </div>
+    <div class="confirm-body">
+      <p>This will permanently delete <strong>boppl-design</strong>, all docs, flows, and connected MCP clients. There's no undo.</p>
+      <p>Type <span class="echo">boppl-design</span> to confirm.</p>
+      <div class="ws-input-wrap" style="margin-top:10px;"><input id="confirm-input" type="text" placeholder="Type workspace name" autocomplete="off" /></div>
+    </div>
+    <div class="confirm-foot">
+      <button class="btn-ghost" id="cancel-delete">Cancel</button>
+      <button class="btn btn-danger" id="confirm-delete" disabled style="opacity:0.55;cursor:not-allowed;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Delete forever</button>
+    </div>
+  </div>
+</div>
+
+<aside class="tweaks" id="tweaks">
+  <div class="tweaks-hd"><b>Tweaks · Settings</b><button class="tweaks-close" id="tweaks-close">×</button></div>
+  <div class="tweaks-body">
+    <div class="tweaks-section">
+      <h6>Font</h6>
+      <div class="seg2" data-tweak="font">
+        <button data-val="Inter">Inter</button>
+        <button data-val="Geist">Geist</button>
+        <button data-val="IBM Plex Sans">Plex</button>
+        <button data-val="system">System</button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Theme</h6>
+      <div class="seg2" data-tweak="theme">
+        <button data-val="dark">Dark</button>
+        <button data-val="light">Light</button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Accent</h6>
+      <div class="swatches" data-tweak="accent">
+        <button data-val="244,245,247" style="background:#F4F5F7"></button>
+        <button data-val="107,227,155" style="background:#6BE39B"></button>
+        <button data-val="124,156,255" style="background:#7C9CFF"></button>
+        <button data-val="200,162,255" style="background:#C8A2FF"></button>
+        <button data-val="255,179,112" style="background:#FFB370"></button>
+        <button data-val="255,122,138" style="background:#FF7A8A"></button>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<script>
+const TWEAKS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "accent": "255,179,112",
+  "font": "Inter"
+}/*EDITMODE-END*/;
+function applyTweaks() {
+  const root = document.documentElement;
+  root.setAttribute('data-theme', TWEAKS.theme);
+  root.style.setProperty('--accent-rgb', TWEAKS.accent);
+  const fontStack = TWEAKS.font === 'system'
+    ? '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif'
+    : `"${TWEAKS.font}", ui-sans-serif, system-ui, sans-serif`;
+  root.style.setProperty('--sans', fontStack);
+  document.querySelectorAll('[data-tweak]').forEach(el => {
+    const k = el.dataset.tweak; const v = TWEAKS[k];
+    if (el.classList.contains('seg2') || el.classList.contains('swatches')) {
+      el.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.val === v));
+    }
+  });
+}
+function setTweak(k, v) {
+  TWEAKS[k] = v; applyTweaks();
+  try { window.parent.postMessage({type:'__edit_mode_set_keys', edits:{[k]:v}}, '*'); } catch(e){}
+}
+document.querySelectorAll('.seg2[data-tweak], .swatches[data-tweak]').forEach(el => {
+  el.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    setTweak(el.dataset.tweak, b.dataset.val);
+  });
+});
+(function() {
+  const panel = document.getElementById('tweaks');
+  const close = document.getElementById('tweaks-close');
+  window.addEventListener('message', e => {
+    const m = e.data; if (!m || !m.type) return;
+    if (m.type === '__activate_edit_mode') panel.classList.add('active');
+    if (m.type === '__deactivate_edit_mode') {
+      panel.classList.remove('active');
+      try { window.parent.postMessage({type:'__edit_mode_dismissed'}, '*'); } catch(e){}
+    }
+  });
+  close.addEventListener('click', () => {
+    panel.classList.remove('active');
+    try { window.parent.postMessage({type:'__edit_mode_dismissed'}, '*'); } catch(e){}
+  });
+  try { window.parent.postMessage({type:'__edit_mode_available'}, '*'); } catch(e){}
+})();
+applyTweaks();
+
+(function(){
+  const savebar = document.getElementById('savebar');
+  let dirty = false;
+  function markDirty() { if (!dirty) { dirty = true; savebar.classList.add('active'); } }
+  function markClean() { dirty = false; savebar.classList.remove('active'); }
+  document.getElementById('ws-name')?.addEventListener('input', markDirty);
+  document.getElementById('ws-slug')?.addEventListener('input', markDirty);
+  document.querySelectorAll('#swatches .swatch').forEach(s => {
+    s.addEventListener('click', () => {
+      document.querySelectorAll('#swatches .swatch').forEach(x => x.classList.remove('selected'));
+      s.classList.add('selected');
+      const preview = document.getElementById('avatar-preview');
+      if (preview) preview.style.background = s.dataset.grad;
+      markDirty();
+    });
+  });
+  document.querySelectorAll('.avatar-buttons .av-tab').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.avatar-buttons .av-tab').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      const sw = document.getElementById('swatches');
+      if (sw) sw.classList.toggle('active', b.id === 'use-color-btn');
+    });
+  });
+  document.getElementById('discard-btn')?.addEventListener('click', () => markClean());
+  document.getElementById('save-btn')?.addEventListener('click', () => {
+    const btn = document.getElementById('save-btn');
+    const original = btn.innerHTML;
+    btn.innerHTML = 'Saving…';
+    setTimeout(() => {
+      btn.innerHTML = '✓ Saved';
+      setTimeout(() => { btn.innerHTML = original; markClean(); }, 700);
+    }, 400);
+  });
+  const overlay = document.getElementById('confirm-overlay');
+  const cInput = document.getElementById('confirm-input');
+  const cBtn = document.getElementById('confirm-delete');
+  document.getElementById('delete-btn')?.addEventListener('click', () => { overlay.classList.add('active'); setTimeout(() => cInput.focus(), 50); });
+  function closeConfirm() { overlay.classList.remove('active'); cInput.value = ''; cBtn.disabled = true; cBtn.style.opacity = '0.55'; cBtn.style.cursor = 'not-allowed'; }
+  document.getElementById('cancel-delete')?.addEventListener('click', closeConfirm);
+  cInput?.addEventListener('input', () => { const ok = cInput.value.trim() === 'boppl-design'; cBtn.disabled = !ok; cBtn.style.opacity = ok ? '1' : '0.55'; cBtn.style.cursor = ok ? 'pointer' : 'not-allowed'; });
+  overlay?.addEventListener('click', e => { if (e.target === overlay) closeConfirm(); });
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && overlay?.classList.contains('active')) closeConfirm(); });
+
+  function switchPanel(name) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== name));
+    document.querySelectorAll('.sb-item[data-panel]').forEach(s => s.classList.toggle('active', s.dataset.panel === name));
+    const crumb = document.getElementById('crumb-here');
+    if (crumb) crumb.textContent = name === 'account' ? 'Account' : 'Workspace';
+  }
+  document.querySelectorAll('.sb-item[data-panel]').forEach(s => {
+    s.addEventListener('click', () => switchPanel(s.dataset.panel));
+  });
+
+  document.getElementById('acct-name')?.addEventListener('input', e => {
+    markDirty();
+    const ppName = document.getElementById('pp-name');
+    if (ppName) ppName.textContent = e.target.value || 'Kevin Reyes';
+  });
+  document.querySelectorAll('#acct-swatches .swatch').forEach(s => {
+    s.addEventListener('click', () => {
+      document.querySelectorAll('#acct-swatches .swatch').forEach(x => x.classList.remove('selected'));
+      s.classList.add('selected');
+      const av = document.getElementById('acct-avatar');
+      if (av) av.style.background = s.dataset.grad;
+      markDirty();
+    });
+  });
+  document.querySelectorAll('#theme-cards .theme-card').forEach(c => {
+    c.addEventListener('click', () => {
+      document.querySelectorAll('#theme-cards .theme-card').forEach(x => x.classList.remove('active'));
+      c.classList.add('active');
+      const t = c.dataset.theme;
+      const eff = t === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : t;
+      document.documentElement.setAttribute('data-theme', eff);
+      markDirty();
+    });
+  });
+  document.querySelectorAll('#time-row .radio-pill').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#time-row .radio-pill').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      markDirty();
+    });
+  });
+  document.getElementById('delete-acct-btn')?.addEventListener('click', () => {
+    overlay.classList.add('active');
+    setTimeout(() => cInput.focus(), 50);
+  });
+})();
+</script>
+</body>
+</html>

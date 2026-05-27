@@ -254,4 +254,92 @@ Complete rewrite of `workspace.astro` as a standalone 4-step wizard page (no Bas
 
 **Pages:** Signup (`/signup`), Login (`/login`), CreateWorkspace (`/onboarding/workspace`)
 
-**Next:** Chunk 3 — Core app pages
+---
+
+## Chunk 3 — Core app pages
+
+**Started:** 2026-05-19T23:00:00+05:30
+
+**Status:** ✅ Complete
+
+**Completed:** 2026-05-19T23:45:00+05:30
+
+### Files modified
+
+| File | Change |
+|------|--------|
+| `apps/web/src/layouts/AppLayout.astro` | **Rebuilt** — CSS Grid shell (topbar/sidebar/toolbar/main/status), `hasToolbar` prop, named slots |
+| `apps/web/src/layouts/SettingsLayout.astro` | **Rebuilt** — standalone grid shell for settings, inline Astro nav |
+| `apps/web/src/pages/app/content/index.astro` | **Rebuilt** — list view, file icons, toolbar, empty state, `co-` namespace |
+| `apps/web/src/pages/app/flows/index.astro` | **Rebuilt** — flow cards, status pills, empty state + how-grid, `fl-` namespace |
+| `apps/web/src/pages/app/connections/claude.astro` | **Rebuilt** — status card, endpoint copy, setup steps, scopes, danger zone, `cc-` namespace |
+| `apps/web/src/pages/app/connections/drive.astro` | **Rebuilt** — placeholder card, notify form, options grid, `dr-` namespace |
+
+### Page 3.1 — AppLayout
+
+Replaced the flexbox `AppLayout` with a 5-region CSS Grid shell matching `Workspace.html`:
+- `grid-template-areas: "topbar topbar" / "sidebar toolbar" / "sidebar main" / "status status"`
+- `hasToolbar` prop adds/removes the toolbar row — pages without toolbar use 4-row grid
+- Named Astro slots: `toolbar`, `status-left`, `status-right`
+- Topbar: brand glyph + workspace switcher + search box (⌘K) + invite/settings buttons + user avatar
+- Status bar: pulsing MCP-live signal + `status-left` slot + email on right
+
+### Page 3.2 — Content (`/app/content`)
+
+Rebuilt to use `AppLayout` with `hasToolbar={true}`:
+- Toolbar: back/fwd disabled nav buttons + breadcrumb (`{workspace} > {heading}`) + view toggle segmented control + type select + New button
+- List view: `.co-lr` 5-column grid (icon · name · type badge · updated · empty)
+- File icons: `.co-file-ico` with colored `.ext` badge by doc type (md/eng/inst/snip)
+- Unread indicator: 6px amber dot before doc name when unread comments exist
+- Empty state: centered "Add your first content unit" with Create document CTA
+
+### Page 3.3 — Flows (`/app/flows`)
+
+Rebuilt with no toolbar (`hasToolbar` default false):
+- Flow cards: flex row with name + description + steps label + status pill + walk button + arrow
+- Status pills: `.published` (green), `.draft-changes` (amber), `.draft` (muted)
+- Empty state: icon card with "coming-pill" (blue pulsing dot) + "How flows will work" 3-block grid
+- "New flow" button calls `POST /api/flows` and redirects to canvas
+
+### Page 3.4 — Settings layout
+
+`SettingsLayout.astro` rebuilt as standalone grid shell:
+- Same topbar structure as AppLayout (brand + workspace chip + crumbs + back arrow)
+- Inline Astro nav replaces React `SettingsNav` component (no more `client:load` for nav)
+- 2 sections: Workspace (Workspace, Members) + Account (Account, Billing)
+- Active nav item: amber left rail + `--surface-2` background
+
+### Page 3.5 — Claude connection (`/app/connections/claude`)
+
+Rebuilt with:
+- Status card: pulsing green dot + "Active" + MCP protocol + scopes granted
+- Endpoint block: monospace URL + copy button (shows "Copied!" flash)
+- Setup steps: 4-step list (step 1 shown as done with green checkmark)
+- Scopes grid: docs:read GRANTED, flows:read GRANTED, docs:write NOT YET (locked)
+- Danger zone: revoke connection button
+
+### Page 3.6 — Drive connection (`/app/connections/drive`)
+
+Rebuilt with:
+- Drive logo (Google colors) in white rounded badge
+- Placeholder card: inbox icon + h2 + "coming-pill" (blue pulsing dot)
+- Notify block: email pre-filled from auth + "Notify me" button (success state)
+- "Other ways" 3-card grid: paste markdown, upload .md files, copy from clipboard
+
+### TypeScript check
+
+`npx tsc --noEmit` — **clean, zero errors**
+
+### Cleanup
+
+- Deleted temp `apps/web/src/pages/layout-test.astro` that was used during AppLayout verification
+
+---
+
+## Chunk 3 — Summary
+
+**Status:** ✅ Complete
+
+**Commit:** `268b4e6` — "feat(design): Phase 6.3 Chunk 3 — app shell + core pages rebuilt to reference spec"
+
+**Next:** Chunk 4 — Doc editor page (`/app/content/[id]`) and remaining pages

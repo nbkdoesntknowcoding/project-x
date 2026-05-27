@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Mnema · Notifications</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --canvas:#0A0B0D;--surface:#121317;--surface-2:#181A1F;--surface-3:#22252B;--sunken:#050608;
+  --line:rgba(255,255,255,0.06);--line-strong:rgba(255,255,255,0.12);--line-bright:rgba(255,255,255,0.22);
+  --ink:#F4F5F7;--ink-soft:#B0B4BC;--ink-muted:#707479;--ink-faint:#3D4046;
+  --accent-rgb:255,179,112;--accent:rgb(var(--accent-rgb));
+  --accent-soft:rgba(var(--accent-rgb),0.14);--accent-line:rgba(var(--accent-rgb),0.32);
+  --status-sync:#6BE39B;--status-edit:#FFB370;--status-info:#7C9CFF;--status-error:#FF7A8A;
+  --on-ink:#0A0B0D;
+  --sans:"Geist",ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --topbar-h:40px;--status-h:24px;--sidebar-w:220px;
+}
+*{box-sizing:border-box;}html,body{margin:0;padding:0;height:100%;}
+body{background:var(--canvas);color:var(--ink);font-family:var(--sans);font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow:hidden;}
+button,a,input{font-family:inherit;}a{color:inherit;text-decoration:none;}
+*{scrollbar-width:none;-ms-overflow-style:none;}*::-webkit-scrollbar{display:none;}
+
+.app{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:var(--topbar-h) 1fr var(--status-h);grid-template-areas:"topbar topbar" "sidebar main" "status status";height:100vh;}
+
+/* TOPBAR (Settings shell) */
+.topbar{grid-area:topbar;display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:var(--surface);border-bottom:1px solid var(--line);}
+.tb-left{display:flex;align-items:center;gap:8px;}
+.brand{display:inline-flex;align-items:center;gap:7px;font:600 12.5px/1 var(--sans);}
+.brand .glyph{width:20px;height:20px;border-radius:5px;background:var(--ink);color:var(--on-ink);display:inline-flex;align-items:center;justify-content:center;font:500 13px/1 var(--sans);padding-bottom:1px;position:relative;}
+.brand .glyph::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(135deg,rgba(255,255,255,0.18),transparent 50%);}
+.tb-sep{width:1px;height:14px;background:var(--line-strong);}
+.ws-switch{display:inline-flex;align-items:center;gap:6px;padding:3px 6px 3px 4px;border-radius:5px;border:1px solid transparent;color:var(--ink);font:500 12px/1 var(--sans);background:transparent;cursor:pointer;}
+.ws-switch:hover{background:var(--surface-2);border-color:var(--line);}
+.ws-avatar{width:14px;height:14px;border-radius:4px;background:linear-gradient(135deg,#7C9CFF,#C8A2FF);color:white;font-weight:700;font-size:8.5px;display:inline-flex;align-items:center;justify-content:center;}
+.crumbs{display:flex;align-items:center;gap:6px;font:500 12px/1 var(--sans);color:var(--ink-muted);flex:1;justify-content:center;}
+.crumbs .here{color:var(--ink);font-weight:600;}
+.crumbs .sep{color:var(--ink-faint);font-size:9px;}
+.tb-right{display:flex;align-items:center;gap:2px;}
+.icon-btn{width:24px;height:24px;border-radius:4px;background:transparent;border:0;color:var(--ink-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
+.icon-btn:hover{background:var(--surface-2);color:var(--ink);}
+.user-chip{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,rgba(var(--accent-rgb),0.95),rgba(255,122,138,0.95));color:var(--on-ink);font:700 9.5px/1 var(--sans);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;margin-left:4px;}
+
+/* SIDEBAR (Settings shell — identical) */
+.sidebar{grid-area:sidebar;background:var(--surface);border-right:1px solid var(--line);padding:14px 10px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;}
+.sb-section h6{margin:0 0 4px;padding:0 8px;font:500 10px/1 var(--mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-muted);}
+.sb-list{display:flex;flex-direction:column;gap:1px;}
+.sb-item{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:5px;cursor:pointer;color:var(--ink-soft);font:500 12px/1 var(--sans);position:relative;}
+.sb-item:hover{background:var(--surface-2);color:var(--ink);}
+.sb-item.active{background:var(--surface-2);color:var(--ink);}
+.sb-item.active::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:2px;background:var(--accent);border-radius:2px;}
+.sb-item .l{display:flex;align-items:center;gap:9px;}
+.sb-item .l svg{color:var(--ink-muted);}
+.sb-item.active .l svg{color:var(--accent);}
+.sb-item .pill{font:500 9.5px/1 var(--mono);padding:2px 5px;border-radius:3px;background:var(--surface-3);color:var(--ink-muted);letter-spacing:0.04em;}
+.sb-item .pill.acc{background:var(--accent-soft);color:var(--accent);}
+.sb-foot{margin-top:auto;padding:10px;border-top:1px solid var(--line);}
+.plan-card{background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;}
+.plan-card .row{display:flex;align-items:center;justify-content:space-between;}
+.plan-card .name{font:600 12px var(--sans);}
+.plan-card .badge{font:500 9px var(--mono);padding:2px 6px;border-radius:3px;background:var(--accent-soft);color:var(--accent);letter-spacing:0.04em;}
+.plan-card .bar{margin:8px 0 4px;height:3px;background:rgba(255,255,255,0.06);border-radius:999px;overflow:hidden;}
+.plan-card .bar>span{display:block;height:100%;width:56%;background:var(--accent);border-radius:999px;}
+.plan-card .meta{font:500 10.5px var(--mono);color:var(--ink-muted);display:flex;justify-content:space-between;margin-top:4px;}
+
+/* MAIN (Settings shell content area) */
+.main{grid-area:main;overflow-y:auto;}
+.main-wrap{max-width:880px;margin:0 auto;padding:40px 32px 100px;}
+.pre{font:500 11px/1 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-muted);margin-bottom:12px;}
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px;}
+.page-head h1{margin:0;font:500 28px/1.15 var(--sans);letter-spacing:-0.02em;}
+.page-head .sub{margin:6px 0 0;font-size:14px;color:var(--ink-soft);max-width:36rem;}
+.btn{font:500 12.5px/1 var(--sans);padding:8px 12px;border-radius:6px;cursor:pointer;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;}
+.btn-secondary{background:var(--surface);color:var(--ink);border-color:var(--line-strong);}
+.btn-secondary:hover{background:var(--surface-2);border-color:var(--line-bright);}
+
+/* FILTER CHIPS — same pattern as Trash */
+.chips{display:flex;gap:6px;margin-bottom:14px;}
+.chip{font:500 12px/1 var(--sans);padding:6px 11px;border-radius:999px;background:transparent;border:1px solid transparent;color:var(--ink-muted);cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+.chip:hover{color:var(--ink);background:var(--surface-2);}
+.chip.active{background:var(--surface-2);color:var(--ink);border-color:var(--line);}
+.chip .ct{font:500 10.5px/1 var(--mono);color:var(--ink-faint);letter-spacing:0.02em;}
+.chip.active .ct{color:var(--ink-muted);}
+
+.meta-line{font:500 11px/1 var(--mono);letter-spacing:0.04em;color:var(--ink-muted);margin:0 0 8px;display:flex;align-items:center;justify-content:space-between;}
+.meta-line .v{color:var(--ink-soft);font-weight:600;}
+.meta-line .sep{color:var(--ink-faint);margin:0 10px;}
+.meta-line .mark-all{font:500 12px var(--sans);background:transparent;border:0;color:var(--ink-soft);cursor:pointer;padding:6px 8px;border-radius:5px;letter-spacing:0;}
+.meta-line .mark-all:hover{color:var(--ink);background:var(--surface-2);}
+
+/* DAY DIVIDER */
+.day-divider{font:500 10.5px/1 var(--mono);letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-muted);padding:18px 0 8px;border-top:1px solid var(--line);}
+.day-divider:first-of-type{border-top:0;padding-top:6px;}
+
+/* NOTIFICATION ROWS */
+.notif{display:grid;grid-template-columns:14px 36px 1fr auto;gap:12px;align-items:flex-start;padding:14px 12px;border-radius:8px;cursor:pointer;position:relative;}
+.notif:hover{background:var(--surface);}
+.notif.unread{background:linear-gradient(180deg,rgba(124,156,255,0.04),transparent 60%);}
+.notif.unread:hover{background:linear-gradient(180deg,rgba(124,156,255,0.07),transparent 60%);}
+
+.unread-dot{width:6px;height:6px;border-radius:50%;background:var(--status-info);box-shadow:0 0 5px rgba(124,156,255,0.55);margin-top:13px;justify-self:center;}
+.notif:not(.unread) .unread-dot{background:transparent;box-shadow:none;}
+
+.notif-av{width:32px;height:32px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:white;font:700 12px/1 var(--sans);flex-shrink:0;margin-top:2px;}
+.notif-av.a{background:linear-gradient(135deg,#FFB370,#FF7A8A);}
+.notif-av.b{background:linear-gradient(135deg,#7C9CFF,#C8A2FF);}
+.notif-av.c{background:linear-gradient(135deg,#6BE39B,#2B9B9B);}
+.notif-av.d{background:linear-gradient(135deg,#FF7A8A,#B847C0);}
+
+.sys-ic{width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-soft);flex-shrink:0;margin-top:2px;}
+.sys-ic.claude{background:linear-gradient(135deg,#FFB370,#FF7A8A);color:white;border-color:transparent;font:700 13px/1 var(--sans);}
+.sys-ic.warn{background:rgba(255,179,112,0.12);border-color:rgba(255,179,112,0.32);color:var(--status-edit);}
+.sys-ic.err{background:rgba(255,122,138,0.10);border-color:rgba(255,122,138,0.30);color:var(--status-error);}
+.sys-ic.ok{background:rgba(107,227,155,0.10);border-color:rgba(107,227,155,0.28);color:var(--status-sync);}
+
+.notif-meta{min-width:0;}
+.notif-line{font:400 13.5px/1.45 var(--sans);color:var(--ink);}
+.notif-line strong{font-weight:600;color:var(--ink);}
+.notif-line .ref{color:var(--ink);font-weight:500;}
+.notif-snippet{margin-top:5px;font:400 12.5px/1.5 var(--sans);color:var(--ink-muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;border-left:2px solid var(--line-strong);padding-left:10px;}
+.notif-link{display:inline-flex;align-items:center;gap:4px;margin-top:7px;font:500 12px/1 var(--sans);color:var(--ink-soft);}
+.notif-link:hover{color:var(--accent);}
+.notif-ts{font:500 11px/1 var(--mono);color:var(--ink-muted);letter-spacing:0.02em;text-align:right;margin-top:4px;flex-shrink:0;}
+
+.empty{display:none;flex-direction:column;align-items:center;text-align:center;padding:80px 24px;}
+.empty.active{display:flex;}
+.empty .ic{width:48px;height:48px;border-radius:12px;background:var(--surface);border:1px solid var(--line);color:var(--ink-soft);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px;}
+.empty h3{margin:0 0 8px;font:500 16px/1.3 var(--sans);letter-spacing:-0.005em;}
+.empty p{margin:0;font-size:13px;color:var(--ink-muted);line-height:1.55;max-width:24rem;}
+
+.foot-link{margin-top:32px;padding-top:20px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;}
+.foot-link a{font:500 12.5px var(--sans);color:var(--ink-soft);display:inline-flex;align-items:center;gap:6px;}
+.foot-link a:hover{color:var(--ink);}
+.foot-link .live{font:500 10.5px/1 var(--mono);color:var(--ink-faint);letter-spacing:0.06em;display:inline-flex;align-items:center;gap:6px;}
+.foot-link .live .dot{width:5px;height:5px;border-radius:50%;background:var(--status-sync);box-shadow:0 0 4px rgba(107,227,155,0.5);}
+
+.statusbar{grid-area:status;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:var(--surface);border-top:1px solid var(--line);font:500 10.5px/1 var(--mono);color:var(--ink-muted);}
+.statusbar .v{color:var(--ink-soft);font-weight:600;}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <div class="tb-left">
+      <a class="brand"><span class="glyph">μ</span><span>Mnema</span></a>
+      <span class="tb-sep"></span>
+      <button class="ws-switch"><span class="ws-avatar">B</span><span>boppl-design</span><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg></button>
+    </div>
+    <div class="crumbs">
+      <span>Settings</span>
+      <svg class="sep" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>
+      <span class="here">Notifications</span>
+    </div>
+    <div class="tb-right">
+      <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
+      <button class="user-chip">K</button>
+    </div>
+  </header>
+
+  <aside class="sidebar">
+    <div class="sb-section">
+      <h6>Workspace</h6>
+      <div class="sb-list">
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Workspace</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Members</span><span class="pill">5</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg>Knowledge bases</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>Integrations</span><span class="pill">3</span></div>
+      </div>
+    </div>
+    <div class="sb-section">
+      <h6>Developer</h6>
+      <div class="sb-list">
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>MCP server</span><span class="pill" style="background:rgba(107,227,155,0.12);color:var(--status-sync);">LIVE</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="8" cy="12" r="1.5"/><path d="M14 12h6"/></svg>API keys</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>Audit log</span></div>
+      </div>
+    </div>
+    <div class="sb-section">
+      <h6>Account</h6>
+      <div class="sb-list">
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a8.38 8.38 0 0 1 13 0"/></svg>Profile</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>Billing</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Security</span></div>
+        <div class="sb-item active"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>Notifications</span><span class="pill acc">5</span></div>
+        <div class="sb-item"><span class="l"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>Trash</span><span class="pill">7</span></div>
+      </div>
+    </div>
+
+    <div class="sb-foot">
+      <div class="plan-card">
+        <div class="row"><span class="name">Pro</span><span class="badge">CURRENT</span></div>
+        <div class="bar"><span></span></div>
+        <div class="meta"><span>2,840 / 5,000 calls</span><span>9d left</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="main-wrap">
+
+      <div class="page-head">
+        <div>
+          <p class="pre">NOTIFICATIONS</p>
+          <h1>Inbox</h1>
+          <p class="sub">Mentions, comments, flow runs, billing, and system events from your workspace.</p>
+        </div>
+      </div>
+
+      <div class="chips" id="chips">
+        <button class="chip active" data-filter="all">All<span class="ct">8</span></button>
+        <button class="chip" data-filter="unread">Unread<span class="ct">5</span></button>
+        <button class="chip" data-filter="mention">Mentions<span class="ct">2</span></button>
+        <button class="chip" data-filter="comment">Comments<span class="ct">1</span></button>
+        <button class="chip" data-filter="flow">Flow updates<span class="ct">1</span></button>
+        <button class="chip" data-filter="billing">Billing<span class="ct">2</span></button>
+      </div>
+
+      <div class="meta-line">
+        <span><span class="v" id="meta-count">8</span> notifications · <span class="v" id="meta-unread">5</span> unread</span>
+        <button class="mark-all" id="mark-all">Mark all as read</button>
+      </div>
+
+      <div id="list">
+
+        <div class="day-divider">TODAY</div>
+
+        <div class="notif unread" data-type="mention">
+          <span class="unread-dot"></span>
+          <span class="notif-av b">A</span>
+          <div class="notif-meta">
+            <div class="notif-line"><strong>Anton</strong> mentioned you in <span class="ref">Pricing strategy v2</span></div>
+            <div class="notif-snippet">"Hey @kevin — are we sure 5,000 is the right rate limit for Pro? Looking at usage, 78% of teams are well under…"</div>
+          </div>
+          <span class="notif-ts">14 min ago</span>
+        </div>
+
+        <div class="notif unread" data-type="comment">
+          <span class="unread-dot"></span>
+          <span class="notif-av c">M</span>
+          <div class="notif-meta">
+            <div class="notif-line"><strong>Maya</strong> replied to your comment on <span class="ref">MCP tool reference</span></div>
+            <div class="notif-snippet">"Good catch — I'll update the rate-limit headers section before the next release."</div>
+          </div>
+          <span class="notif-ts">42 min ago</span>
+        </div>
+
+        <div class="notif unread" data-type="flow">
+          <span class="unread-dot"></span>
+          <span class="sys-ic claude">C</span>
+          <div class="notif-meta">
+            <div class="notif-line">Claude walked <span class="ref">New-hire onboarding</span> · <span style="color:var(--ink-muted);">7 steps</span></div>
+          </div>
+          <span class="notif-ts">2 hours ago</span>
+        </div>
+
+        <div class="notif unread" data-type="billing">
+          <span class="unread-dot"></span>
+          <span class="sys-ic warn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+          <div class="notif-meta">
+            <div class="notif-line">You've used <strong>80%</strong> of your MCP calls this period</div>
+            <div class="notif-snippet" style="border-color:rgba(255,179,112,0.28);color:var(--ink-soft);">4,012 of 5,000 calls used · resets in 9 days</div>
+            <a class="notif-link" href="#">View usage <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></a>
+          </div>
+          <span class="notif-ts">3 hours ago</span>
+        </div>
+
+        <div class="notif unread" data-type="mention">
+          <span class="unread-dot"></span>
+          <span class="notif-av d">P</span>
+          <div class="notif-meta">
+            <div class="notif-line"><strong>Priya</strong> mentioned you in a comment on <span class="ref">Local dev setup</span></div>
+            <div class="notif-snippet">"@kevin can you double-check the Postgres connection string section before we onboard the new eng cohort?"</div>
+          </div>
+          <span class="notif-ts">5 hours ago</span>
+        </div>
+
+        <div class="day-divider">YESTERDAY</div>
+
+        <div class="notif" data-type="billing">
+          <span class="unread-dot"></span>
+          <span class="sys-ic err"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></span>
+          <div class="notif-meta">
+            <div class="notif-line">Payment for <span class="ref">INV-2025-0214-B0PP1</span> failed</div>
+            <div class="notif-snippet" style="border-color:rgba(255,122,138,0.30);color:var(--ink-soft);">Mastercard •••• 4242 was declined. We'll retry in 2 days.</div>
+            <a class="notif-link" href="#" style="color:var(--status-error);">Update payment method <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></a>
+          </div>
+          <span class="notif-ts">1 day ago</span>
+        </div>
+
+        <div class="notif" data-type="mention">
+          <span class="unread-dot"></span>
+          <span class="notif-av a">N</span>
+          <div class="notif-meta">
+            <div class="notif-line"><strong>Nikhil Bhat</strong> joined the workspace</div>
+          </div>
+          <span class="notif-ts">1 day ago</span>
+        </div>
+
+        <div class="day-divider">EARLIER</div>
+
+        <div class="notif" data-type="billing">
+          <span class="unread-dot"></span>
+          <span class="sys-ic ok"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+          <div class="notif-meta">
+            <div class="notif-line">Workspace upgraded to <strong>Pro</strong></div>
+            <div class="notif-snippet" style="border-color:rgba(107,227,155,0.28);color:var(--ink-soft);">5 seats · 5,000 MCP calls/month · unlimited docs</div>
+          </div>
+          <span class="notif-ts">3 days ago</span>
+        </div>
+
+        <div class="empty" id="empty">
+          <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
+          <h3>No notifications</h3>
+          <p>When something happens, it'll show up here.</p>
+        </div>
+      </div>
+
+      <div class="foot-link">
+        <a href="#"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Notification preferences</a>
+        <span class="live"><span class="dot"></span>REAL-TIME · LIVE</span>
+      </div>
+    </div>
+  </main>
+
+  <footer class="statusbar">
+    <div><span>MCP <span class="v">v2025-11-25</span></span></div>
+    <div><span>8 notifications · <span class="v">5 unread</span></span></div>
+  </footer>
+</div>
+
+<script>
+const empty = document.getElementById('empty');
+const list = document.getElementById('list');
+
+function updateMeta() {
+  const visible = [...document.querySelectorAll('.notif')].filter(r => r.style.display !== 'none');
+  const unread = visible.filter(r => r.classList.contains('unread')).length;
+  document.getElementById('meta-count').textContent = visible.length;
+  document.getElementById('meta-unread').textContent = unread;
+}
+
+document.getElementById('chips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === b));
+  const f = b.dataset.filter;
+  let visible = 0;
+  document.querySelectorAll('.notif').forEach(r => {
+    let show = true;
+    if (f === 'unread') show = r.classList.contains('unread');
+    else if (f !== 'all') show = r.dataset.type === f;
+    r.style.display = show ? 'grid' : 'none';
+    if (show) visible++;
+  });
+  document.querySelectorAll('.day-divider').forEach(d => {
+    let next = d.nextElementSibling, hasVisible = false;
+    while (next && !next.classList.contains('day-divider') && !next.classList.contains('empty')) {
+      if (next.style.display !== 'none') { hasVisible = true; break; }
+      next = next.nextElementSibling;
+    }
+    d.style.display = hasVisible ? '' : 'none';
+  });
+  empty.classList.toggle('active', visible === 0);
+  updateMeta();
+});
+
+document.getElementById('mark-all').addEventListener('click', () => {
+  document.querySelectorAll('.notif.unread').forEach(r => r.classList.remove('unread'));
+  updateMeta();
+});
+
+document.querySelectorAll('.notif').forEach(r => {
+  r.addEventListener('click', () => { r.classList.remove('unread'); updateMeta(); });
+});
+</script>
+</body>
+</html>

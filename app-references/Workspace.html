@@ -1,0 +1,1009 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Mnema · Workspace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --canvas:        #0A0B0D;
+  --surface:       #131418;
+  --surface-2:     #1A1C20;
+  --surface-3:     #24272D;
+  --line:          rgba(255,255,255,0.06);
+  --line-strong:   rgba(255,255,255,0.12);
+  --line-bright:   rgba(255,255,255,0.22);
+  --ink:           #F4F5F7;
+  --ink-soft:      #B8BCC4;
+  --ink-muted:     #74797F;
+  --ink-faint:     #3F434B;
+
+  --accent-rgb:    255, 179, 112;
+  --accent:        rgb(var(--accent-rgb));
+  --accent-soft:   rgba(var(--accent-rgb), 0.14);
+  --accent-line:   rgba(var(--accent-rgb), 0.32);
+
+  --on-ink:        #0A0B0D;
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --topbar-h:    44px;
+  --toolbar-h:   44px;
+  --status-h:    26px;
+  --sidebar-w:   220px;
+  --tile-size:   84px;          /* folder/file icon body width */
+
+  --r-2: 5px; --r-3: 7px; --r-4: 9px; --r-pill: 999px;
+}
+[data-theme="light"] {
+  --canvas: #F4F4F2;
+  --surface: #FBFBFA;
+  --surface-2: #EEEEEB;
+  --surface-3: #E3E3DF;
+  --line: rgba(10,11,13,0.07);
+  --line-strong: rgba(10,11,13,0.13);
+  --line-bright: rgba(10,11,13,0.24);
+  --ink: #0A0B0D;
+  --ink-soft: #424650;
+  --ink-muted: #80858E;
+  --ink-faint: #B8BCC2;
+  --on-ink: #FFFFFF;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  overflow: hidden;
+}
+button { font-family: inherit; }
+
+/* Hide scrollbars everywhere — keep scrollability */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; }
+
+/* ============================================================
+   APP SHELL
+   ============================================================ */
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: var(--topbar-h) var(--toolbar-h) 1fr var(--status-h);
+  grid-template-areas:
+    "topbar topbar"
+    "sidebar toolbar"
+    "sidebar main"
+    "status status";
+  height: 100vh;
+}
+
+/* ============================================================
+   TOPBAR
+   ============================================================ */
+.topbar {
+  grid-area: topbar;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.tb-left { display: flex; align-items: center; gap: 10px; }
+.brand {
+  display: inline-flex; align-items: center; gap: 8px;
+  font: 600 13px/1 var(--sans); color: var(--ink); text-decoration: none;
+}
+.brand .glyph {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--ink); color: var(--on-ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 500 14px/1 var(--sans); padding-bottom: 1px;
+  position: relative;
+}
+.brand .glyph::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,0.18), transparent 50%);
+}
+.tb-divider { width: 1px; height: 16px; background: var(--line-strong); }
+.workspace-switcher {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 6px 4px 5px; border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  color: var(--ink);
+  font: 500 12.5px/1 var(--sans);
+}
+.workspace-switcher:hover { background: var(--surface-2); border-color: var(--line); }
+.ws-avatar {
+  width: 16px; height: 16px; border-radius: 4px;
+  background: linear-gradient(135deg, #7C9CFF, #C8A2FF);
+  color: white; font-weight: 700; font-size: 9.5px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.ws-chev { color: var(--ink-muted); }
+
+.tb-search {
+  flex: 0 1 420px; min-width: 240px;
+  position: relative;
+}
+.tb-search svg.search-icon {
+  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+  width: 12px; height: 12px; color: var(--ink-muted);
+}
+.tb-search input {
+  width: 100%; padding: 6px 60px 6px 30px;
+  border-radius: 6px;
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid transparent;
+  outline: none;
+  font: 400 12.5px/1 var(--sans);
+}
+.tb-search input:focus { border-color: var(--accent-line); background: var(--surface); }
+.tb-search input::placeholder { color: var(--ink-muted); }
+.tb-search .kbd {
+  position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+  display: inline-flex; gap: 2px;
+}
+.tb-search .kbd kbd {
+  font: 500 10px/1 var(--sans);
+  padding: 2px 5px; border-radius: 3px;
+  background: var(--surface); border: 1px solid var(--line);
+  color: var(--ink-muted);
+}
+
+.tb-right { display: flex; align-items: center; gap: 3px; }
+.icon-btn {
+  width: 26px; height: 26px; border-radius: 5px;
+  background: transparent; border: 0;
+  color: var(--ink-muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+.icon-btn .badge {
+  position: absolute; top: 5px; right: 5px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--surface);
+}
+.user-chip {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: linear-gradient(135deg, rgba(var(--accent-rgb),0.95), rgba(255,122,138,0.95));
+  color: var(--on-ink); font: 700 10.5px/1 var(--sans);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; margin-left: 4px;
+}
+
+/* ============================================================
+   SIDEBAR (Finder-style)
+   ============================================================ */
+.sidebar {
+  grid-area: sidebar;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  padding: 8px 6px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.sb-section { margin-top: 10px; }
+.sb-section:first-child { margin-top: 2px; }
+.sb-section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 8px 2px;
+  font: 500 10px/1 var(--mono);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.sb-section-head .add {
+  width: 16px; height: 16px; border: 0; background: transparent;
+  color: var(--ink-muted); cursor: pointer; border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  opacity: 0;
+}
+.sb-section:hover .sb-section-head .add { opacity: 1; }
+.sb-section-head .add:hover { background: var(--surface-2); color: var(--ink); }
+
+.sb-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 8px; border-radius: 5px;
+  cursor: pointer; font: 500 12px/1 var(--sans);
+  color: var(--ink-soft);
+  user-select: none;
+}
+.sb-row:hover { background: var(--surface-2); color: var(--ink); }
+.sb-row.active { background: var(--accent-soft); color: var(--ink); }
+.sb-row.active .icon { color: var(--accent); }
+.sb-row .l { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sb-row .icon { color: var(--ink-muted); flex-shrink: 0; }
+.sb-row .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-row .count { font: 500 11px var(--sans); color: var(--ink-muted); }
+.sb-row.indent-1 { padding-left: 22px; }
+.sb-row.indent-2 { padding-left: 36px; }
+
+.tag-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* sidebar footer — usage chip */
+.sb-foot {
+  margin-top: auto;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+  font: 500 11px/1.3 var(--sans); color: var(--ink-muted);
+  display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer;
+}
+.sb-foot:hover { color: var(--ink); }
+.sb-foot .v { color: var(--ink); }
+
+/* ============================================================
+   TOOLBAR (Finder-style)
+   ============================================================ */
+.toolbar {
+  grid-area: toolbar;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.tb-back {
+  display: flex; align-items: center; gap: 1px; margin-right: 10px;
+}
+.tb-back button {
+  width: 26px; height: 26px; border: 0; background: transparent;
+  border-radius: 5px; color: var(--ink-muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tb-back button:not(:disabled):hover { background: var(--surface-2); color: var(--ink); }
+.tb-back button:disabled { opacity: 0.4; cursor: default; }
+
+.crumb-row {
+  display: flex; align-items: center; gap: 6px;
+  font: 500 13.5px/1 var(--sans);
+  color: var(--ink-muted);
+  flex: 1; min-width: 0;
+}
+.crumb-row .here { color: var(--ink); font-weight: 600; }
+.crumb-row .sep { color: var(--ink-faint); }
+
+.toolbar-right { display: flex; align-items: center; gap: 8px; }
+.view-seg {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px;
+}
+.view-seg button {
+  width: 28px; height: 22px; border: 0; background: transparent;
+  border-radius: 4px; color: var(--ink-muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.view-seg button.active { background: var(--canvas); color: var(--ink); }
+.view-seg button:hover:not(.active) { color: var(--ink); }
+
+.action-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px 5px 8px; border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font: 500 12px/1 var(--sans); color: var(--ink-soft);
+  cursor: pointer;
+}
+.action-btn:hover { background: var(--surface-3); color: var(--ink); }
+.action-btn svg { color: var(--ink-muted); }
+.action-btn:hover svg { color: var(--ink); }
+
+.toolbar-right .vsep { width: 1px; height: 18px; background: var(--line); }
+
+/* ============================================================
+   MAIN
+   ============================================================ */
+.main {
+  grid-area: main;
+  overflow-y: auto;
+  padding: 14px 24px 80px;
+}
+
+.section-title {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin: 10px 4px 12px;
+}
+.section-title h3 {
+  margin: 0;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.section-title .count {
+  font: 500 11px/1 var(--mono);
+  color: var(--ink-muted);
+}
+
+/* FINDER ICON GRID */
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 6px;
+  margin-bottom: 24px;
+}
+.tile {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 6px;
+  padding: 12px 6px 10px;
+  border-radius: 9px;
+  cursor: default;
+  user-select: none;
+  position: relative;
+}
+.tile:hover { background: var(--surface-2); }
+.tile.selected { background: var(--accent-soft); }
+.tile.selected .t-name { color: var(--ink); }
+
+.tile .ico-wrap {
+  height: 78px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+}
+.tile .t-name {
+  font: 500 12.5px/1.25 var(--sans);
+  color: var(--ink);
+  text-align: center;
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  padding: 0 4px;
+}
+.tile.selected .t-name {
+  background: var(--accent);
+  color: var(--on-ink);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.tile .t-meta {
+  font: 500 10.5px/1 var(--sans);
+  color: var(--ink-muted);
+  letter-spacing: 0.02em;
+}
+
+/* FOLDER ICON */
+.folder-ico {
+  position: relative;
+  width: 96px; height: 74px;
+  filter: drop-shadow(0 6px 14px rgba(0,0,0,0.45));
+}
+[data-theme="light"] .folder-ico { filter: drop-shadow(0 4px 10px rgba(10,11,13,0.16)); }
+.folder-ico .apps {
+  position: absolute; left: 10px; bottom: 6px;
+  display: flex; gap: 2px;
+}
+.folder-ico .app {
+  width: 13px; height: 13px; border-radius: 3px;
+  display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+  font: 700 7.5px var(--sans); line-height: 1; color: white;
+}
+.folder-ico .app.gd { background: #FFFFFF; padding: 0; }
+.folder-ico .app.no { background: #FFFFFF; color: #000; font-family: serif; font-size: 8.5px; }
+.folder-ico .app.fi { background: #1E1E1E; color: #fff; }
+.folder-ico .app.ou { background: #0078D4; color: #fff; }
+
+/* FILE ICONS — colored sheets with extension tab */
+.file-ico {
+  width: 56px; height: 68px;
+  position: relative;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,0.4));
+}
+[data-theme="light"] .file-ico { filter: drop-shadow(0 3px 8px rgba(10,11,13,0.15)); }
+.file-ico .sheet {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, #FBFBFA, #DBDBD7);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.file-ico .sheet::before {
+  content: ""; position: absolute; top: 0; right: 0;
+  width: 16px; height: 16px;
+  background: linear-gradient(225deg, rgba(0,0,0,0.18) 50%, transparent 50%);
+  border-bottom-left-radius: 4px;
+}
+.file-ico .sheet::after {
+  content: ""; position: absolute; top: 0; right: 0;
+  width: 16px; height: 16px;
+  background: linear-gradient(135deg, transparent 50%, #C7C7C2 50%);
+  border-bottom-left-radius: 4px;
+}
+.file-ico .lines {
+  position: absolute; left: 7px; right: 7px; top: 24px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.file-ico .lines i {
+  height: 2px; background: rgba(10,11,13,0.18); border-radius: 1px;
+  display: block;
+}
+.file-ico .lines i:nth-child(2) { width: 72%; }
+.file-ico .lines i:nth-child(3) { width: 90%; }
+.file-ico .lines i:nth-child(4) { width: 60%; }
+.file-ico .lines i:nth-child(5) { width: 82%; }
+.file-ico .ext-tag {
+  position: absolute; bottom: 6px; left: -3px; right: -3px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 3px 0;
+  border-radius: 3px;
+  font: 700 9px/1 var(--sans);
+  color: white;
+  letter-spacing: 0.08em;
+}
+.file-ico.pdf .ext-tag { background: linear-gradient(180deg, #FF4D52, #C8242A); }
+.file-ico.docx .ext-tag { background: linear-gradient(180deg, #2B7CD3, #1B4E91); }
+.file-ico.md .ext-tag { background: linear-gradient(180deg, #1E1F23, #0E0F12); color: var(--accent); }
+.file-ico.xlsx .ext-tag { background: linear-gradient(180deg, #1E8E48, #11502A); }
+.file-ico.png .ext-tag { background: linear-gradient(180deg, #C8A2FF, #8259D9); }
+.file-ico.fig .ext-tag { background: #1E1E1E; color: #FFB370; }
+
+/* Image preview tile (for png) — show a colored block instead of sheet */
+.file-ico.image .sheet {
+  background:
+    linear-gradient(135deg, rgba(255,255,255,0.18), transparent 40%),
+    linear-gradient(180deg, #C8A2FF, #7C9CFF);
+}
+.file-ico.image .lines { display: none; }
+
+/* selection dot */
+.tile.selected .ico-wrap::after {
+  content: "✓"; position: absolute; top: -4px; right: 8px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); color: var(--on-ink);
+  font: 700 11px/1 var(--sans);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+/* NEW FOLDER ADD TILE */
+.add-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px;
+  padding: 12px 6px 10px;
+  border-radius: 9px;
+  border: 1.5px dashed var(--line-strong);
+  cursor: pointer;
+  color: var(--ink-muted);
+  font: 500 12px/1.2 var(--sans);
+  min-height: 116px;
+}
+.add-tile:hover { border-color: var(--accent-line); color: var(--ink); background: rgba(var(--accent-rgb), 0.04); }
+.add-tile .plus {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--surface-2);
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line-strong);
+}
+
+/* LIST VIEW */
+.list-view {
+  background: transparent;
+}
+.lr {
+  display: grid;
+  grid-template-columns: 28px minmax(0,1fr) 90px 130px 80px 28px;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font: 400 12.5px/1 var(--sans);
+  gap: 12px;
+}
+.lr.head {
+  font: 500 10.5px/1 var(--mono);
+  color: var(--ink-muted);
+  letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+.lr:not(.head):hover { background: var(--surface-2); }
+.lr.sel { background: var(--accent-soft); }
+.lr .ic {
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+}
+.lr .nm { color: var(--ink); display: flex; align-items: center; gap: 4px; min-width: 0; }
+.lr .nm .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lr .sz, .lr .dt { color: var(--ink-muted); font-size: 12px; }
+.lr .by { display: flex; align-items: center; gap: 6px; color: var(--ink-soft); font-size: 12px; min-width: 0; }
+.lr .by .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lr .av {
+  width: 18px; height: 18px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 700 9px/1 var(--sans); color: white; flex-shrink: 0;
+}
+.lr .av.a { background: linear-gradient(135deg, #FFB370, #FF7A8A); }
+.lr .av.b { background: linear-gradient(135deg, #7C9CFF, #C8A2FF); }
+.lr .av.c { background: linear-gradient(135deg, #6BE39B, #2B9B9B); }
+.lr .av.d { background: linear-gradient(135deg, #FF7A8A, #B847C0); }
+
+/* COLUMN HIDE LOGIC FOR LIST VIEW IN MAIN */
+.view-icons .list-view { display: none; }
+.view-list .icon-grid { display: none; }
+
+/* ============================================================
+   STATUS BAR
+   ============================================================ */
+.statusbar {
+  grid-area: status;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--ink-muted);
+}
+.statusbar .left, .statusbar .right { display: flex; align-items: center; gap: 14px; }
+.statusbar .item { display: flex; align-items: center; gap: 6px; }
+.statusbar .sep { width: 1px; height: 12px; background: var(--line); }
+.statusbar .item .sig {
+  width: 6px; height: 6px; border-radius: 50%; background: #6BE39B;
+  box-shadow: 0 0 5px rgba(107,227,155,0.5);
+  animation: sigPulse 2s ease-in-out infinite;
+}
+@keyframes sigPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(107,227,155,0.55); }
+  50% { box-shadow: 0 0 0 4px rgba(107,227,155,0); }
+}
+.statusbar .item .v { color: var(--ink); font-weight: 600; }
+
+/* ============================================================
+   TWEAKS
+   ============================================================ */
+.tweaks {
+  position: fixed; right: 14px; bottom: calc(var(--status-h) + 12px); z-index: 60;
+  width: 260px;
+  background: rgba(20,21,25,0.94);
+  backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  color: var(--ink);
+  font-size: 11.5px;
+  box-shadow: 0 24px 60px -16px rgba(0,0,0,0.55);
+  display: none;
+}
+[data-theme="light"] .tweaks { background: rgba(255,255,255,0.95); border-color: rgba(10,11,13,0.08); }
+.tweaks.active { display: block; }
+.tweaks-hd { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+[data-theme="light"] .tweaks-hd { border-color: rgba(10,11,13,0.06); }
+.tweaks-hd b { font: 600 12px var(--sans); }
+.tweaks-close { border: 0; background: transparent; color: var(--ink-muted); width: 20px; height: 20px; border-radius: 5px; cursor: pointer; font-size: 14px; line-height: 1; }
+.tweaks-close:hover { background: rgba(255,255,255,0.05); color: var(--ink); }
+.tweaks-body { padding: 8px 12px 12px; max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.tweaks-section { display: flex; flex-direction: column; gap: 6px; }
+.tweaks-section h6 { margin: 4px 0 0; font: 600 9.5px/1 var(--sans); text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-muted); }
+.tweaks .seg2 { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 2px; }
+[data-theme="light"] .tweaks .seg2 { background: rgba(10,11,13,0.04); border-color: rgba(10,11,13,0.06); }
+.tweaks .seg2 button { border: 0; background: transparent; cursor: pointer; font: 500 11px var(--sans); padding: 5px 6px; border-radius: 4px; color: var(--ink-muted); }
+.tweaks .seg2 button.active { background: var(--ink); color: var(--on-ink); }
+.tweaks .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.tweaks .swatches button { aspect-ratio: 1; border-radius: 5px; cursor: pointer; border: 1px solid rgba(255,255,255,0.1); padding: 0; }
+.tweaks .swatches button.active { outline: 2px solid var(--ink); outline-offset: 2px; }
+.tweaks input[type=range] { width: 100%; -webkit-appearance: none; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.1); outline: none; }
+[data-theme="light"] .tweaks input[type=range] { background: rgba(10,11,13,0.1); }
+.tweaks input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--ink); cursor: pointer; border: 2px solid var(--canvas); }
+.tweaks-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-soft); }
+.tweaks-row .v { color: var(--ink-muted); }
+</style>
+</head>
+<body>
+
+<div class="app view-icons" id="app">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="tb-left">
+      <a href="#" class="brand"><span class="glyph">μ</span><span>Mnema</span></a>
+      <span class="tb-divider"></span>
+      <button class="workspace-switcher">
+        <span class="ws-avatar">B</span>
+        <span>boppl-design</span>
+        <svg class="ws-chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+    </div>
+    <div class="tb-search">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input placeholder="Hybrid search — try 'rate limiting' or '/pricing'" />
+      <span class="kbd"><kbd>⌘</kbd><kbd>K</kbd></span>
+    </div>
+    <div class="tb-right">
+      <button class="icon-btn" title="Invite"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg></button>
+      <button class="icon-btn" title="Notifications"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="badge"></span></button>
+      <button class="icon-btn" title="Settings"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <button class="user-chip" title="Kevin">K</button>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sb-section">
+      <div class="sb-section-head"><span>Favorites</span><button class="add">+</button></div>
+      <div class="sb-row active">
+        <span class="l"><svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg><span class="label">General Knowledge</span></span>
+        <span class="count">10</span>
+      </div>
+      <div class="sb-row indent-1">
+        <span class="l"><svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg><span class="label">Onboarding</span></span>
+        <span class="count">15</span>
+      </div>
+      <div class="sb-row indent-1">
+        <span class="l"><svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg><span class="label">Integrations</span></span>
+        <span class="count">5</span>
+      </div>
+      <div class="sb-row indent-1">
+        <span class="l"><svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg><span class="label">Documents</span></span>
+        <span class="count">10</span>
+      </div>
+      <div class="sb-row">
+        <span class="l"><svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12,2 15,8.5 22,9.3 17,14 18.5,21 12,17.5 5.5,21 7,14 2,9.3 9,8.5"/></svg><span class="label">Starred</span></span>
+        <span class="count">4</span>
+      </div>
+      <div class="sb-row">
+        <span class="l"><svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg><span class="label">Recents</span></span>
+        <span class="count"></span>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-section-head"><span>Shared</span></div>
+      <div class="sb-row">
+        <span class="l"><svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg><span class="label">Onboarding Design</span></span>
+        <span class="count">3</span>
+      </div>
+      <div class="sb-row">
+        <span class="l"><svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg><span class="label">Team Interviews</span></span>
+        <span class="count">8</span>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-section-head"><span>Tags</span></div>
+      <div class="sb-row"><span class="l"><span class="tag-dot" style="background:#FFB370"></span><span class="label">Live</span></span><span class="count">12</span></div>
+      <div class="sb-row"><span class="l"><span class="tag-dot" style="background:#7C9CFF"></span><span class="label">Draft</span></span><span class="count">5</span></div>
+      <div class="sb-row"><span class="l"><span class="tag-dot" style="background:#6BE39B"></span><span class="label">Source</span></span><span class="count">23</span></div>
+      <div class="sb-row"><span class="l"><span class="tag-dot" style="background:#C8A2FF"></span><span class="label">Research</span></span><span class="count">8</span></div>
+    </div>
+
+    <div class="sb-foot">
+      <span>MCP usage</span>
+      <span><span class="v">2.8k</span> / 5k</span>
+    </div>
+  </aside>
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div style="display:flex;align-items:center;flex:1;min-width:0;">
+      <div class="tb-back">
+        <button disabled title="Back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+        <button disabled title="Forward"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+      </div>
+      <div class="crumb-row">
+        <span>boppl-design</span>
+        <svg class="sep" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 6 6 6-6 6"/></svg>
+        <span class="here">General Knowledge</span>
+      </div>
+    </div>
+
+    <div class="toolbar-right">
+      <div class="view-seg" id="view-seg">
+        <button data-view="icons" class="active" title="Icons"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></button>
+        <button data-view="list" title="List"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+      </div>
+      <span class="vsep"></span>
+      <button class="action-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h13M3 12h9M3 18h5"/></svg>Sort</button>
+      <button class="action-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><path d="M12 2v13"/></svg>Share</button>
+      <button class="action-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>Upload</button>
+      <button class="action-btn" style="background:var(--ink);color:var(--on-ink);border-color:var(--ink);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <div class="section-title">
+      <h3>Folders</h3>
+      <span class="count">3 items</span>
+    </div>
+
+    <div class="icon-grid">
+      <!-- folder 1 (selected) -->
+      <div class="tile selected">
+        <div class="ico-wrap">
+          <svg class="folder-ico" viewBox="0 0 168 130" fill="none" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <linearGradient id="paper-1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F5F5F5"/><stop offset="1" stop-color="#D6D6D6"/></linearGradient>
+              <linearGradient id="front-1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5C5E64"/><stop offset="0.45" stop-color="#3E4046"/><stop offset="1" stop-color="#2C2E33"/></linearGradient>
+            </defs>
+            <g><path d="M48 16 L106 16 L116 26 L116 84 Q116 88 112 88 L48 88 Q44 88 44 84 L44 20 Q44 16 48 16 Z" fill="url(#paper-1)"/><path d="M106 16 L116 26 L106 26 Z" fill="#B8B8B8"/></g>
+            <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31 L152 116 Q152 120 148 120 L24 120 Q20 120 20 116 Z" fill="url(#front-1)"/>
+            <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31" stroke="rgba(255,255,255,0.18)" stroke-width="1" fill="none"/>
+            <rect x="20" y="115" width="132" height="5" rx="2" fill="rgba(0,0,0,0.18)"/>
+          </svg>
+          <div class="apps" style="position:absolute;left:14px;bottom:6px;display:flex;gap:2px;">
+            <span class="app gd"><svg width="9" height="9" viewBox="0 0 24 24"><polygon points="8,3 2,14 6,21 12,12" fill="#0F9D58"/><polygon points="16,3 8,3 12,12 20,12" fill="#FFCD40"/><polygon points="22,14 16,3 12,12 18,21" fill="#4285F4"/></svg></span>
+            <span class="app no" style="width:13px;height:13px;border-radius:3px;background:white;color:black;display:inline-flex;align-items:center;justify-content:center;font:700 8.5px serif;">N</span>
+          </div>
+        </div>
+        <div class="t-name">Onboarding</div>
+        <div class="t-meta">15 files</div>
+      </div>
+
+      <div class="tile">
+        <div class="ico-wrap">
+          <svg class="folder-ico" viewBox="0 0 168 130" fill="none">
+            <defs><linearGradient id="paper-2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F5F5F5"/><stop offset="1" stop-color="#D6D6D6"/></linearGradient><linearGradient id="front-2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5C5E64"/><stop offset="0.45" stop-color="#3E4046"/><stop offset="1" stop-color="#2C2E33"/></linearGradient></defs>
+            <g><path d="M48 16 L106 16 L116 26 L116 84 Q116 88 112 88 L48 88 Q44 88 44 84 L44 20 Q44 16 48 16 Z" fill="url(#paper-2)"/><path d="M106 16 L116 26 L106 26 Z" fill="#B8B8B8"/></g>
+            <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31 L152 116 Q152 120 148 120 L24 120 Q20 120 20 116 Z" fill="url(#front-2)"/>
+            <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31" stroke="rgba(255,255,255,0.18)" stroke-width="1" fill="none"/>
+            <rect x="20" y="115" width="132" height="5" rx="2" fill="rgba(0,0,0,0.18)"/>
+          </svg>
+          <div class="apps" style="position:absolute;left:14px;bottom:6px;display:flex;gap:2px;">
+            <span class="app no" style="width:13px;height:13px;border-radius:3px;background:white;color:black;display:inline-flex;align-items:center;justify-content:center;font:700 8.5px serif;">N</span>
+            <span class="app fi" style="width:13px;height:13px;border-radius:3px;background:#1E1E1E;color:#fff;display:inline-flex;align-items:center;justify-content:center;font:700 8px var(--sans);">F</span>
+            <span class="app ou" style="width:13px;height:13px;border-radius:3px;background:#0078D4;color:#fff;display:inline-flex;align-items:center;justify-content:center;font:700 8px var(--sans);">O</span>
+          </div>
+        </div>
+        <div class="t-name">Integrations</div>
+        <div class="t-meta">5 files</div>
+      </div>
+
+      <div class="tile">
+        <div class="ico-wrap">
+          <svg class="folder-ico" viewBox="0 0 168 130" fill="none">
+            <defs><linearGradient id="paper-3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F5F5F5"/><stop offset="1" stop-color="#D6D6D6"/></linearGradient><linearGradient id="front-3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5C5E64"/><stop offset="0.45" stop-color="#3E4046"/><stop offset="1" stop-color="#2C2E33"/></linearGradient></defs>
+            <g><path d="M48 16 L106 16 L116 26 L116 84 Q116 88 112 88 L48 88 Q44 88 44 84 L44 20 Q44 16 48 16 Z" fill="url(#paper-3)"/><path d="M106 16 L116 26 L106 26 Z" fill="#B8B8B8"/></g>
+            <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31 L152 116 Q152 120 148 120 L24 120 Q20 120 20 116 Z" fill="url(#front-3)"/>
+            <path d="M20 42 Q20 38 24 38 L62 38 Q66 38 67.5 35 L70 30 Q71.5 27 75 27 L148 27 Q152 27 152 31" stroke="rgba(255,255,255,0.18)" stroke-width="1" fill="none"/>
+            <rect x="20" y="115" width="132" height="5" rx="2" fill="rgba(0,0,0,0.18)"/>
+          </svg>
+          <div class="apps" style="position:absolute;left:14px;bottom:6px;display:flex;gap:2px;">
+            <span class="app gd"><svg width="9" height="9" viewBox="0 0 24 24"><polygon points="8,3 2,14 6,21 12,12" fill="#0F9D58"/><polygon points="16,3 8,3 12,12 20,12" fill="#FFCD40"/><polygon points="22,14 16,3 12,12 18,21" fill="#4285F4"/></svg></span>
+          </div>
+        </div>
+        <div class="t-name">Documents</div>
+        <div class="t-meta">10 files</div>
+      </div>
+
+      <div class="add-tile">
+        <div class="plus"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+        <div>New folder</div>
+      </div>
+    </div>
+
+    <div class="section-title">
+      <h3>Files</h3>
+      <span class="count">7 items</span>
+    </div>
+
+    <!-- ICON VIEW -->
+    <div class="icon-grid">
+      <div class="tile">
+        <div class="ico-wrap"><div class="file-ico pdf"><div class="sheet"><div class="lines"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ext-tag">PDF</div></div></div>
+        <div class="t-name">Onboarding-Guide.pdf</div>
+        <div class="t-meta">2.4 MB · 2d</div>
+      </div>
+      <div class="tile">
+        <div class="ico-wrap"><div class="file-ico docx"><div class="sheet"><div class="lines"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ext-tag">DOC</div></div></div>
+        <div class="t-name">Product-Roadmap.docx</div>
+        <div class="t-meta">912 KB · 5h</div>
+      </div>
+      <div class="tile">
+        <div class="ico-wrap"><div class="file-ico md"><div class="sheet"><div class="lines"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ext-tag">MD</div></div></div>
+        <div class="t-name">MCP-Spec-Notes.md</div>
+        <div class="t-meta">22 KB · now</div>
+      </div>
+      <div class="tile">
+        <div class="ico-wrap"><div class="file-ico xlsx"><div class="sheet"><div class="lines"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ext-tag">XLS</div></div></div>
+        <div class="t-name">Q3-Metrics.xlsx</div>
+        <div class="t-meta">340 KB · 1d</div>
+      </div>
+      <div class="tile">
+        <div class="ico-wrap"><div class="file-ico image png"><div class="sheet"></div><div class="ext-tag">PNG</div></div></div>
+        <div class="t-name">brand-architecture-v3.png</div>
+        <div class="t-meta">1.8 MB · 4d</div>
+      </div>
+      <div class="tile">
+        <div class="ico-wrap"><div class="file-ico fig"><div class="sheet"><div class="lines"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ext-tag">FIG</div></div></div>
+        <div class="t-name">Workspace-Wireframes</div>
+        <div class="t-meta">— · 1w</div>
+      </div>
+      <div class="tile">
+        <div class="ico-wrap"><div class="file-ico md"><div class="sheet"><div class="lines"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ext-tag">MD</div></div></div>
+        <div class="t-name">Team-Interview-Notes.md</div>
+        <div class="t-meta">48 KB · 2w</div>
+      </div>
+      <div class="tile">
+        <div class="ico-wrap"><div class="file-ico docx"><div class="sheet"><div class="lines"><i></i><i></i><i></i><i></i><i></i></div></div><div class="ext-tag">DOC</div></div></div>
+        <div class="t-name">Brand-Voice.docx</div>
+        <div class="t-meta">186 KB · 3w</div>
+      </div>
+    </div>
+
+    <!-- LIST VIEW (hidden in icons mode) -->
+    <div class="list-view">
+      <div class="lr head">
+        <span></span><span>NAME</span><span>SIZE</span><span>ADDED BY</span><span>UPDATED</span><span></span>
+      </div>
+      <div class="lr"><span class="ic"><div class="file-ico pdf" style="width:18px;height:22px;"><div class="sheet"></div><div class="ext-tag" style="font-size:5px;bottom:1px;">PDF</div></div></span><span class="nm"><span class="name">Onboarding-Guide.pdf</span></span><span class="sz">2.4 MB</span><span class="by"><span class="av a">K</span><span class="name">kevin@mail.com</span></span><span class="dt">2d ago</span><span></span></div>
+      <div class="lr"><span class="ic"><div class="file-ico docx" style="width:18px;height:22px;"><div class="sheet"></div><div class="ext-tag" style="font-size:5px;bottom:1px;">DOC</div></div></span><span class="nm"><span class="name">Product-Roadmap.docx</span></span><span class="sz">912 KB</span><span class="by"><span class="av b">A</span><span class="name">antonwe@gmail.com</span></span><span class="dt">5h ago</span><span></span></div>
+      <div class="lr"><span class="ic"><div class="file-ico md" style="width:18px;height:22px;"><div class="sheet"></div><div class="ext-tag" style="font-size:5px;bottom:1px;">MD</div></div></span><span class="nm"><span class="name">MCP-Spec-Notes.md</span></span><span class="sz">22 KB</span><span class="by"><span class="av c">M</span><span class="name">maya@boppl.in</span></span><span class="dt">just now</span><span></span></div>
+      <div class="lr"><span class="ic"><div class="file-ico xlsx" style="width:18px;height:22px;"><div class="sheet"></div><div class="ext-tag" style="font-size:5px;bottom:1px;">XLS</div></div></span><span class="nm"><span class="name">Q3-Metrics.xlsx</span></span><span class="sz">340 KB</span><span class="by"><span class="av d">P</span><span class="name">priya@boppl.in</span></span><span class="dt">1d ago</span><span></span></div>
+      <div class="lr"><span class="ic"><div class="file-ico image png" style="width:18px;height:22px;"><div class="sheet"></div><div class="ext-tag" style="font-size:5px;bottom:1px;">PNG</div></div></span><span class="nm"><span class="name">brand-architecture-v3.png</span></span><span class="sz">1.8 MB</span><span class="by"><span class="av a">K</span><span class="name">kevin@mail.com</span></span><span class="dt">4d ago</span><span></span></div>
+      <div class="lr"><span class="ic"><div class="file-ico fig" style="width:18px;height:22px;"><div class="sheet"></div><div class="ext-tag" style="font-size:5px;bottom:1px;">FIG</div></div></span><span class="nm"><span class="name">Workspace-Wireframes</span></span><span class="sz">—</span><span class="by"><span class="av b">A</span><span class="name">antonwe@gmail.com</span></span><span class="dt">1w ago</span><span></span></div>
+      <div class="lr"><span class="ic"><div class="file-ico md" style="width:18px;height:22px;"><div class="sheet"></div><div class="ext-tag" style="font-size:5px;bottom:1px;">MD</div></div></span><span class="nm"><span class="name">Team-Interview-Notes.md</span></span><span class="sz">48 KB</span><span class="by"><span class="av c">M</span><span class="name">maya@boppl.in</span></span><span class="dt">2w ago</span><span></span></div>
+      <div class="lr"><span class="ic"><div class="file-ico docx" style="width:18px;height:22px;"><div class="sheet"></div><div class="ext-tag" style="font-size:5px;bottom:1px;">DOC</div></div></span><span class="nm"><span class="name">Brand-Voice.docx</span></span><span class="sz">186 KB</span><span class="by"><span class="av d">P</span><span class="name">priya@boppl.in</span></span><span class="dt">3w ago</span><span></span></div>
+    </div>
+
+  </main>
+
+  <!-- STATUS BAR -->
+  <footer class="statusbar">
+    <div class="left">
+      <span class="item"><span class="sig"></span>MCP live · synced 2 min ago</span>
+      <span class="sep"></span>
+      <span class="item">11 items · <span class="v">5.7 MB</span></span>
+    </div>
+    <div class="right">
+      <span class="item">3 collaborators online</span>
+      <span class="sep"></span>
+      <span class="item">P50 <span class="v">52ms</span></span>
+    </div>
+  </footer>
+</div>
+
+<!-- TWEAKS -->
+<aside class="tweaks" id="tweaks">
+  <div class="tweaks-hd">
+    <b>Tweaks · Workspace</b>
+    <button class="tweaks-close" id="tweaks-close">×</button>
+  </div>
+  <div class="tweaks-body">
+    <div class="tweaks-section">
+      <h6>Font</h6>
+      <div class="seg2" data-tweak="font">
+        <button data-val="Inter">Inter</button>
+        <button data-val="Geist">Geist</button>
+        <button data-val="IBM Plex Sans">Plex</button>
+        <button data-val="system">System</button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Theme</h6>
+      <div class="seg2" data-tweak="theme">
+        <button data-val="dark">Dark</button>
+        <button data-val="light">Light</button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Accent</h6>
+      <div class="swatches" data-tweak="accent">
+        <button data-val="244,245,247" style="background:#F4F5F7"></button>
+        <button data-val="107,227,155" style="background:#6BE39B"></button>
+        <button data-val="124,156,255" style="background:#7C9CFF"></button>
+        <button data-val="200,162,255" style="background:#C8A2FF"></button>
+        <button data-val="255,179,112" style="background:#FFB370"></button>
+        <button data-val="255,122,138" style="background:#FF7A8A"></button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>View</h6>
+      <div class="seg2" data-tweak="view">
+        <button data-val="icons">Icons</button>
+        <button data-val="list">List</button>
+      </div>
+    </div>
+    <div class="tweaks-section">
+      <h6>Sidebar width</h6>
+      <div class="tweaks-row"><span>Width</span><span class="v" id="sbw-v">220</span></div>
+      <input type="range" min="180" max="280" step="4" data-tweak="sidebar" />
+    </div>
+    <div class="tweaks-section">
+      <h6>Icon size</h6>
+      <div class="tweaks-row"><span>Grid tile</span><span class="v" id="ts-v">120</span></div>
+      <input type="range" min="96" max="160" step="4" data-tweak="tile" />
+    </div>
+  </div>
+</aside>
+
+<script>
+const TWEAKS = /*EDITMODE-BEGIN*/{
+  "theme": "dark",
+  "accent": "255,179,112",
+  "view": "icons",
+  "sidebar": 188,
+  "tile": 132,
+  "font": "Inter"
+}/*EDITMODE-END*/;
+
+function applyTweaks() {
+  const root = document.documentElement;
+  root.setAttribute('data-theme', TWEAKS.theme);
+  root.style.setProperty('--accent-rgb', TWEAKS.accent);
+  root.style.setProperty('--sidebar-w', TWEAKS.sidebar + 'px');
+  const fontStack = TWEAKS.font === 'system'
+    ? '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif'
+    : `"${TWEAKS.font}", ui-sans-serif, system-ui, sans-serif`;
+  root.style.setProperty('--sans', fontStack);
+  document.querySelectorAll('.icon-grid').forEach(g => {
+    g.style.gridTemplateColumns = `repeat(auto-fill, minmax(${TWEAKS.tile}px, 1fr))`;
+  });
+  const app = document.getElementById('app');
+  app.classList.remove('view-icons', 'view-list');
+  app.classList.add('view-' + TWEAKS.view);
+  document.querySelectorAll('#view-seg button').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === TWEAKS.view);
+  });
+
+  document.querySelectorAll('[data-tweak]').forEach(el => {
+    const k = el.dataset.tweak; const v = TWEAKS[k];
+    if (el.classList.contains('seg2') || el.classList.contains('swatches')) {
+      el.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.val === v));
+    } else if (el.type === 'range') {
+      el.value = v;
+    }
+  });
+  document.getElementById('sbw-v').textContent = TWEAKS.sidebar;
+  document.getElementById('ts-v').textContent = TWEAKS.tile;
+}
+function setTweak(k, v) {
+  TWEAKS[k] = v; applyTweaks();
+  try { window.parent.postMessage({type:'__edit_mode_set_keys', edits:{[k]:v}}, '*'); } catch(e){}
+}
+document.querySelectorAll('.seg2[data-tweak], .swatches[data-tweak]').forEach(el => {
+  el.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    setTweak(el.dataset.tweak, b.dataset.val);
+  });
+});
+document.querySelectorAll('input[type=range][data-tweak]').forEach(el => {
+  el.addEventListener('input', () => setTweak(el.dataset.tweak, parseInt(el.value, 10)));
+});
+
+// view segmented control in toolbar
+document.getElementById('view-seg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  setTweak('view', b.dataset.view);
+});
+
+// Tweaks panel host protocol
+(function() {
+  const panel = document.getElementById('tweaks');
+  const close = document.getElementById('tweaks-close');
+  window.addEventListener('message', e => {
+    const m = e.data; if (!m || !m.type) return;
+    if (m.type === '__activate_edit_mode') panel.classList.add('active');
+    if (m.type === '__deactivate_edit_mode') {
+      panel.classList.remove('active');
+      try { window.parent.postMessage({type:'__edit_mode_dismissed'}, '*'); } catch(e){}
+    }
+  });
+  close.addEventListener('click', () => {
+    panel.classList.remove('active');
+    try { window.parent.postMessage({type:'__edit_mode_dismissed'}, '*'); } catch(e){}
+  });
+  try { window.parent.postMessage({type:'__edit_mode_available'}, '*'); } catch(e){}
+})();
+
+applyTweaks();
+</script>
+</body>
+</html>

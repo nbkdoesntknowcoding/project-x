@@ -1,9 +1,7 @@
-// TODO: Claude Design — apply Mnema glassmorphism design system
-// Background: var(--bg) #0a0a0a
-// Cards: rgba(255,255,255,0.04) + backdrop-filter: blur(24px)
-// See BOPPL_Context_Engine_Prompt_UI_Redesign_All_MCP_Panels for token system
+// DESIGN APPLIED: 2026-05-27
 
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
+import { T, glassCard } from '../../lib/dev-tokens';
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 
@@ -253,62 +251,193 @@ export function SessionDetail({ sessionId }: SessionDetailProps): JSX.Element {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   if (loading) {
-    return <div style={{ padding: '40px', color: 'var(--ink-muted)', fontSize: '13px' }}>Loading session…</div>;
+    return (
+      <div style={{
+        padding:    40,
+        color:      T.textMuted,
+        fontSize:   13,
+        fontFamily: T.fontUI,
+        background: T.bg,
+        height:     '100%',
+      }}>
+        Loading session…
+      </div>
+    );
   }
 
   if (error || !session) {
     return (
-      <div style={{ padding: '40px', color: '#f87171', fontSize: '13px' }}>
+      <div style={{
+        padding:    40,
+        color:      T.red,
+        fontSize:   13,
+        fontFamily: T.fontUI,
+        background: T.bg,
+        height:     '100%',
+      }}>
         {error ?? 'Session not found'}
       </div>
     );
   }
 
   return (
-    // TODO: Claude Design — three-panel layout
-    <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr 300px', gap: '16px', padding: '24px', height: 'calc(100vh - 80px)', overflow: 'hidden' }}>
+    <div style={{
+      display:             'grid',
+      gridTemplateColumns: '280px 1fr 320px',
+      flex:                1,
+      overflow:            'hidden',
+      background:          T.bg,
+      fontFamily:          T.fontUI,
+      height:              '100%',
+    }}>
 
-      {/* LEFT PANEL — session metadata */}
-      <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {/* TODO: Claude Design */}
-        <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '16px' }}>
-          <h2 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', marginBottom: '12px' }}>Session</h2>
-          <MetaRow label="ID"         value={session.id.slice(0, 12) + '…'} mono />
-          <MetaRow label="Status"     value={session.status} />
-          <MetaRow label="Developer"  value={session.developerId} />
-          <MetaRow label="Agent"      value={session.agent} />
-          {session.taskTitle && <MetaRow label="Task" value={session.taskTitle} />}
-          <MetaRow label="Started"    value={new Date(session.startedAt).toLocaleString()} />
-          {session.endedAt && <MetaRow label="Ended" value={new Date(session.endedAt).toLocaleString()} />}
-          {session.model && <MetaRow label="Model" value={session.model} mono />}
-          {session.gitBranch && <MetaRow label="Branch" value={session.gitBranch} mono />}
+      {/* ── LEFT PANEL — session metadata ─────────────────────────────── */}
+      <div style={{
+        borderRight: `1px solid ${T.line}`,
+        overflowY:   'auto',
+        padding:     '18px 18px 28px',
+        display:     'flex',
+        flexDirection: 'column',
+        gap:         12,
+        background:  T.bg,
+      }}>
+
+        {/* Session identity card */}
+        <div style={{ ...sdCard }}>
+          {/* Big cost */}
+          <div style={{
+            fontFamily:    T.fontMono,
+            fontSize:      22,
+            fontWeight:    500,
+            color:         T.amber,
+            letterSpacing: '-0.01em',
+            margin:        '0 0 2px',
+          }}>
+            {formatCost(session.totalCostUsd)}
+          </div>
+          <div style={{
+            fontFamily: T.fontMono,
+            fontSize:   11.5,
+            color:      T.textSecondary,
+            marginBottom: 14,
+          }}>
+            {session.durationMs !== null
+              ? `${Math.round(session.durationMs / 1000)}s`
+              : 'ongoing'}
+            {' · '}
+            {session.totalToolCalls} tool calls
+          </div>
+
+          {/* Status badge */}
+          <div style={{ marginBottom: 12 }}>
+            {(() => {
+              const sc = T.sbadge[session.status as keyof typeof T.sbadge] ?? T.sbadge.idle;
+              return (
+                <span style={{
+                  display:       'inline-flex',
+                  alignItems:    'center',
+                  fontFamily:    T.fontMono,
+                  fontSize:      10.5,
+                  fontWeight:    500,
+                  padding:       '4px 9px',
+                  borderRadius:  6,
+                  background:    sc.bg,
+                  border:        `0.5px solid ${sc.border}`,
+                  color:         sc.text,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}>
+                  {session.status}
+                </span>
+              );
+            })()}
+          </div>
+
+          {/* Meta rows */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <MetaRow label="ID"        value={session.id.slice(0, 14) + '…'} mono />
+            <MetaRow label="Developer" value={session.developerId} />
+            <MetaRow label="Agent"     value={session.agent} mono />
+            {session.taskTitle && <MetaRow label="Task" value={session.taskTitle} />}
+            {session.model && <MetaRow label="Model" value={session.model} mono />}
+            <MetaRow label="Started" value={new Date(session.startedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })} mono />
+            {session.endedAt && <MetaRow label="Ended" value={new Date(session.endedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })} mono />}
+          </div>
         </div>
 
-        <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '12px', padding: '16px' }}>
-          <h2 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', marginBottom: '12px' }}>Stats</h2>
-          <MetaRow label="Cost"         value={formatCost(session.totalCostUsd)} mono />
-          <MetaRow label="Tool calls"   value={String(session.totalToolCalls)} />
-          <MetaRow label="Files changed" value={String(session.filesModifiedCount)} />
-          <MetaRow label="Tokens in"    value={session.totalInputTokens.toLocaleString()} />
-          <MetaRow label="Tokens out"   value={session.totalOutputTokens.toLocaleString()} />
+        {/* Git card */}
+        {(session.gitBranch ?? session.gitCommitBefore ?? session.gitCommitAfter) && (
+          <div style={{ ...sdCard }}>
+            <div style={sdLabel}>Git</div>
+            <div style={{ fontFamily: T.fontMono, fontSize: 12, color: T.textSecondary, display: 'flex', flexDirection: 'column', gap: 5, marginTop: 8 }}>
+              {session.gitBranch && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ color: T.textMuted, width: 56, flexShrink: 0 }}>branch</span>
+                  <span>{session.gitBranch}</span>
+                </div>
+              )}
+              {session.gitCommitBefore && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ color: T.textMuted, width: 56, flexShrink: 0 }}>before</span>
+                  <span>{session.gitCommitBefore.slice(0, 8)}</span>
+                </div>
+              )}
+              {session.gitCommitAfter && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <span style={{ color: T.textMuted, width: 56, flexShrink: 0 }}>after</span>
+                  <span style={{ color: T.green }}>{session.gitCommitAfter.slice(0, 8)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Stats card */}
+        <div style={{ ...sdCard }}>
+          <div style={sdLabel}>Stats</div>
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <MetaRow label="Files changed" value={String(session.filesModifiedCount)} />
+            <MetaRow label="Tokens in"    value={session.totalInputTokens.toLocaleString()} mono />
+            <MetaRow label="Tokens out"   value={session.totalOutputTokens.toLocaleString()} mono />
+          </div>
         </div>
 
-        <div style={{ position: 'relative' }}>
+        {/* Export button */}
+        <div style={{ position: 'relative', marginTop: 4 }}>
           <button
             onClick={() => { setExportOpen((v) => !v); }}
-            style={{ padding: '8px 14px', fontSize: '12px', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: '8px', color: '#a5b4fc', cursor: 'pointer', width: '100%' }}
+            style={{
+              width:          '100%',
+              padding:        '9px 12px',
+              fontSize:       12,
+              fontFamily:     T.fontUI,
+              fontWeight:     500,
+              background:     'transparent',
+              border:         `0.5px solid ${T.glassBorder}`,
+              borderRadius:   6,
+              color:          T.textSecondary,
+              cursor:         'pointer',
+              display:        'flex',
+              alignItems:     'center',
+              justifyContent: 'center',
+              gap:            6,
+            }}
           >
             ↓ Export ▾
           </button>
           {exportOpen && (
             <div
               style={{
-                position: 'absolute', left: 0, bottom: '110%', zIndex: 10,
-                background: 'var(--surface-elevated, #161616)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: '8px', overflow: 'hidden',
-                minWidth: '160px',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                position:  'absolute',
+                left:      0,
+                bottom:    '110%',
+                zIndex:    10,
+                background: T.surface2,
+                border:     `0.5px solid ${T.glassBorderStrong}`,
+                borderRadius: 8,
+                overflow:  'hidden',
+                minWidth:  160,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
               }}
             >
               {[
@@ -320,13 +449,19 @@ export function SessionDetail({ sessionId }: SessionDetailProps): JSX.Element {
                   key={fmt}
                   onClick={() => { handleExport(fmt); }}
                   style={{
-                    display: 'block', width: '100%', textAlign: 'left',
-                    padding: '8px 14px', fontSize: '12px',
-                    background: 'transparent', border: 'none',
-                    color: 'var(--text-secondary)', cursor: 'pointer',
+                    display:    'block',
+                    width:      '100%',
+                    textAlign:  'left',
+                    padding:    '8px 14px',
+                    fontSize:   12,
+                    fontFamily: T.fontUI,
+                    background: 'transparent',
+                    border:     'none',
+                    color:      T.textSecondary,
+                    cursor:     'pointer',
                   }}
-                  onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
-                  onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                  onMouseOver={(e) => { e.currentTarget.style.background = T.glass; }}
+                  onMouseOut={(e)  => { e.currentTarget.style.background = 'transparent'; }}
                 >
                   {label}
                 </button>
@@ -336,13 +471,45 @@ export function SessionDetail({ sessionId }: SessionDetailProps): JSX.Element {
         </div>
       </div>
 
-      {/* CENTRE PANEL — tool call timeline */}
-      <div style={{ overflowY: 'auto' }}>
-        <h2 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', marginBottom: '12px' }}>Timeline</h2>
+      {/* ── CENTRE PANEL — tool call timeline ─────────────────────────── */}
+      <div style={{
+        overflowY:  'auto',
+        padding:    '18px 22px 28px',
+        background: T.bg,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <h2 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: T.textPrimary, fontFamily: T.fontUI }}>
+            Timeline
+          </h2>
+          <span style={{
+            fontFamily:    T.fontMono,
+            fontSize:      10,
+            padding:       '2px 6px',
+            borderRadius:  999,
+            background:    T.surface2,
+            border:        `0.5px solid ${T.line}`,
+            color:         T.textSecondary,
+          }}>
+            {toolCallRows.length}
+          </span>
+        </div>
+
         {toolCallRows.length === 0 && (
-          <div style={{ color: 'var(--ink-muted)', fontSize: '13px' }}>No tool calls yet.</div>
+          <div style={{ color: T.textMuted, fontSize: 13 }}>No tool calls yet.</div>
         )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+
+        {/* Timeline list */}
+        <div style={{ position: 'relative', paddingLeft: 60 }}>
+          {/* Vertical rule */}
+          <div style={{
+            position:    'absolute',
+            left:        50,
+            top:         4,
+            bottom:      4,
+            width:       1,
+            background:  T.surface3,
+          }} />
+
           {toolCallRows.map((tc) => (
             <ToolCallEntry
               key={tc.id}
@@ -355,39 +522,82 @@ export function SessionDetail({ sessionId }: SessionDetailProps): JSX.Element {
         </div>
       </div>
 
-      {/* RIGHT PANEL — file diffs */}
-      <div style={{ overflowY: 'auto' }}>
-        <h2 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', marginBottom: '12px' }}>Files changed</h2>
+      {/* ── RIGHT PANEL — file diffs ───────────────────────────────────── */}
+      <div style={{
+        borderLeft: `1px solid ${T.line}`,
+        overflowY:  'auto',
+        padding:    '18px 18px 28px',
+        background: T.bg,
+      }}>
+        <h2 style={{ margin: '0 0 14px', fontSize: 14, fontWeight: 600, color: T.textPrimary, fontFamily: T.fontUI }}>
+          Files changed
+          <span style={{
+            marginLeft:    6,
+            fontFamily:    T.fontMono,
+            fontSize:      10,
+            padding:       '2px 6px',
+            borderRadius:  999,
+            background:    T.surface2,
+            border:        `0.5px solid ${T.line}`,
+            color:         T.textSecondary,
+            fontWeight:    400,
+          }}>
+            {session.filesModifiedCount}
+          </span>
+        </h2>
+
         {diffRows.length === 0 && (
-          <div style={{ color: 'var(--ink-muted)', fontSize: '13px' }}>No file changes recorded.</div>
+          <div style={{ color: T.textMuted, fontSize: 13 }}>No file changes recorded.</div>
         )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {diffRows.map((d) => (
             <div key={d.id}>
               <div
                 onClick={() => void handleSelectDiff(d.id)}
                 style={{
-                  padding: '8px 10px',
-                  background: selectedDiffId === d.id ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${selectedDiffId === d.id ? 'rgba(99,102,241,0.4)' : 'rgba(255,255,255,0.06)'}`,
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
+                  display:       'flex',
+                  alignItems:    'center',
+                  gap:           10,
+                  padding:       '9px 12px',
+                  borderRadius:  6,
+                  cursor:        'pointer',
+                  background:    selectedDiffId === d.id ? T.surface2 : 'transparent',
+                  transition:    'background 120ms ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (selectedDiffId !== d.id) (e.currentTarget as HTMLDivElement).style.background = T.glass;
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.background = selectedDiffId === d.id ? T.surface2 : 'transparent';
                 }}
               >
-                <div style={{ fontFamily: 'var(--mono)', color: 'var(--ink)', fontSize: '11px', wordBreak: 'break-all' }}>{d.filePath}</div>
-                <div style={{ color: 'var(--ink-muted)', marginTop: '2px' }}>
-                  <span style={{ color: '#22c55e' }}>+{d.linesAdded ?? 0}</span>
-                  {' / '}
-                  <span style={{ color: '#ef4444' }}>-{d.linesRemoved ?? 0}</span>
-                  {d.truncated && <span style={{ color: '#f59e0b', marginLeft: '6px' }}>(truncated)</span>}
-                </div>
+                <span style={{
+                  fontFamily:   T.fontMono,
+                  fontSize:     11.5,
+                  color:        T.textSecondary,
+                  flex:         1,
+                  minWidth:     0,
+                  wordBreak:    'break-all',
+                  lineHeight:   '1.4',
+                }}>
+                  {d.filePath}
+                </span>
+                <span style={{ fontFamily: T.fontMono, fontSize: 10.5, fontWeight: 500, color: T.green, flexShrink: 0 }}>
+                  +{d.linesAdded ?? 0}
+                </span>
+                <span style={{ fontFamily: T.fontMono, fontSize: 10.5, fontWeight: 500, color: T.red, flexShrink: 0 }}>
+                  -{d.linesRemoved ?? 0}
+                </span>
+                {d.truncated && (
+                  <span style={{ color: T.amber, fontSize: 10, flexShrink: 0 }}>⚠</span>
+                )}
               </div>
 
               {selectedDiffId === d.id && (
-                <div style={{ marginTop: '4px', borderRadius: '6px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ marginBottom: 8, borderRadius: 8, overflow: 'hidden', border: `0.5px solid ${T.line}` }}>
                   {loadingDiff && (
-                    <div style={{ padding: '8px', fontSize: '12px', color: 'var(--ink-muted)' }}>Loading diff…</div>
+                    <div style={{ padding: '8px 12px', fontSize: 12, color: T.textMuted, fontFamily: T.fontUI }}>Loading diff…</div>
                   )}
                   {!loadingDiff && selectedDiff?.diffContent && (
                     <DiffViewer
@@ -396,7 +606,7 @@ export function SessionDetail({ sessionId }: SessionDetailProps): JSX.Element {
                     />
                   )}
                   {!loadingDiff && !selectedDiff?.diffContent && (
-                    <div style={{ padding: '8px', fontSize: '12px', color: 'var(--ink-muted)' }}>No diff content available.</div>
+                    <div style={{ padding: '8px 12px', fontSize: 12, color: T.textMuted }}>No diff content available.</div>
                   )}
                 </div>
               )}
@@ -408,13 +618,39 @@ export function SessionDetail({ sessionId }: SessionDetailProps): JSX.Element {
   );
 }
 
+// ── Shared sub-component card style ──────────────────────────────────────────
+
+const sdCard: React.CSSProperties = {
+  ...glassCard,
+  borderRadius: 12,
+  padding:      '14px 16px',
+};
+
+const sdLabel: React.CSSProperties = {
+  fontFamily:    T.fontMono,
+  fontSize:      10,
+  fontWeight:    500,
+  color:         T.textMuted,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+};
+
 // ── MetaRow ───────────────────────────────────────────────────────────────────
 
 function MetaRow({ label, value, mono }: { label: string; value: string; mono?: boolean }): JSX.Element {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', fontSize: '12px' }}>
-      <span style={{ color: 'var(--ink-muted)' }}>{label}</span>
-      <span style={{ color: 'var(--ink)', fontFamily: mono ? 'var(--mono)' : undefined, textAlign: 'right', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+      <span style={{ fontSize: 11, fontWeight: 500, color: T.textMuted, flexShrink: 0 }}>{label}</span>
+      <span style={{
+        fontSize:     mono ? 11 : 12,
+        color:        T.textPrimary,
+        fontFamily:   mono ? T.fontMono : T.fontUI,
+        textAlign:    'right',
+        overflow:     'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace:   'nowrap',
+        maxWidth:     '160px',
+      }}>
         {value}
       </span>
     </div>
@@ -439,99 +675,199 @@ function ToolCallEntry({
     ? (tc.inputJson as Record<string, unknown>).message as string
     : null;
 
+  // Format timestamp as short HH:MM:SS
+  const ts = new Date(tc.timestamp).toLocaleTimeString(undefined, {
+    hour:   '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+
   if (isMilestone) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', color: '#a78bfa', fontSize: '12px' }}>
-        {/* TODO: Claude Design — milestone divider */}
-        <div style={{ height: '1px', flex: 1, background: 'rgba(167,139,250,0.3)' }} />
+      <div style={{
+        display:    'flex',
+        alignItems: 'center',
+        gap:        10,
+        padding:    '6px 0',
+        color:      T.violet,
+        fontSize:   12,
+        fontFamily: T.fontUI,
+        marginBottom: 8,
+      }}>
+        <div style={{ height: 1, flex: 1, background: `${T.violet}40` }} />
         <span>🏁 {milestoneMsg ?? 'Milestone'}</span>
-        <div style={{ height: '1px', flex: 1, background: 'rgba(167,139,250,0.3)' }} />
+        <div style={{ height: 1, flex: 1, background: `${T.violet}40` }} />
       </div>
     );
   }
 
   return (
-    <div
-      style={{
-        background: 'rgba(255,255,255,0.03)',
-        border: `1px solid ${tc.isError ? 'rgba(239,68,68,0.3)' : 'rgba(255,255,255,0.06)'}`,
-        borderRadius: '6px',
-        overflow: 'hidden',
-      }}
-    >
-      <div
-        onClick={onToggle}
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 60px 70px 70px',
-          gap: '8px',
-          padding: '8px 10px',
-          cursor: 'pointer',
-          fontSize: '12px',
-          alignItems: 'center',
-        }}
-      >
-        {/* Tool name + file */}
-        <div>
-          <span style={{ fontWeight: 600, color: tc.isError ? '#f87171' : 'var(--ink)' }}>
+    <div style={{ position: 'relative', marginBottom: 8 }}>
+      {/* Timestamp + connector dot */}
+      <div style={{
+        position:  'absolute',
+        left:      -60,
+        top:       11,
+        width:     42,
+        textAlign: 'right',
+        fontFamily: T.fontMono,
+        fontSize:  10.5,
+        color:     T.textMuted,
+        letterSpacing: '0.02em',
+      }}>
+        {ts}
+      </div>
+      {/* Connector dot */}
+      <div style={{
+        position:  'absolute',
+        left:      -13,
+        top:       14,
+        width:     8,
+        height:    8,
+        borderRadius: '50%',
+        background: T.surface3,
+        border:    `2px solid ${T.bg}`,
+        zIndex:    1,
+      }} />
+
+      {/* Card */}
+      <div style={{
+        padding:       '10px 14px',
+        background:    tc.isError ? `${T.red}08` : T.surface2,
+        borderRadius:  8,
+        border:        `0.5px solid ${tc.isError ? `${T.red}30` : T.line}`,
+        overflow:      'hidden',
+      }}>
+        <div
+          onClick={onToggle}
+          style={{
+            display:   'flex',
+            alignItems: 'center',
+            gap:       10,
+            cursor:    'pointer',
+          }}
+        >
+          {/* Tool name + file */}
+          <span style={{
+            fontFamily: T.fontMono,
+            fontSize:   13,
+            fontWeight: 500,
+            color:      tc.isError ? T.red : T.textPrimary,
+            flexShrink: 0,
+          }}>
             {tc.toolName}
           </span>
           {tc.filePath && (
-            <span style={{ color: 'var(--ink-muted)', marginLeft: '6px', fontFamily: 'var(--mono)', fontSize: '11px' }}>
+            <span style={{
+              fontFamily:   T.fontMono,
+              fontSize:     11,
+              color:        T.textSecondary,
+              overflow:     'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace:   'nowrap',
+              flex:         1,
+            }}>
               {tc.filePath.split('/').pop()}
+            </span>
+          )}
+          {/* Duration chip */}
+          {tc.durationMs !== null && (
+            <span style={{
+              fontFamily:    T.fontMono,
+              fontSize:      10,
+              padding:       '3px 6px',
+              borderRadius:  4,
+              background:    T.surface3,
+              border:        `0.5px solid ${T.line}`,
+              color:         T.textSecondary,
+              letterSpacing: '0.04em',
+              flexShrink:    0,
+              marginLeft:    'auto',
+            }}>
+              {tc.durationMs}ms
+            </span>
+          )}
+          {/* Tokens */}
+          {tc.inputTokens !== null && (
+            <span style={{
+              fontFamily: T.fontMono,
+              fontSize:   10.5,
+              color:      T.textMuted,
+              flexShrink: 0,
+            }}>
+              {tc.inputTokens.toLocaleString()} tok
             </span>
           )}
         </div>
 
-        {/* Duration */}
-        <span style={{ color: 'var(--ink-muted)', textAlign: 'right' }}>
-          {tc.durationMs !== null ? `${tc.durationMs}ms` : '—'}
-        </span>
+        {/* File path (full, below first row) */}
+        {tc.filePath && (
+          <div style={{
+            marginTop:  4,
+            fontFamily: T.fontMono,
+            fontSize:   11,
+            color:      T.textSecondary,
+            lineHeight: '1.4',
+            wordBreak:  'break-all',
+          }}>
+            {tc.filePath}
+          </div>
+        )}
 
-        {/* Tokens */}
-        <span style={{ color: 'var(--ink-muted)', textAlign: 'right', fontFamily: 'var(--mono)' }}>
-          {tc.inputTokens !== null ? tc.inputTokens.toLocaleString() : '—'}
-        </span>
+        {/* Error message */}
+        {tc.errorMessage && (
+          <div style={{
+            marginTop:  6,
+            fontSize:   11.5,
+            color:      T.red,
+            fontFamily: T.fontUI,
+            lineHeight: '1.4',
+          }}>
+            {tc.errorMessage}
+          </div>
+        )}
 
-        {/* Cost */}
-        <span style={{ color: tc.costUsd ? '#a78bfa' : 'var(--ink-muted)', textAlign: 'right', fontFamily: 'var(--mono)' }}>
-          {tc.costUsd !== null ? `$${tc.costUsd.toFixed(5)}` : '—'}
-        </span>
+        {/* Expanded IO */}
+        {expanded && (
+          <div style={{
+            marginTop:   8,
+            padding:     '10px 12px',
+            borderTop:   `0.5px solid ${T.line}`,
+            borderRadius: 6,
+            background:  '#0d1117',
+            border:      `0.5px solid ${T.line}`,
+            fontFamily:  T.fontMono,
+            fontSize:    11,
+            lineHeight:  '1.55',
+            color:       T.textSecondary,
+            overflowX:   'auto',
+          }}>
+            {expandedData ? (
+              <>
+                {expandedData.inputJson !== undefined && (
+                  <div>
+                    <div style={{ color: T.textMuted, marginBottom: 4, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' }}>INPUT</div>
+                    <pre style={{ color: T.textSecondary, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
+                      {JSON.stringify(expandedData.inputJson, null, 2)}
+                    </pre>
+                  </div>
+                )}
+                {expandedData.outputJson !== undefined && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ color: T.textMuted, marginBottom: 4, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' }}>OUTPUT</div>
+                    <pre style={{ color: T.textSecondary, whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
+                      {JSON.stringify(expandedData.outputJson, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ color: T.textMuted }}>Loading IO data…</div>
+            )}
+          </div>
+        )}
       </div>
-
-      {/* Expanded IO */}
-      {expanded && (
-        <div style={{ padding: '8px 10px', borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: '11px', fontFamily: 'var(--mono)', background: 'rgba(0,0,0,0.2)' }}>
-          {expandedData ? (
-            <>
-              {expandedData.inputJson !== undefined && (
-                <div>
-                  <div style={{ color: 'var(--ink-muted)', marginBottom: '4px' }}>INPUT</div>
-                  <pre style={{ color: 'var(--ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
-                    {JSON.stringify(expandedData.inputJson, null, 2)}
-                  </pre>
-                </div>
-              )}
-              {expandedData.outputJson !== undefined && (
-                <div style={{ marginTop: '8px' }}>
-                  <div style={{ color: 'var(--ink-muted)', marginBottom: '4px' }}>OUTPUT</div>
-                  <pre style={{ color: 'var(--ink)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
-                    {JSON.stringify(expandedData.outputJson, null, 2)}
-                  </pre>
-                </div>
-              )}
-            </>
-          ) : (
-            <div style={{ color: 'var(--ink-muted)' }}>Loading IO data…</div>
-          )}
-          {tc.errorMessage && (
-            <div style={{ marginTop: '8px', color: '#f87171' }}>
-              <div style={{ marginBottom: '4px' }}>ERROR</div>
-              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{tc.errorMessage}</pre>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -542,21 +878,42 @@ function DiffViewer({ diff, truncated }: { diff: string; truncated: boolean }): 
   const lines = parseDiff(diff);
 
   const lineStyle: Record<string, React.CSSProperties> = {
-    add:     { background: 'rgba(34,197,94,0.1)', color: '#86efac' },
-    remove:  { background: 'rgba(239,68,68,0.1)', color: '#fca5a5' },
-    context: { color: 'var(--ink-muted)' },
-    header:  { color: '#6366f1', background: 'rgba(99,102,241,0.08)' },
+    add:     { background: 'rgba(34,197,94,0.08)',   color: T.green },
+    remove:  { background: 'rgba(239,68,68,0.08)',   color: T.red },
+    context: { color: T.textMuted },
+    header:  { color: T.violet, background: T.stPurpleBg },
   };
 
   return (
-    <div style={{ background: 'rgba(0,0,0,0.3)', fontSize: '11px', fontFamily: 'var(--mono)', maxHeight: '400px', overflowY: 'auto' }}>
+    <div style={{
+      background:  '#0d1117',
+      fontFamily:  T.fontMono,
+      fontSize:    11,
+      maxHeight:   300,
+      overflowY:   'auto',
+      padding:     '8px 0',
+    }}>
       {truncated && (
-        <div style={{ padding: '4px 8px', background: 'rgba(245,158,11,0.15)', color: '#fbbf24', fontSize: '11px' }}>
+        <div style={{
+          padding:    '4px 8px',
+          background: T.stAmberBg,
+          color:      T.amber,
+          fontSize:   11,
+        }}>
           ⚠ Diff truncated at 100KB
         </div>
       )}
       {lines.map((line, i) => (
-        <div key={i} style={{ padding: '1px 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', ...lineStyle[line.type] }}>
+        <div
+          key={i}
+          style={{
+            padding:      '1px 12px',
+            whiteSpace:   'pre-wrap',
+            wordBreak:    'break-all',
+            lineHeight:   '1.5',
+            ...lineStyle[line.type],
+          }}
+        >
           {line.text || ' '}
         </div>
       ))}
