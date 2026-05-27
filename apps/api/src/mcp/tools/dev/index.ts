@@ -897,6 +897,11 @@ export const CREATE_TASK_TOOL = {
     'Use this for one-off tasks during a session.',
     'For planning a full sprint from a doc, use create_sprints instead.',
     '',
+    'DESCRIPTION RULE: if the task comes from a source doc, the description field MUST',
+    'contain the EXACT verbatim text of the relevant section from that doc — copy it',
+    'word-for-word. Do NOT summarise, rephrase, condense, or change anything.',
+    'Only divide the doc into tasks; the text inside each task must be unchanged.',
+    '',
     'To assign to a human team member, pass their display name (case-insensitive partial',
     'match). Leave assigned_to blank to create an unassigned task for any agent to pick up.',
     '',
@@ -912,7 +917,12 @@ export const CREATE_TASK_TOOL = {
       },
       description: {
         type: 'string',
-        description: 'Full task description / acceptance criteria (max 3000 chars).',
+        description: [
+          'EXACT verbatim text from the relevant section of the source doc.',
+          'Copy word-for-word — do NOT summarise, rephrase, or modify.',
+          'Preserve all headings, bullet points, code blocks, and formatting.',
+          'Max 3000 chars.',
+        ].join(' '),
       },
       priority: {
         type: 'string',
@@ -976,7 +986,7 @@ export async function createTask(
 
   const argsSchema = z.object({
     title:       z.string().min(1).max(200),
-    description: z.string().max(3000).optional(),
+    description: z.string().max(8000).optional(), // verbatim doc sections can be long
     priority:    z.enum(['low', 'medium', 'high', 'critical']).optional(),
     assigned_to: z.string().optional(),
     sprint:      z.string().optional(),
@@ -1065,17 +1075,25 @@ export const CREATE_SPRINTS_TOOL = {
     '',
     'WORKFLOW:',
     '1. Call get_doc(doc_id) to read the full spec/PRD/architecture doc markdown.',
-    '2. Decompose ALL work described in the doc into logical sprints',
-    '   (typically 1–3 weeks of work each). Consider dependencies and priorities.',
-    '3. Call THIS tool ONCE with the complete sprint plan.',
+    '2. Divide the doc into logical sprints (typically 1–3 weeks each).',
+    '3. Call THIS tool ONCE with the complete plan.',
     '',
-    'Each task in a sprint is automatically tagged "sprint:<name>" for board filtering.',
+    '━━━ CRITICAL — DESCRIPTION RULE ━━━',
+    'Each task description MUST be the EXACT verbatim text of the relevant section',
+    'from the source doc. Copy it word-for-word — do NOT summarise, rephrase, condense,',
+    'rewrite, or modify the instructions in any way.',
+    'Your ONLY job is to divide the doc into tasks and decide which section belongs',
+    'to which sprint/task. The text inside every task must be unchanged from the doc.',
+    'Preserve all bullet points, headings, code blocks, and formatting.',
+    '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    '',
+    'Each task is auto-tagged "sprint:<name>" for board filtering.',
     'Tasks can be assigned to human team members by display name (partial match).',
-    'Unassigned tasks will appear in the backlog for any agent to claim.',
+    'Unassigned tasks appear in the backlog for any agent to claim.',
     '',
-    'The doc_id links all created tasks back to their source spec for traceability.',
+    'The doc_id links all tasks back to the source spec for traceability.',
     '',
-    'Returns a summary of sprints + task IDs, and warns about any unmatched assignees.',
+    'Returns sprint + task IDs; warns about any unmatched assignees.',
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,
@@ -1105,7 +1123,7 @@ export const CREATE_SPRINTS_TOOL = {
                 type: 'object',
                 properties: {
                   title:       { type: 'string', description: 'Task title. Max 200 chars.' },
-                  description: { type: 'string', description: 'Details / acceptance criteria. Max 3000 chars.' },
+                  description: { type: 'string', description: 'EXACT verbatim text of the relevant section from the source doc. Copy word-for-word — do NOT summarise, rephrase, or modify. Preserve all bullet points, headings, code blocks. Max 3000 chars.' },
                   priority:    { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
                   assigned_to: { type: 'string', description: 'Display name of team member (partial match).' },
                   tags:        { type: 'array', items: { type: 'string' }, description: 'Extra tags (sprint tag added automatically).' },
@@ -1134,7 +1152,7 @@ export async function createSprints(
 
   const taskItemSchema = z.object({
     title:       z.string().min(1).max(200),
-    description: z.string().max(3000).optional(),
+    description: z.string().max(8000).optional(), // verbatim doc sections can be long
     priority:    z.enum(['low', 'medium', 'high', 'critical']).optional(),
     assigned_to: z.string().optional(),
     tags:        z.array(z.string()).optional(),

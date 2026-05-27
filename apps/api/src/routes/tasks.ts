@@ -29,7 +29,7 @@ import { emitWorkspaceEvent } from '../lib/events.js';
 
 const createTaskSchema = z.object({
   title:            z.string().min(1).max(200),
-  description:      z.string().max(5000).optional(),
+  description:      z.string().max(8000).optional(),
   priority:         z.enum(['low', 'medium', 'high', 'critical']).optional(),
   estimatedCostUsd: z.number().nonnegative().optional(),
   tags:             z.array(z.string().max(50)).max(20).optional(),
@@ -38,7 +38,7 @@ const createTaskSchema = z.object({
 
 const updateTaskSchema = z.object({
   title:            z.string().min(1).max(200).optional(),
-  description:      z.string().max(5000).optional(),
+  description:      z.string().max(8000).optional(),
   priority:         z.enum(['low', 'medium', 'high', 'critical']).optional(),
   estimatedCostUsd: z.number().nonnegative().optional(),
   tags:             z.array(z.string().max(50)).max(20).optional(),
