@@ -45,6 +45,8 @@ export function DevSettings({ workspaceId, isOwner }: DevSettingsProps): JSX.Ele
   const [regenerating, setRegenerating] = useState(false);
   const [confirmRegen, setConfirmRegen] = useState(false);
   const [newToken, setNewToken] = useState<string | null>(null);
+  const [enabling, setEnabling] = useState(false);
+  const [enableError, setEnableError] = useState<string | null>(null);
 
   useEffect(() => {
     void apiFetch<DevConfig>(`/api/workspaces/${workspaceId}/dev-config`)
@@ -89,16 +91,63 @@ export function DevSettings({ workspaceId, isOwner }: DevSettingsProps): JSX.Ele
     return <div style={{ color: '#ef4444', fontSize: 13, padding: '20px 0' }}>{error}</div>;
   }
 
+  async function handleEnable(): Promise<void> {
+    setEnabling(true);
+    setEnableError(null);
+    try {
+      const res = await apiFetch<{ mode: string; hookToken: string }>(
+        `/api/workspaces/${workspaceId}/convert-to-dev-project`,
+        { method: 'POST' },
+      );
+      setNewToken(res.hookToken);
+      // Reload full config now that mode is dev_project
+      const updated = await apiFetch<DevConfig>(`/api/workspaces/${workspaceId}/dev-config`);
+      setConfig(updated);
+    } catch (err) {
+      setEnableError(err instanceof Error ? err.message : 'Failed to enable dev mode');
+    } finally {
+      setEnabling(false);
+    }
+  }
+
   if (!config || config.mode !== 'dev_project') {
     return (
-      <div style={{
-        padding: 20, borderRadius: 10,
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid var(--line)',
-        color: 'var(--ink-muted)', fontSize: 13,
-      }}>
-        This workspace is not in <strong style={{ color: 'var(--ink)' }}>dev_project</strong> mode.
-        Dev settings are only available for Dev Project workspaces.
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{
+          padding: 20, borderRadius: 10,
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid var(--line)',
+        }}>
+          <p style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
+            Dev mode is not enabled
+          </p>
+          <p style={{ margin: '0 0 16px', fontSize: 12, color: 'var(--ink-muted)' }}>
+            Enable AgentLens to track Claude Code sessions, manage tasks on a Kanban board,
+            monitor costs, and run optimization analysis.
+          </p>
+          {isOwner ? (
+            <>
+              <button
+                onClick={() => void handleEnable()}
+                disabled={enabling}
+                style={{
+                  padding: '8px 18px', borderRadius: 7, fontSize: 13, fontWeight: 600,
+                  border: 'none', background: '#6366f1', color: '#fff',
+                  cursor: enabling ? 'wait' : 'pointer', opacity: enabling ? 0.7 : 1,
+                }}
+              >
+                {enabling ? 'Enabling…' : 'Enable Dev Mode →'}
+              </button>
+              {enableError && (
+                <p style={{ marginTop: 8, fontSize: 12, color: '#ef4444' }}>{enableError}</p>
+              )}
+            </>
+          ) : (
+            <p style={{ fontSize: 12, color: 'var(--ink-muted)' }}>
+              Only workspace owners can enable dev mode.
+            </p>
+          )}
+        </div>
       </div>
     );
   }

@@ -22,7 +22,11 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
   const isOnFlows = currentPath.startsWith('/app/flows');
   const isOnClaude = currentPath === '/app/connections/claude';
   const isOnDrive = currentPath === '/app/connections/drive';
-  const isOnKanban = currentPath.startsWith('/app/kanban');
+  const isOnKanban    = currentPath.startsWith('/app/kanban');
+  const isOnSessions  = currentPath.startsWith('/app/sessions');
+  const isOnCost      = currentPath.startsWith('/app/cost');
+  const isOnOptimize  = currentPath.startsWith('/app/optimize');
+  const isOnTeam      = currentPath.startsWith('/app/team');
 
   const isDevProject = workspaceMode === 'dev_project';
 
@@ -135,10 +139,7 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
         <div className="sb-section">
           <div className="sb-section-head"><span>Dev</span></div>
 
-          <a
-            href="/app/kanban"
-            className={`sb-row${isOnKanban ? ' active' : ''}`}
-          >
+          <a href="/app/kanban" className={`sb-row${isOnKanban ? ' active' : ''}`}>
             <span className="sb-l">
               <span className="sb-icon">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -148,6 +149,50 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
                 </svg>
               </span>
               <span className="sb-label">Kanban</span>
+            </span>
+          </a>
+
+          <a href="/app/sessions" className={`sb-row${isOnSessions ? ' active' : ''}`}>
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/>
+                </svg>
+              </span>
+              <span className="sb-label">Sessions</span>
+            </span>
+          </a>
+
+          <a href="/app/cost" className={`sb-row${isOnCost ? ' active' : ''}`}>
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+              </span>
+              <span className="sb-label">Cost</span>
+            </span>
+          </a>
+
+          <a href="/app/optimize" className={`sb-row${isOnOptimize ? ' active' : ''}`}>
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                </svg>
+              </span>
+              <span className="sb-label">Optimize</span>
+            </span>
+          </a>
+
+          <a href="/app/team" className={`sb-row${isOnTeam ? ' active' : ''}`}>
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </span>
+              <span className="sb-label">Team</span>
             </span>
           </a>
         </div>
