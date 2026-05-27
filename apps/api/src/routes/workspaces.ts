@@ -1,11 +1,12 @@
 import { and, eq, ne } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { workspaces } from '../db/schema.js';
+import { folders, flows, workspaces } from '../db/schema.js';
 import { withSystemPrivilege } from '../db/with-system-privilege.js';
 import { withTenant } from '../db/with-tenant.js';
 import { requireRole, RoleError } from '../lib/role.js';
 import { generateHookToken } from '../lib/dev/hook-token.js';
+import { seedBuildFlow } from '../services/dev-flow-seed.js';
 
 const updateSchema = z.object({
   name: z.string().min(1).max(80).optional(),
@@ -160,6 +161,9 @@ export const workspacesRoutes: FastifyPluginAsync = async (app) => {
     const webBase =
       (process.env.WEB_BASE_URL as string | undefined) ?? 'https://mnema.theboringpeople.in';
 
+    const mcpUrl = `${webBase}/mcp`;
+    const mcpSnippet = { mcpServers: { mnema: { type: 'sse', url: mcpUrl } } };
+
     return {
       mode: row.mode,
       hookTokenSet: row.hookToken !== null,
@@ -168,7 +172,7 @@ export const workspacesRoutes: FastifyPluginAsync = async (app) => {
         {
           mcpServers: {
             mnema: {
-              url: `${webBase}/mcp`,
+              url: mcpUrl,
               headers: { Authorization: 'Bearer <YOUR_MCP_TOKEN>' },
             },
           },
@@ -177,6 +181,34 @@ export const workspacesRoutes: FastifyPluginAsync = async (app) => {
         2,
       ),
       installCommand: `MNEMA_HOOK_TOKEN=<YOUR_HOOK_TOKEN> MNEMA_WORKSPACE_ID=${id} bash <(curl -sf ${webBase}/install/claude-hooks.sh)`,
+      // Phase 4: per-app MCP config snippets for all supported AI apps
+      mcpConfigs: {
+        claude_desktop: {
+          file: '~/.claude/claude.json',
+          snippet: mcpSnippet,
+        },
+        cursor: {
+          file: '~/.cursor/mcp.json',
+          snippet: mcpSnippet,
+        },
+        windsurf: {
+          file: '~/.windsurf/mcp.json',
+          snippet: mcpSnippet,
+        },
+        cline: {
+          file: 'VS Code settings → Cline → MCP Servers',
+          snippet: { name: 'mnema', url: mcpUrl, type: 'sse' },
+        },
+        continue: {
+          file: '~/.continue/config.json',
+          snippet: { experimental: { modelContextProtocolServers: [{ transport: { type: 'sse', url: mcpUrl } }] } },
+        },
+        zed: {
+          file: '~/.config/zed/settings.json',
+          snippet: { context_servers: { mnema: { command: { path: 'npx', args: ['-y', 'mcp-remote', mcpUrl] } } } },
+        },
+      },
+      cursorInstallCommand: `MNEMA_HOOK_TOKEN=<YOUR_HOOK_TOKEN> MNEMA_WORKSPACE_ID=${id} bash <(curl -sf ${webBase}/install/cursor-hooks.sh)`,
     };
   });
 
@@ -238,6 +270,109 @@ export const workspacesRoutes: FastifyPluginAsync = async (app) => {
 
     // Plaintext returned ONCE — never shown again after this response.
     return { hookToken: plaintext };
+  });
+
+  // ------------------------------------------------------------------------
+  // POST /api/workspaces/:id/convert-to-dev-project
+  // Idempotent conversion: sets mode, generates hook token, seeds 6 folders
+  // and Build Flow for existing knowledge workspaces.
+  // Owner-only.
+  // ------------------------------------------------------------------------
+  app.post('/api/workspaces/:id/convert-to-dev-project', async (req, reply) => {
+    if (!req.auth) {
+      return reply.code(401).send({ error: 'unauthorized' });
+    }
+    const { id } = req.params as { id: string };
+
+    if (id !== req.auth.tenant_id) {
+      return reply.code(403).send({ error: 'forbidden' });
+    }
+
+    try {
+      await requireRole(req, 'owner');
+    } catch (err) {
+      if (err instanceof RoleError) {
+        return reply.code(err.status).send({ error: err.reason });
+      }
+      throw err;
+    }
+
+    const row = await withSystemPrivilege((tx) =>
+      tx
+        .select({ mode: workspaces.mode, hookToken: workspaces.hookToken })
+        .from(workspaces)
+        .where(eq(workspaces.id, id))
+        .limit(1)
+        .then((r) => r[0]),
+    );
+
+    if (!row) return reply.code(404).send({ error: 'workspace_not_found' });
+
+    let hookTokenPlaintext: string | null = null;
+
+    // Step 1 & 2: set mode + generate hook token if needed
+    if (row.mode !== 'dev_project' || row.hookToken === null) {
+      const updates: Record<string, unknown> = { updatedAt: new Date() };
+      if (row.mode !== 'dev_project') updates.mode = 'dev_project';
+      if (row.hookToken === null) {
+        const { plaintext, hash } = generateHookToken();
+        updates.hookToken = hash;
+        hookTokenPlaintext = plaintext;
+      }
+      await withSystemPrivilege((tx) =>
+        tx.update(workspaces).set(updates).where(eq(workspaces.id, id)),
+      );
+    }
+
+    // Step 3: create missing dev folders
+    const DEV_FOLDERS = ['Architecture', 'PRD', 'Tasks', 'Build Prompts', 'Skills', 'Decisions'];
+    const foldersCreated: string[] = [];
+
+    const existingFolders = await withTenant(id, (tx) =>
+      tx
+        .select({ name: folders.name })
+        .from(folders)
+        .where(and(eq(folders.workspaceId, id), eq(folders.deletedAt, null as unknown as Date))),
+    ).catch(() => [] as Array<{ name: string }>);
+
+    const existingNames = new Set(existingFolders.map((f) => f.name));
+    const missingFolders = DEV_FOLDERS.filter((n) => !existingNames.has(n));
+
+    if (missingFolders.length > 0) {
+      await withTenant(id, (tx) =>
+        tx.insert(folders).values(
+          missingFolders.map((name) => ({
+            workspaceId: id,
+            name,
+            createdBy: req.auth!.sub,
+          })),
+        ),
+      );
+      foldersCreated.push(...missingFolders);
+    }
+
+    // Step 4: seed Build Flow if missing
+    let flowCreated = false;
+    const existingFlow = await withTenant(id, (tx) =>
+      tx
+        .select({ id: flows.id })
+        .from(flows)
+        .where(eq(flows.slug, 'build-flow'))
+        .limit(1),
+    ).catch(() => [] as Array<{ id: string }>);
+
+    if (existingFlow.length === 0) {
+      await seedBuildFlow(id, req.auth!.sub);
+      flowCreated = true;
+    }
+
+    return {
+      ok: true,
+      mode: 'dev_project',
+      hookToken: hookTokenPlaintext, // null if already existed
+      foldersCreated,
+      flowCreated,
+    };
   });
 };
 

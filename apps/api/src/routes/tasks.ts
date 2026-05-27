@@ -392,6 +392,22 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
     );
 
     emitTaskUpdated(req.auth.tenant_id, updated!, previousStatus, 'user');
+
+    // Phase 4: dispatch task_completed notification (fire-and-forget)
+    const tenantId = req.auth.tenant_id;
+    const completedTask = updated!;
+    const devId = req.auth.email;
+    setImmediate(() => {
+      import('../lib/dev/notifications/dispatcher.js').then(({ dispatchWorkspaceNotification }) => {
+        dispatchWorkspaceNotification(tenantId, {
+          type: 'task_completed',
+          task: completedTask,
+          developerId: devId ?? 'unknown',
+          githubPrUrl: body.githubPrUrl ?? null,
+        }).catch(() => {});
+      }).catch(() => {});
+    });
+
     return updated;
   });
 
@@ -435,6 +451,29 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
     );
 
     emitTaskUpdated(req.auth.tenant_id, updated!, previousStatus, 'user');
+
+    // Trigger async retry engine + notification (non-blocking)
+    const blockedTenantId = req.auth.tenant_id;
+    const blockedTask = updated!;
+    const blockerDesc = body.blockerDescription!;
+    const blockerDev = req.auth.email;
+    setImmediate(() => {
+      import('../lib/dev/retry/trigger.js').then(({ triggerRetry }) => {
+        triggerRetry(blockedTask, blockerDesc).catch((err) =>
+          req.log.error({ err }, 'Retry trigger failed'),
+        );
+      }).catch((err) => req.log.error({ err }, 'Retry trigger import failed'));
+
+      import('../lib/dev/notifications/dispatcher.js').then(({ dispatchWorkspaceNotification }) => {
+        dispatchWorkspaceNotification(blockedTenantId, {
+          type: 'task_blocked',
+          task: blockedTask,
+          developerId: blockerDev ?? 'unknown',
+          blockerDescription: blockerDesc,
+        }).catch(() => {});
+      }).catch(() => {});
+    });
+
     return updated;
   });
 

@@ -33,8 +33,14 @@ import { tasksRoutes } from './routes/tasks.js';
 import { hooksRoutes } from './routes/hooks.js';
 import { sessionsRoutes } from './routes/sessions.js';
 import { devRoutes } from './routes/dev.js';
+import { optimizationRoutes } from './routes/optimization.js';
+import { devSearchRoutes } from './routes/dev-search.js';
 import { setSessionRoutes } from './routes/_internal/set-session.js';
 import { joinWorkspaceRoutes } from './routes/_internal/join-workspace.js';
+import { apiKeysRoutes } from './routes/api-keys.js';
+import { publicV1Routes } from './routes/public/v1.js';
+import { openApiRoutes } from './routes/public/openapi.js';
+import { geminiRoutes } from './routes/public/gemini.js';
 
 const app = Fastify({ logger: loggerOptions });
 
@@ -63,6 +69,8 @@ await app.register(tasksRoutes);
 await app.register(hooksRoutes);
 await app.register(sessionsRoutes);
 await app.register(devRoutes);
+await app.register(optimizationRoutes);
+await app.register(devSearchRoutes);
 await app.register(commentsRoutes);
 await app.register(docVersionsRoutes);
 await app.register(docReadStateRoutes);
@@ -70,6 +78,10 @@ await app.register(completeRoutes);
 await app.register(razorpayRoutes);
 await app.register(billingRoutes);
 await app.register(mcpTokenRoutes);
+await app.register(apiKeysRoutes);
+await app.register(publicV1Routes);
+await app.register(openApiRoutes);
+await app.register(geminiRoutes);
 await app.register(oauthPlugin);
 await app.register(mcpPlugin);
 

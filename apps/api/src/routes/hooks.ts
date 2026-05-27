@@ -9,9 +9,12 @@
  *   Rate limit: 120 req/min per IP.
  *   Payload limit: 10MB (413 if exceeded — only non-202 besides 429).
  *
- * POST /api/hooks/aider, /cursor, /generic — Phase 2 stubs (always 202).
+ * POST /api/hooks/cursor  — Phase 4: same format as claude-code, agent='cursor'
+ * POST /api/hooks/aider   — Phase 4: Aider payload translation
+ * POST /api/hooks/generic — generic passthrough (always 202)
  *
- * GET /install/claude-hooks.sh — installer shell script.
+ * GET /install/claude-hooks.sh  — installer for Claude Code
+ * GET /install/cursor-hooks.sh  — installer for Cursor
  */
 
 import type { FastifyPluginAsync } from 'fastify';
@@ -122,18 +125,101 @@ export const hooksRoutes: FastifyPluginAsync = async (app) => {
   );
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Stub adapters
+  // POST /api/hooks/cursor — same PostToolUse format as claude-code, agent='cursor'
+  // Separate route for per-adapter analytics in Phase 5.
   // ──────────────────────────────────────────────────────────────────────────
-  app.post('/api/hooks/aider', async (_req, reply) => {
-    return reply.code(202).send({ message: 'Aider adapter coming in Phase 3' });
+  app.post('/api/hooks/cursor', async (req, reply) => {
+    // 202-first — never block Cursor
+    void reply.code(202).send({ ok: true });
+
+    const ip = req.ip;
+    if (!checkRateLimit(ip)) return; // silently drop after 202
+
+    const contentLength = parseInt(req.headers['content-length'] ?? '0', 10);
+    if (contentLength > PAYLOAD_LIMIT_BYTES) return;
+
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) return;
+
+    setImmediate(async () => {
+      try {
+        const workspaceId = await resolveHookToken(token);
+        if (!workspaceId) return;
+
+        // Tag payload with agent='cursor' so worker creates session correctly
+        const body = req.body as Record<string, unknown> ?? {};
+        const taggedPayload = { ...body, agent: 'cursor' };
+
+        await enqueueHookEvent({
+          workspaceId,
+          adapter: 'cursor',
+          payload: taggedPayload,
+          receivedAt: new Date().toISOString(),
+        });
+      } catch { /* fail-open */ }
+    });
   });
 
-  app.post('/api/hooks/cursor', async (_req, reply) => {
-    return reply.code(202).send({ message: 'Cursor adapter coming in Phase 3' });
+  // ──────────────────────────────────────────────────────────────────────────
+  // POST /api/hooks/aider — Aider payload translation
+  // Aider sends tool_use events with a different payload shape.
+  // ──────────────────────────────────────────────────────────────────────────
+  app.post('/api/hooks/aider', async (req, reply) => {
+    void reply.code(202).send({ ok: true });
+
+    const ip = req.ip;
+    if (!checkRateLimit(ip)) return;
+
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (!token) return;
+
+    setImmediate(async () => {
+      try {
+        const workspaceId = await resolveHookToken(token);
+        if (!workspaceId) return;
+
+        // Aider payload shape (from devmanager/adapters/aider.go):
+        // { type, tool, args, result, cost?, tokens?: { prompt, completion }, session_id?, developer_id? }
+        const aiderBody = req.body as {
+          type?: string;
+          tool?: string;
+          args?: Record<string, unknown>;
+          result?: string;
+          cost?: number;
+          tokens?: { prompt: number; completion: number };
+          session_id?: string;
+          developer_id?: string;
+        } ?? {};
+
+        // Translate to Mnema normalised HookEvent (PostToolUse shape)
+        const normalisedPayload = {
+          hook_event_name:  'PostToolUse',
+          tool_name:        aiderBody.tool ?? 'unknown',
+          tool_input:       aiderBody.args ?? {},
+          tool_output:      aiderBody.result ?? '',
+          session_id:       aiderBody.session_id,
+          developer_id:     aiderBody.developer_id,
+          agent:            'aider',
+          // Map Aider token fields to Mnema token fields
+          input_tokens:     aiderBody.tokens?.prompt ?? 0,
+          output_tokens:    aiderBody.tokens?.completion ?? 0,
+          cost_usd:         aiderBody.cost,
+        };
+
+        await enqueueHookEvent({
+          workspaceId,
+          adapter: 'aider',
+          payload: normalisedPayload,
+          receivedAt: new Date().toISOString(),
+        });
+      } catch { /* fail-open */ }
+    });
   });
 
   app.post('/api/hooks/generic', async (_req, reply) => {
-    return reply.code(202).send({ message: 'Generic adapter coming in Phase 3' });
+    return reply.code(202).send({ ok: true });
   });
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -177,6 +263,51 @@ echo "  export MNEMA_DEVELOPER_ID=<your-name-or-machine-id>"
 echo "  export MNEMA_WORKSPACE_ID=\\$MNEMA_WORKSPACE_ID"
 echo ""
 echo "  Then configure Claude Code to run the hook on PostToolUse."
+`;
+
+    reply.header('Content-Type', 'text/plain; charset=utf-8');
+    return reply.send(script);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // GET /install/cursor-hooks.sh — Cursor-specific installer
+  // Same as claude-hooks.sh but targets ~/.cursor/hooks/ and /api/hooks/cursor
+  // ──────────────────────────────────────────────────────────────────────────
+  app.get('/install/cursor-hooks.sh', async (_req, reply) => {
+    const script = `#!/bin/bash
+# Mnema Cursor hook installer
+# Usage: MNEMA_HOOK_TOKEN=mnema_hook_xxx MNEMA_WORKSPACE_ID=ws_xxx bash <(curl -sf https://mnema.theboringpeople.in/install/cursor-hooks.sh)
+
+if [ -z "$MNEMA_HOOK_TOKEN" ] || [ -z "$MNEMA_WORKSPACE_ID" ]; then
+  echo "Error: MNEMA_HOOK_TOKEN and MNEMA_WORKSPACE_ID must be set"
+  exit 1
+fi
+
+HOOKS_DIR="$HOME/.cursor/hooks"
+mkdir -p "$HOOKS_DIR"
+
+cat > "$HOOKS_DIR/mnema-post-tool.sh" << 'HOOK'
+#!/bin/bash
+# Mnema AgentLens hook for Cursor — fires after every tool call
+curl -sf -X POST "https://mnema.theboringpeople.in/api/hooks/cursor" \\
+  -H "Authorization: Bearer $MNEMA_HOOK_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d "{
+    \\"hook_event_name\\": \\"PostToolUse\\",
+    \\"session_id\\": \\"$CURSOR_SESSION_ID\\",
+    \\"developer_id\\": \\"$MNEMA_DEVELOPER_ID\\",
+    \\"tool_name\\": \\"$CURSOR_TOOL_NAME\\",
+    \\"workspace_id\\": \\"$MNEMA_WORKSPACE_ID\\"
+  }" > /dev/null 2>&1 &
+HOOK
+
+chmod +x "$HOOKS_DIR/mnema-post-tool.sh"
+
+echo "\\n✓ Mnema hooks installed at $HOOKS_DIR/mnema-post-tool.sh"
+echo "\\n  Add to your shell profile:"
+echo "  export MNEMA_HOOK_TOKEN=\\$MNEMA_HOOK_TOKEN"
+echo "  export MNEMA_DEVELOPER_ID=<your-name>"
+echo "  export MNEMA_WORKSPACE_ID=\\$MNEMA_WORKSPACE_ID"
 `;
 
     reply.header('Content-Type', 'text/plain; charset=utf-8');

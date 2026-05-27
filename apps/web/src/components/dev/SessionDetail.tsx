@@ -243,8 +243,12 @@ export function SessionDetail({ sessionId }: SessionDetailProps): JSX.Element {
   }, [selectedDiffId, sessionId]);
 
   // ── Export ──────────────────────────────────────────────────────────────────
-  const handleExport = useCallback(() => {
-    window.location.href = `${API_BASE}/api/sessions/${sessionId}/export`;
+  const [exportOpen, setExportOpen] = useState(false);
+
+  const handleExport = useCallback((format: 'md' | 'json' | 'csv') => {
+    const suffix = format === 'md' ? '' : `?format=${format}`;
+    window.location.href = `${API_BASE}/api/sessions/${sessionId}/export${suffix}`;
+    setExportOpen(false);
   }, [sessionId]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -289,12 +293,47 @@ export function SessionDetail({ sessionId }: SessionDetailProps): JSX.Element {
           <MetaRow label="Tokens out"   value={session.totalOutputTokens.toLocaleString()} />
         </div>
 
-        <button
-          onClick={handleExport}
-          style={{ padding: '8px 14px', fontSize: '12px', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: '8px', color: '#a5b4fc', cursor: 'pointer' }}
-        >
-          Export as Markdown
-        </button>
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => { setExportOpen((v) => !v); }}
+            style={{ padding: '8px 14px', fontSize: '12px', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.4)', borderRadius: '8px', color: '#a5b4fc', cursor: 'pointer', width: '100%' }}
+          >
+            ↓ Export ▾
+          </button>
+          {exportOpen && (
+            <div
+              style={{
+                position: 'absolute', left: 0, bottom: '110%', zIndex: 10,
+                background: 'var(--surface-elevated, #161616)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '8px', overflow: 'hidden',
+                minWidth: '160px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+              }}
+            >
+              {[
+                { fmt: 'md' as const,   label: 'Markdown (.md)' },
+                { fmt: 'json' as const, label: 'JSON (.json)' },
+                { fmt: 'csv' as const,  label: 'CSV (.csv)' },
+              ].map(({ fmt, label }) => (
+                <button
+                  key={fmt}
+                  onClick={() => { handleExport(fmt); }}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    padding: '8px 14px', fontSize: '12px',
+                    background: 'transparent', border: 'none',
+                    color: 'var(--text-secondary)', cursor: 'pointer',
+                  }}
+                  onMouseOver={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+                  onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* CENTRE PANEL — tool call timeline */}

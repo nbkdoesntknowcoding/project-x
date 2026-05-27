@@ -127,6 +127,27 @@
       "when": 1748736000000,
       "tag": "0017_agentlens_phase2_execution",
       "breakpoints": false
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1748822400000,
+      "tag": "0018_agentlens_phase3_intelligence",
+      "breakpoints": false
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1748908800000,
+      "tag": "0019_phase4_api_keys",
+      "breakpoints": false
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1748995200000,
+      "tag": "0020_optimization_materialized_view",
+      "breakpoints": false
     }
   ]
 }

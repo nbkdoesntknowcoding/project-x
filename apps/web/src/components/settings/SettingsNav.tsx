@@ -15,6 +15,8 @@ const ITEMS: ReadonlyArray<Item> = [
   { href: '/app/settings/workspace', label: 'Workspace' },
   { href: '/app/settings/account', label: 'Account' },
   { href: '/app/settings/billing', label: 'Billing' },
+  { href: '/app/settings/api-keys', label: 'API Keys' },
+  { href: '/app/settings/connect-apps', label: 'Connect Apps' },
 ];
 
 /**

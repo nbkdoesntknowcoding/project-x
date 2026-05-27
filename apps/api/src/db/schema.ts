@@ -874,9 +874,109 @@ export const budgetConfigs = pgTable('budget_configs', {
   slackWebhookUrl:   text('slack_webhook_url'),
   discordWebhookUrl: text('discord_webhook_url'),
   lastAlertSentAt:   timestamp('last_alert_sent_at'),
+  // Phase 4: task notification toggles
+  notifyOnTaskComplete: boolean('notify_on_task_complete').notNull().default(true),
+  notifyOnBlocker:      boolean('notify_on_blocker').notNull().default(true),
+  notifyOnRetry:        boolean('notify_on_retry').notNull().default(false),
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ── Phase 4: workspace_session_stats (materialized view) ──────────────────────
+// Read-only Drizzle wrapper for the materialized view created in migration 0020.
+// Drizzle doesn't natively model MAT VIEWs, so we use pgTable with the same
+// column names — it produces correct SELECT queries at runtime.
+export const workspaceSessionStats = pgTable('workspace_session_stats', {
+  workspaceId:        uuid('workspace_id').notNull(),
+  sessionCount:       integer('session_count').notNull(),
+  medianCostUsd:      doublePrecision('median_cost_usd'),
+  avgCostUsd:         doublePrecision('avg_cost_usd'),
+  medianInputTokens:  doublePrecision('median_input_tokens'),
+  avgInputTokens:     doublePrecision('avg_input_tokens'),
+  maxCostUsd:         doublePrecision('max_cost_usd'),
+  firstSessionAt:     timestamp('first_session_at', { withTimezone: true }),
+  lastSessionAt:      timestamp('last_session_at',  { withTimezone: true }),
+});
+
+// ── Phase 4: api_keys ─────────────────────────────────────────────────────────
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id:          uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull()
+                 .references(() => workspaces.id, { onDelete: 'cascade' }),
+    createdBy:   uuid('created_by').notNull()
+                 .references(() => workspaceMembers.userId, { onDelete: 'cascade' }),
+    name:        text('name').notNull(),
+    // SHA-256 of plaintext key. Format: mnema_api_ + 48 random hex chars.
+    keyHash:     text('key_hash').notNull().unique(),
+    // First 16 chars of plaintext for display: "mnema_api_a3b2c1"
+    keyPrefix:   text('key_prefix').notNull(),
+    scopes:      text('scopes').array().notNull().default(sql`'{read}'`),
+    lastUsedAt:  timestamp('last_used_at', { withTimezone: true }),
+    expiresAt:   timestamp('expires_at', { withTimezone: true }),
+    revokedAt:   timestamp('revoked_at', { withTimezone: true }),
+    createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    apiKeysWorkspaceIdx: index('api_keys_workspace_idx').on(table.workspaceId),
+    apiKeysHashIdx:      index('api_keys_hash_idx').on(table.keyHash),
+  }),
+);
+
+// ── Phase 3: optimization_findings ───────────────────────────────────────────
+export const optimizationFindings = pgTable(
+  'optimization_findings',
+  {
+    id:          uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id').notNull()
+                 .references(() => workspaces.id, { onDelete: 'cascade' }),
+    sessionId:   uuid('session_id')
+                 .references(() => agentSessions.id, { onDelete: 'set null' }),
+    taskId:      uuid('task_id')
+                 .references(() => tasks.id, { onDelete: 'set null' }),
+    rule:        text('rule').notNull(),
+    // Values: 'stall' | 'high_retry' | 'cost_overrun' | 'parallel' | 'token_bloat' | 'context_wide'
+    description:     text('description').notNull(),
+    suggestedAction: text('suggested_action').notNull(),
+    roiScore:        doublePrecision('roi_score').notNull().default(0),
+    applied:    boolean('applied').notNull().default(false),
+    appliedAt:  timestamp('applied_at'),
+    dismissed:  boolean('dismissed').notNull().default(false),
+    metadata:   jsonb('metadata'),
+    createdAt:  timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => ({
+    findingsWorkspaceIdx: index('findings_workspace_idx').on(table.workspaceId),
+    findingsRuleIdx:      index('findings_rule_idx').on(table.rule),
+    findingsAppliedIdx:   index('findings_applied_idx').on(table.applied),
+  }),
+);
+
+// ── Phase 3: fix_history ──────────────────────────────────────────────────────
+export const fixHistory = pgTable(
+  'fix_history',
+  {
+    id:          uuid('id').primaryKey().defaultRandom(),
+    taskId:      uuid('task_id').notNull()
+                 .references(() => tasks.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').notNull()
+                 .references(() => workspaces.id, { onDelete: 'cascade' }),
+    attemptNumber:      integer('attempt_number').notNull(),
+    blockerDescription: text('blocker_description').notNull(),
+    fixPrompt:          text('fix_prompt'),
+    fixPromptModel:     text('fix_prompt_model'),
+    status: text('status').notNull().default('pending'),
+    // Values: 'pending' | 'dispatched' | 'succeeded' | 'exhausted'
+    scheduledAt:  timestamp('scheduled_at').notNull(),
+    dispatchedAt: timestamp('dispatched_at'),
+    resolvedAt:   timestamp('resolved_at'),
+    createdAt:    timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => ({
+    fixHistoryTaskIdx: index('fix_history_task_idx').on(table.taskId),
+  }),
+);
 
 // ── Phase 9.5: Notification Center ───────────────────────────────────────────
 export const notifications = pgTable(
