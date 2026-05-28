@@ -1,4 +1,4 @@
-import { type JSX, useEffect, useState } from 'react';
+import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
 import { VersionItem } from './VersionItem';
 import type { VersionRow } from './types';
 
@@ -13,14 +13,15 @@ interface Props {
   refreshKey?: number;
 }
 
+const POLL_INTERVAL_MS = 15_000; // re-check for new AI-written versions every 15 s
+
 /**
  * Right-rail sidebar listing every snapshot in `doc_versions` for this doc.
  *
  * Auto-snapshots are written by the collab process every 50 store events
  * (Phase 1.2). Manual snapshots are written by the Save version button.
- * We fetch once on open and again whenever `refreshKey` bumps — no polling
- * here, because versions are a low-frequency mutation surface and the user
- * triggers refresh by re-opening the sidebar after a save.
+ * We fetch on open, whenever `refreshKey` bumps, and every 15 s while open
+ * so AI-written versions appear without requiring a sidebar close/reopen.
  */
 export function VersionsSidebar({
   docId,
@@ -32,27 +33,44 @@ export function VersionsSidebar({
 }: Props): JSX.Element | null {
   const [versions, setVersions] = useState<VersionRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setLoading(true);
-    void (async () => {
+  const fetchVersions = useCallback(
+    async (isInitial: boolean) => {
       try {
         const res = await fetch(`/api/doc-versions?doc_id=${docId}`, {
           credentials: 'include',
         });
         if (!res.ok) return;
         const body = (await res.json()) as { versions: VersionRow[] };
-        if (!cancelled) setVersions(body.versions ?? []);
+        setVersions(body.versions ?? []);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (isInitial) setLoading(false);
       }
-    })();
+    },
+    [docId],
+  );
+
+  // Fetch on open / refreshKey change, start polling while open.
+  useEffect(() => {
+    if (!open) {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
+      return;
+    }
+
+    setLoading(true);
+    void fetchVersions(true);
+
+    pollRef.current = setInterval(() => {
+      void fetchVersions(false);
+    }, POLL_INTERVAL_MS);
+
     return () => {
-      cancelled = true;
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
     };
-  }, [docId, open, refreshKey]);
+  }, [docId, open, refreshKey, fetchVersions]);
 
   if (!open) return null;
 
