@@ -207,18 +207,17 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
         )}
       </div>
 
-      {/* Fixed top-right toolbar — status + actions */}
+      {/* Edit-bar actions — sit flush inside the dl-editbar row (top: 40px, h: 38px) */}
       <div
         className="fixed flex items-center gap-1"
         style={{
-          top: 86,
-          right: 24,
-          zIndex: 50,
-          background: 'var(--surface-elevated)',
-          border: '1px solid var(--border-default)',
-          borderRadius: 'var(--radius-md)',
-          padding: '6px 8px',
-          boxShadow: 'var(--shadow-md)',
+          top: 40,   /* --topbar-h */
+          right: 0,
+          height: 38, /* --editbar-h */
+          zIndex: 20,
+          background: 'var(--canvas)',
+          borderBottom: '1px solid var(--line)',
+          padding: '0 12px',
         }}
       >
         <BottomStatusPill provider={provider} />

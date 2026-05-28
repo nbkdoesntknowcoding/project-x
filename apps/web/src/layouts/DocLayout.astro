@@ -289,12 +289,10 @@ try {
       <button class="dl-eb-btn" title="Comment (⌘⇧M)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
 
       <div class="dl-eb-spacer"></div>
-
-      <button class="dl-ai-btn" type="button">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" class="acc"><path d="M12 2 9.4 8.6 2 9.5l6 4.6L6 22l6-3.6L18 22l-2-7.9 6-4.6L14.6 8.6z"/></svg>
-        Ask μ
-        <span class="shortcut">⌘ K</span>
-      </button>
+      <!-- Doc actions (Synced · Save version · Versions · Comments · Share) are
+           rendered by the DocPage React component as a fixed overlay over this
+           right-side area. The spacer above pushes formatting buttons left,
+           leaving room for the React panel. -->
     </div>
 
     <!-- MAIN CONTENT -->
