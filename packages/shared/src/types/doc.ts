@@ -9,6 +9,8 @@ export interface DocSummary {
 export interface DocFull extends DocSummary {
   markdown: string;
   content_hash: string | null;
+  is_public?: boolean;
+  public_token?: string | null;
 }
 
 export interface DocCreatePayload {

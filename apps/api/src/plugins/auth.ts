@@ -43,6 +43,8 @@ export const authPlugin: FastifyPluginAsync = fp(async (app) => {
     if (req.routeOptions?.config?.mcpRoute) return;
     // Hook routes have their own Bearer token auth (hook_token, not JWT).
     if (url.startsWith('/api/hooks/') || url === '/install/claude-hooks.sh') return;
+    // Public doc reader — no auth required.
+    if (url.startsWith('/api/docs/public/')) return;
 
     const token = req.cookies[JWT_COOKIE_NAME] ?? extractBearer(req.headers.authorization);
     if (!token) {

@@ -8,6 +8,7 @@ import { SaveVersionMenu } from '../versions/SaveVersionMenu';
 import { VersionDiffView } from '../versions/VersionDiffView';
 import { VersionsSidebar } from '../versions/VersionsSidebar';
 import { Editor, type EditorSelection } from './Editor';
+import { ShareModal } from './ShareModal';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 
 interface DocPageProps {
@@ -54,6 +55,8 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
   const [versionsSidebarOpen, setVersionsSidebarOpen] = useState(false);
   const [versionsRefreshKey, setVersionsRefreshKey] = useState(0);
   const [diffVersion, setDiffVersion] = useState<number | null>(null);
+
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   // --- title save -----------------------------------------------------------
   // Title save: only patches the title field — never touches markdown.
@@ -279,6 +282,31 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
             </span>
           )}
         </button>
+
+        <div
+          style={{
+            width: 1,
+            height: 14,
+            background: 'var(--border-default)',
+            margin: '0 4px',
+          }}
+        />
+
+        <button
+          type="button"
+          onClick={() => setShareModalOpen(true)}
+          className="inline-flex items-center gap-1.5 justify-center h-7 px-3 rounded transition-[background,color]"
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: '#fff',
+            background: 'var(--accent-primary, #6366f1)',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          Share
+        </button>
       </div>
 
       <CommentsSidebar
@@ -304,6 +332,15 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
           role={role}
           onClose={() => setDiffVersion(null)}
           onRestored={() => setVersionsRefreshKey((k) => k + 1)}
+        />
+      )}
+
+      {shareModalOpen && (
+        <ShareModal
+          docId={initialDoc.id}
+          initialIsPublic={initialDoc.is_public ?? false}
+          initialPublicToken={initialDoc.public_token}
+          onClose={() => setShareModalOpen(false)}
         />
       )}
     </div>

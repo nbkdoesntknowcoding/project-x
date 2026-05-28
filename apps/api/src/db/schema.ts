@@ -203,6 +203,9 @@ export const docs = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     tsv: tsvector('tsv'),
+    // Phase sharing: public reader link
+    isPublic:    boolean('is_public').notNull().default(false),
+    publicToken: uuid('public_token').unique(),
   },
   (table) => ({
     workspacePathUnique: unique().on(table.workspaceId, table.path),

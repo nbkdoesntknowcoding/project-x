@@ -1,8 +1,10 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { nanoid } from 'nanoid';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { writeMarkdownIntoLiveDoc } from '../collab/writeback.js';
+import { db } from '../db/index.js';
 import { docs } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { contentHash, emptyYjsState } from '../lib/yjs.js';
@@ -181,6 +183,44 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
     });
   });
 
+  // GET /api/docs/public/:token — no auth required; must be registered before /:id
+  // so Fastify's radix tree can favour the static 'public' segment.
+  app.get<{ Params: { token: string } }>('/api/docs/public/:token', async (req, reply) => {
+    const { token } = req.params;
+    if (!isUuid(token)) return reply.code(400).send({ error: 'bad_token' });
+
+    // Query without row-level security (no tenant context needed)
+    const rows = await db
+      .select({
+        id: docs.id,
+        path: docs.path,
+        title: docs.title,
+        markdown: docs.markdown,
+        contentHash: docs.contentHash,
+        isPublic: docs.isPublic,
+        createdAt: docs.createdAt,
+        updatedAt: docs.updatedAt,
+      })
+      .from(docs)
+      .where(and(eq(docs.publicToken, token), eq(docs.isPublic, true), isNull(docs.deletedAt)))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row) return reply.code(404).send({ error: 'not_found' });
+
+    return {
+      doc: {
+        id: row.id,
+        path: row.path,
+        title: row.title,
+        markdown: row.markdown,
+        content_hash: row.contentHash,
+        created_at: row.createdAt,
+        updated_at: row.updatedAt,
+      },
+    };
+  });
+
   app.get<{ Params: { id: string } }>('/api/docs/:id', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
     const { id } = req.params;
@@ -204,10 +244,53 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
         title: row.title,
         markdown: row.markdown,
         content_hash: row.contentHash,
+        is_public: row.isPublic,
+        public_token: row.publicToken,
         created_at: row.createdAt,
         updated_at: row.updatedAt,
       },
     };
+  });
+
+  // POST /api/docs/:id/share — toggle public link on/off.
+  // Body: { enable: boolean }
+  // Returns: { is_public, public_token, share_url }
+  app.post<{ Params: { id: string } }>('/api/docs/:id/share', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params;
+    if (!isUuid(id)) return reply.code(400).send({ error: 'bad_id' });
+
+    const parsed = z.object({ enable: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'bad_request' });
+
+    const { enable } = parsed.data;
+    const auth = req.auth;
+
+    const updated = await withTenant(auth.tenant_id, async (tx) => {
+      // Fetch current row to get or create publicToken
+      const current = await tx
+        .select({ publicToken: docs.publicToken, isPublic: docs.isPublic })
+        .from(docs)
+        .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
+        .limit(1);
+      if (!current[0]) return null;
+
+      const token = enable ? (current[0].publicToken ?? randomUUID()) : current[0].publicToken;
+      const rows = await tx
+        .update(docs)
+        .set({ isPublic: enable, publicToken: token ?? undefined })
+        .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
+        .returning({ id: docs.id, isPublic: docs.isPublic, publicToken: docs.publicToken });
+      return rows[0];
+    });
+
+    if (!updated) return reply.code(404).send({ error: 'not_found' });
+
+    const shareUrl = updated.publicToken
+      ? `https://mnema.theboringpeople.in/share/${updated.publicToken}`
+      : null;
+
+    return { is_public: updated.isPublic, public_token: updated.publicToken, share_url: shareUrl };
   });
 
   app.post<{ Params: { id: string } }>('/api/docs/:id', async (req, reply) => {
