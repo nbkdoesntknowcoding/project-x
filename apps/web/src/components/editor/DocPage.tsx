@@ -4,10 +4,10 @@ import type { EditorView } from 'prosemirror-view';
 import { api, setAuthToken } from '../../lib/api';
 import { CommentComposer } from '../comments/CommentComposer';
 import { CommentsSidebar } from '../comments/CommentsSidebar';
-import { SaveVersionMenu } from '../versions/SaveVersionMenu';
 import { VersionDiffView } from '../versions/VersionDiffView';
 import { VersionsSidebar } from '../versions/VersionsSidebar';
 import { Editor, type EditorSelection } from './Editor';
+import { DocToolbar } from './DocToolbar';
 import { ShareModal } from './ShareModal';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 
@@ -57,6 +57,9 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
   const [diffVersion, setDiffVersion] = useState<number | null>(null);
 
   const [shareModalOpen, setShareModalOpen] = useState(false);
+
+  // Incremented on every selection/state change so DocToolbar re-reads view.state
+  const [selectionTick, setSelectionTick] = useState(0);
 
   // --- title save -----------------------------------------------------------
   // Title save: only patches the title field — never touches markdown.
@@ -131,6 +134,8 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
   const handleSelectionChange = useCallback((sel: EditorSelection | null) => {
     setSelection(sel);
     if (sel) lastSelectionRef.current = sel;
+    // Tick so DocToolbar re-reads view.state for active mark/block states
+    setSelectionTick((n) => n + 1);
   }, []);
 
   // --- ⌘⇧M shortcut -------------------------------------------------------
@@ -173,7 +178,22 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
 
   return (
     <div className="doc-page">
-      {/* Title-only row — above the editor body, not part of the fixed toolbar */}
+      {/* Unified top toolbar — formatting + doc actions */}
+      <DocToolbar
+        view={view}
+        selectionTick={selectionTick}
+        provider={provider}
+        docId={initialDoc.id}
+        onSavedVersion={() => setVersionsRefreshKey((k) => k + 1)}
+        versionsSidebarOpen={versionsSidebarOpen}
+        onToggleVersions={openVersionsExclusive}
+        commentsSidebarOpen={commentsSidebarOpen}
+        onToggleComments={openCommentsExclusive}
+        unresolvedCount={unresolvedCount}
+        onShare={() => setShareModalOpen(true)}
+      />
+
+      {/* Title-only row — above the editor body */}
       <input
         className="doc-title"
         value={title}
@@ -205,108 +225,6 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
             onCancel={() => setComposerSelection(null)}
           />
         )}
-      </div>
-
-      {/* Fixed top-right toolbar — status + actions */}
-      <div
-        className="fixed flex items-center gap-1"
-        style={{
-          top: 86,
-          right: 24,
-          zIndex: 50,
-          background: 'var(--surface-elevated)',
-          border: '1px solid var(--border-default)',
-          borderRadius: 'var(--radius-md)',
-          padding: '6px 8px',
-          boxShadow: 'var(--shadow-md)',
-        }}
-      >
-        <BottomStatusPill provider={provider} />
-
-        <div
-          style={{
-            width: 1,
-            height: 14,
-            background: 'var(--border-default)',
-            margin: '0 4px',
-          }}
-        />
-
-        <SaveVersionMenu
-          docId={initialDoc.id}
-          onSaved={() => setVersionsRefreshKey((k) => k + 1)}
-        />
-
-        <button
-          type="button"
-          onClick={openVersionsExclusive}
-          className="inline-flex items-center justify-center h-7 px-2.5 rounded transition-[background,color]"
-          style={{
-            fontSize: 12,
-            fontWeight: 500,
-            color: versionsSidebarOpen ? 'var(--text-primary)' : 'var(--text-secondary)',
-            background: versionsSidebarOpen ? 'var(--surface-overlay)' : 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-          }}
-          aria-pressed={versionsSidebarOpen}
-        >
-          Versions
-        </button>
-
-        <button
-          type="button"
-          onClick={openCommentsExclusive}
-          className="inline-flex items-center gap-1.5 justify-center h-7 px-2.5 rounded transition-[background,color]"
-          style={{
-            fontSize: 12,
-            fontWeight: 500,
-            color: commentsSidebarOpen ? 'var(--text-primary)' : 'var(--text-secondary)',
-            background: commentsSidebarOpen ? 'var(--surface-overlay)' : 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-          }}
-          aria-pressed={commentsSidebarOpen}
-        >
-          Comments
-          {unresolvedCount > 0 && (
-            <span
-              className="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-medium"
-              style={{
-                background: 'var(--status-info-bg)',
-                color: 'var(--status-info)',
-                border: '1px solid var(--status-info)',
-              }}
-            >
-              {unresolvedCount}
-            </span>
-          )}
-        </button>
-
-        <div
-          style={{
-            width: 1,
-            height: 14,
-            background: 'var(--border-default)',
-            margin: '0 4px',
-          }}
-        />
-
-        <button
-          type="button"
-          onClick={() => setShareModalOpen(true)}
-          className="inline-flex items-center gap-1.5 justify-center h-7 px-3 rounded transition-[background,color]"
-          style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: '#fff',
-            background: 'var(--accent-primary, #6366f1)',
-            border: 'none',
-            cursor: 'pointer',
-          }}
-        >
-          Share
-        </button>
       </div>
 
       <CommentsSidebar
@@ -347,64 +265,3 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
   );
 }
 
-// ---------------------------------------------------------------------------
-// Inline status pill — renders connection state as a small coloured badge
-// ---------------------------------------------------------------------------
-import type { HocuspocusProvider as HP } from '@hocuspocus/provider';
-
-function BottomStatusPill({ provider }: { provider: HP | null }): JSX.Element {
-  const [status, setStatus] = useState<'connecting' | 'connected' | 'synced' | 'disconnected'>('connecting');
-  const [peers, setPeers] = useState(0);
-
-  useEffect(() => {
-    if (!provider) return;
-    const onStatus = ({ status: s }: { status: string }) => {
-      if (s === 'connected') setStatus('connected');
-      else if (s === 'disconnected') setStatus('disconnected');
-    };
-    const onSynced = () => setStatus('synced');
-    const onAwareness = () => {
-      const states = provider.awareness?.getStates() ?? new Map<number, unknown>();
-      setPeers(Math.max(0, states.size - 1));
-    };
-    provider.on('status', onStatus);
-    provider.on('synced', onSynced);
-    provider.on('awarenessUpdate', onAwareness);
-    onAwareness();
-    return () => {
-      provider.off('status', onStatus);
-      provider.off('synced', onSynced);
-      provider.off('awarenessUpdate', onAwareness);
-    };
-  }, [provider]);
-
-  const tone =
-    status === 'synced' ? 'var(--status-success)' :
-    status === 'disconnected' ? 'var(--status-error)' :
-    'var(--text-tertiary)';
-
-  const label =
-    status === 'connecting' ? 'Connecting…' :
-    status === 'connected' ? 'Connected' :
-    status === 'synced' ? (peers > 0 ? `Synced · ${peers} other${peers === 1 ? '' : 's'}` : 'Synced') :
-    'Offline';
-
-  return (
-    <span
-      className="inline-flex items-center gap-1.5"
-      style={{ fontSize: 11, fontWeight: 500, color: tone }}
-    >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          background: tone,
-          display: 'inline-block',
-          flexShrink: 0,
-        }}
-      />
-      {label}
-    </span>
-  );
-}

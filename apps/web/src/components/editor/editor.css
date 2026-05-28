@@ -2,7 +2,8 @@
 .doc-page {
   max-width: 720px;
   margin: 0 auto;
-  padding: 80px 24px 200px;
+  /* 44px unified toolbar + 32px breathing room = 76px top, 200px bottom */
+  padding: 76px 24px 200px;
 }
 
 .doc-title {
