@@ -1,5 +1,5 @@
 ---
-import { getPendingJoinSession, clearPendingJoinSession, setSession } from '../../lib/session.ts';
+import { getPendingJoinSession } from '../../lib/session.ts';
 
 // Must have a pending join cookie — anyone else gets sent away
 const pending = await getPendingJoinSession(Astro.cookies);
@@ -10,7 +10,6 @@ if (!pending) {
 const { domain_workspaces } = pending;
 const emailDomain = pending.email.split('@')[1] ?? '';
 const userInitial = (pending.email[0] || 'U').toUpperCase();
-const cookiePassword = import.meta.env.WORKOS_COOKIE_PASSWORD as string;
 const apiUrl = (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
 
 // Read and consume the login_next cookie so the post-auth redirect works
@@ -19,14 +18,37 @@ const loginNextRaw = Astro.cookies.get('login_next')?.value ?? null;
 const loginNext = loginNextRaw && loginNextRaw.startsWith('/') ? loginNextRaw : null;
 if (loginNext) Astro.cookies.delete('login_next', { path: '/' });
 
-// Serialize safe props for the client-side script (no secrets)
-const pendingJson = JSON.stringify({
-  user_id: pending.user_id,
-  email: pending.email,
-  display_name: pending.display_name,
-  workos_user_id: pending.workos_user_id,
-  domain_workspaces: pending.domain_workspaces,
-});
+// ── Detect a pending invitation ──────────────────────────────────────────────
+// If loginNext = '/invite/TOKEN', the user arrived from an invitation email.
+// Look up the invite server-side (no client secret needed) to find which
+// workspace they were invited to so we can show "Join" on that workspace card
+// instead of the generic "Request to join".
+let inviteToken: string | null = null;
+let invitedWorkspaceId: string | null = null;
+
+if (loginNext?.startsWith('/invite/')) {
+  inviteToken = loginNext.replace('/invite/', '').split('?')[0] ?? null;
+  if (inviteToken) {
+    try {
+      const lookupRes = await fetch(
+        `${apiUrl}/api/invitations/lookup?token=${encodeURIComponent(inviteToken)}`,
+      );
+      if (lookupRes.ok) {
+        const lookup = (await lookupRes.json()) as { workspace_slug?: string };
+        // Match by slug against the domain_workspaces list to get the id
+        if (lookup.workspace_slug) {
+          const match = domain_workspaces.find((w) => w.slug === lookup.workspace_slug);
+          invitedWorkspaceId = match?.id ?? null;
+        }
+      }
+    } catch {
+      // Lookup failure is non-fatal — fall back to showing all as "Request to join"
+    }
+  }
+}
+
+// loginNext is the only value the client-side script needs (for the redirect
+// after join). No user data or secrets are passed to the browser.
 ---
 
 <!doctype html>
@@ -199,25 +221,30 @@ const pendingJson = JSON.stringify({
 
     <!-- Existing workspaces -->
     <div class="jc-ws-list" id="jc-ws-list">
-      {domain_workspaces.map((ws) => (
-        <div class="jc-ws-card">
-          <span class="jc-ws-icon">{ws.name[0]?.toUpperCase() ?? 'W'}</span>
-          <div class="jc-ws-body">
-            <div class="jc-ws-name">{ws.name}</div>
-            <div class="jc-ws-meta">
-              {ws.member_count === 1 ? '1 member' : `${ws.member_count} members`}
+      {domain_workspaces.map((ws) => {
+        const isInvited = ws.id === invitedWorkspaceId;
+        return (
+          <div class="jc-ws-card">
+            <span class="jc-ws-icon">{ws.name[0]?.toUpperCase() ?? 'W'}</span>
+            <div class="jc-ws-body">
+              <div class="jc-ws-name">{ws.name}</div>
+              <div class="jc-ws-meta">
+                {isInvited
+                  ? 'You\'ve been invited'
+                  : ws.member_count === 1 ? '1 member' : `${ws.member_count} members`}
+              </div>
             </div>
+            <button
+              class="jc-join-btn"
+              data-workspace-id={ws.id}
+              data-invite-token={isInvited ? inviteToken : undefined}
+            >
+              {isInvited ? 'Join' : 'Request to join'}
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+            </button>
           </div>
-          <button
-            class="jc-join-btn"
-            data-workspace-id={ws.id}
-            data-workspace-name={ws.name}
-          >
-            Request to join
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
-          </button>
-        </div>
-      ))}
+        );
+      })}
     </div>
 
     <div class="jc-divider">
@@ -241,9 +268,8 @@ const pendingJson = JSON.stringify({
   </div>
 </main>
 
-<script define:vars={{ pendingJson, cookiePassword, apiUrl, loginNext }}>
+<script define:vars={{ loginNext }}>
 (function() {
-  const pending = JSON.parse(pendingJson);
   const loading = document.getElementById('jc-loading');
   const errEl = document.getElementById('jc-error');
 
@@ -253,84 +279,69 @@ const pendingJson = JSON.stringify({
     errEl.textContent = msg;
     errEl.classList.add('visible');
   }
-
-  async function finaliseSession(user_id, tenant_id, jwt) {
-    // Write the sealed session by calling the same set-session endpoint with
-    // the workspace we just joined/created — but using a finalize path.
-    // Simpler: POST to our own Astro endpoint that seals the session cookie.
-    const res = await fetch('/api/auth/seal-session', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id,
-        email: pending.email,
-        tenant_id,
-        workos_user_id: pending.workos_user_id,
-        access_token: pending.access_token,
-        jwt,
-      }),
-    });
-    if (!res.ok) throw new Error('session_seal_failed');
+  function disableAll() {
+    document.querySelectorAll('.jc-join-btn').forEach(function(b) { b.disabled = true; });
+    var createBtn = document.getElementById('jc-create-btn');
+    if (createBtn) createBtn.disabled = true;
+  }
+  function enableAll() {
+    document.querySelectorAll('.jc-join-btn').forEach(function(b) { b.disabled = false; });
+    var createBtn = document.getElementById('jc-create-btn');
+    if (createBtn) createBtn.disabled = false;
   }
 
-  // ── Join an existing workspace ─────────────────────────────────────────────
+  // ── Join / accept invite for an existing workspace ─────────────────────────
+  // All API calls go through /api/auth/join-workspace (Astro server-side) so
+  // WORKOS_COOKIE_PASSWORD never touches the browser and access_token is read
+  // from the sealed boppl_pending_join cookie server-side.
   document.querySelectorAll('.jc-join-btn').forEach(function(btn) {
     btn.addEventListener('click', async function() {
       const workspaceId = btn.dataset.workspaceId;
-      const workspaceName = btn.dataset.workspaceName;
+      const inviteToken = btn.dataset.inviteToken || null;
       showLoading();
       errEl.classList.remove('visible');
-      document.querySelectorAll('.jc-join-btn').forEach(function(b) { b.disabled = true; });
-      document.getElementById('jc-create-btn').disabled = true;
+      disableAll();
 
       try {
-        const res = await fetch(apiUrl + '/api/_internal/join-workspace', {
+        const body = inviteToken
+          ? { workspace_id: workspaceId, invite_token: inviteToken }
+          : { workspace_id: workspaceId };
+
+        const res = await fetch('/api/auth/join-workspace', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            internal_secret: cookiePassword,
-            user_id: pending.user_id,
-            workspace_id: workspaceId,
-          }),
+          body: JSON.stringify(body),
         });
         if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
+          const err = await res.json().catch(function() { return {}; });
           throw new Error(err.error || 'join_failed');
         }
-        const { user_id, tenant_id, jwt } = await res.json();
-        await finaliseSession(user_id, tenant_id, jwt);
+        // Session cookie is now set server-side — redirect straight to app.
         window.location.href = loginNext || '/app';
       } catch (e) {
         showError('Could not join workspace. Please try again.');
-        document.querySelectorAll('.jc-join-btn').forEach(function(b) { b.disabled = false; });
-        document.getElementById('jc-create-btn').disabled = false;
+        enableAll();
       }
     });
   });
 
   // ── Create a new workspace ─────────────────────────────────────────────────
+  // Still calls /api/_internal/set-session but via the server-side Astro proxy
+  // at /api/[...path].ts — which injects the JWT server-side, so WORKOS_COOKIE_PASSWORD
+  // is never needed client-side. We use the existing set-session endpoint with
+  // force_new_workspace: true, which creates a fresh workspace and returns a JWT.
+  // The session is then sealed by /api/auth/seal-session.
   document.getElementById('jc-create-btn').addEventListener('click', async function() {
     showLoading();
     errEl.classList.remove('visible');
 
     try {
-      // Re-call set-session with force_new_workspace: true — this creates a
-      // fresh workspace for the user and returns a normal { user_id, tenant_id, jwt }
-      const res = await fetch(apiUrl + '/api/_internal/set-session', {
+      const res = await fetch('/api/auth/create-workspace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          internal_secret: cookiePassword,
-          email: pending.email,
-          display_name: pending.display_name,
-          workos_user_id: pending.workos_user_id,
-          force_new_workspace: true,
-        }),
+        body: JSON.stringify({}),
       });
       if (!res.ok) throw new Error('create_failed');
-      const { user_id, tenant_id, jwt } = await res.json();
-      await finaliseSession(user_id, tenant_id, jwt);
-      // Send to onboarding to name the workspace
       window.location.href = '/onboarding/workspace';
     } catch (e) {
       showError('Could not create workspace. Please try again.');
