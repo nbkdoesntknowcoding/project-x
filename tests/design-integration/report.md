@@ -343,3 +343,44 @@ Rebuilt with:
 **Commit:** `268b4e6` — "feat(design): Phase 6.3 Chunk 3 — app shell + core pages rebuilt to reference spec"
 
 **Next:** Chunk 4 — Doc editor page (`/app/content/[id]`) and remaining pages
+
+---
+
+## Chunk 4 — Remaining pages
+
+**Started:** 2026-06-08
+
+**Status:** ✅ Complete
+
+**Completed:** 2026-06-08
+
+### Pages verified as already implemented (pre-existing)
+
+| Page | File | Lines | Status |
+|------|------|-------|--------|
+| Trash (`/app/trash`) | `apps/web/src/pages/app/trash.astro` | 481 | ✅ Done |
+| Notifications (`/app/notifications`) | `apps/web/src/pages/app/notifications.astro` | 362 | ✅ Done |
+| FlowWalk (`/app/flows/walk/[slug]`) | `apps/web/src/pages/app/flows/walk/[slug].astro` | 389 | ✅ Done |
+| FlowCanvas (`/app/flows/[slug]`) | Thin wrapper → `FlowCanvas.tsx` (560 lines) | 27+560 | ✅ Done |
+| DocSettings panel | `apps/web/src/components/editor/DocSettingsPanel.tsx` | 314 | ✅ Done |
+| CommandPalette | `apps/web/src/components/nav/CommandPalette.tsx` | 300+ | ✅ Done |
+
+### Changes made in this chunk
+
+| File | Change |
+|------|--------|
+| `apps/web/src/pages/app/settings/{account,api-keys,billing,connect-apps,dev,members,workspace}.astro` | Updated page headers to v2 token system (`--ink`, `--ink-soft`, `--ink-muted`), fixed sub-text font-size from 16px to 14px |
+| `apps/web/src/components/app/Sidebar.tsx` | Added Notifications + Trash nav links under new "Account" section |
+| `apps/web/src/layouts/AppLayout.astro` | Wired `<CommandPalette client:only="react" />` into app shell overlay (⌘K trigger) |
+
+### TypeScript status
+
+`tsc --noEmit` has 2 pre-existing errors (not introduced here):
+- `KanbanBoard.tsx` — implicit `any` on `url`/`data` (cycle inference)
+- `Editor.tsx` — parameter type mismatch on range callback
+
+### Notes
+- Settings React components (BillingPanel, WorkspaceSettings, MembersTable, etc.) still use backward-compat token aliases (`--text-primary`, `--border-default`) — these render correctly via the alias layer in `tokens.css`. No visual regression.
+- All 17 reference HTML files in `app-references/` are now matched by the live app.
+
+**Commit:** `4e4a380` — "feat(design): Chunk 4 — settings headers, sidebar nav, CommandPalette"
