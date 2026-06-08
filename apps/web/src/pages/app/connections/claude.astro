@@ -33,6 +33,20 @@ try {
   }
 } catch { /* API offline */ }
 
+// Fetch the caller's role so we know which scopes they can request.
+const WRITE_ROLES = new Set(['owner', 'admin', 'editor']);
+let userRole = 'viewer';
+try {
+  const meRes = await fetch(`${apiUrl}/api/auth/me`, {
+    headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+  });
+  if (meRes.ok) {
+    const meBody = (await meRes.json()) as { role?: string };
+    if (meBody.role) userRole = meBody.role;
+  }
+} catch { /* API offline */ }
+const canWrite = WRITE_ROLES.has(userRole);
+
 const hasToken = tokens.length > 0;
 // "Live" = a token has been used by Claude in the last 2 hours
 const LIVE_WINDOW_MS = 2 * 60 * 60 * 1000;
@@ -182,6 +196,8 @@ const isLocalhost = mcpBaseUrl.includes('localhost') || mcpBaseUrl.includes('127
   .cc-scope-row.locked { opacity: 0.6; }
   .cc-scope-check { color: var(--status-sync); display: flex; align-items: center; }
   .cc-scope-row.locked .cc-scope-check { color: var(--ink-muted); }
+  #cc-write-check { transition: color 120ms ease; }
+  #cc-write-check:hover { color: var(--ink); }
   .cc-scope-name { font: 500 12.5px/1 var(--mono); color: var(--ink); }
   .cc-scope-desc { font-size: 12.5px; color: var(--ink-muted); }
   .cc-scope-tag {
@@ -281,7 +297,7 @@ const isLocalhost = mcpBaseUrl.includes('localhost') || mcpBaseUrl.includes('127
               </div>
               <div class="cc-status-item">
                 <span class="cc-status-k">Scopes granted</span>
-                <span class="cc-status-v">docs:read, flows:read</span>
+                <span class="cc-status-v" id="cc-scopes-granted">{canWrite ? 'docs:read, workspace:write' : 'docs:read'}</span>
               </div>
             </div>
           </div>
@@ -393,31 +409,46 @@ const isLocalhost = mcpBaseUrl.includes('localhost') || mcpBaseUrl.includes('127
       <!-- SCOPES -->
       <div class="cc-section">
         <div class="cc-sec-label">What Claude can access</div>
+        <p style="font-size:13px;color:var(--ink-muted);margin:0 0 12px;">
+          Choose which capabilities to include in this token. You can generate separate tokens for read-only and write access.
+        </p>
         <div class="cc-scopes">
+          <!-- docs:read — always on, non-toggleable -->
           <div class="cc-scope-row">
             <span class="cc-scope-check">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
             </span>
             <span class="cc-scope-name">docs:read</span>
-            <span class="cc-scope-desc">Read the contents of any doc in this workspace, including instructions and snippets.</span>
-            <span class="cc-scope-tag">GRANTED</span>
+            <span class="cc-scope-desc">Read all docs, instructions and snippets in this workspace.</span>
+            <span class="cc-scope-tag">ALWAYS ON</span>
           </div>
-          <div class="cc-scope-row">
-            <span class="cc-scope-check">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-            </span>
-            <span class="cc-scope-name">flows:read</span>
-            <span class="cc-scope-desc">Walk through your flows step-by-step, reading content in the order you defined.</span>
-            <span class="cc-scope-tag">GRANTED</span>
-          </div>
-          <div class="cc-scope-row locked">
-            <span class="cc-scope-check">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-            </span>
-            <span class="cc-scope-name">docs:write</span>
-            <span class="cc-scope-desc">Edit docs on your behalf. Requires per-workspace approval — disabled until Mnema 6.5.</span>
-            <span class="cc-scope-tag">NOT YET</span>
-          </div>
+
+          <!-- workspace:write — toggleable for write-capable roles -->
+          {canWrite ? (
+            <div class="cc-scope-row" id="cc-write-row">
+              <span class="cc-scope-check" id="cc-write-check" style="cursor:pointer;" title="Toggle workspace:write">
+                <!-- checked state shown by default -->
+                <svg id="cc-write-icon-on" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg id="cc-write-icon-off" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+              </span>
+              <span class="cc-scope-name">workspace:write</span>
+              <span class="cc-scope-desc">
+                Propose and commit edits to docs on your behalf (<code style="font-family:var(--mono);font-size:11px;padding:1px 4px;background:var(--surface-3);border-radius:3px;">propose_doc_write</code>,
+                <code style="font-family:var(--mono);font-size:11px;padding:1px 4px;background:var(--surface-3);border-radius:3px;">append_blocks_to_doc</code>, and other write tools).
+                Every write shows a preview with Approve / Reject.
+              </span>
+              <span class="cc-scope-tag" id="cc-write-tag">INCLUDED</span>
+            </div>
+          ) : (
+            <div class="cc-scope-row locked">
+              <span class="cc-scope-check">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+              </span>
+              <span class="cc-scope-name">workspace:write</span>
+              <span class="cc-scope-desc">Propose and commit edits to docs. Only available to workspace owners and editors.</span>
+              <span class="cc-scope-tag">VIEWER ONLY</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -468,8 +499,29 @@ const isLocalhost = mcpBaseUrl.includes('localhost') || mcpBaseUrl.includes('127
     </div>
   </div>
 
-  <script define:vars={{ mcpEndpoint, hasTokenInit: hasToken }}>
+  <script define:vars={{ mcpEndpoint, hasTokenInit: hasToken, canWriteInit: canWrite }}>
     const API = '';   // relative — proxied through Astro → backend
+
+    // Track whether workspace:write is included in the next token
+    let includeWrite = canWriteInit;
+
+    // ---- scope toggle ----
+    var writeCheck = document.getElementById('cc-write-check');
+    if (writeCheck) {
+      writeCheck.addEventListener('click', function() {
+        includeWrite = !includeWrite;
+        var iconOn  = document.getElementById('cc-write-icon-on');
+        var iconOff = document.getElementById('cc-write-icon-off');
+        var tag     = document.getElementById('cc-write-tag');
+        var row     = document.getElementById('cc-write-row');
+        var granted = document.getElementById('cc-scopes-granted');
+        if (iconOn)  iconOn.style.display  = includeWrite ? '' : 'none';
+        if (iconOff) iconOff.style.display = includeWrite ? 'none' : '';
+        if (tag)  tag.textContent  = includeWrite ? 'INCLUDED' : 'EXCLUDED';
+        if (row)  row.style.opacity = includeWrite ? '1' : '0.5';
+        if (granted) granted.textContent = includeWrite ? 'docs:read, workspace:write' : 'docs:read';
+      });
+    }
 
     // ---- helpers ----
     function copyText(text, labelEl, original) {
@@ -499,13 +551,20 @@ const isLocalhost = mcpBaseUrl.includes('localhost') || mcpBaseUrl.includes('127
       const expires = token.expires_at
         ? `Expires ${new Date(token.expires_at).toLocaleDateString()}`
         : 'No expiry';
+      // Show scopes as badges
+      const scopeBadges = (token.scopes || [])
+        .map(function(s) { return `<span style="font:500 9px/1 var(--mono);padding:2px 5px;border-radius:3px;background:var(--surface-3);color:var(--ink-muted);">${s}</span>`; })
+        .join(' ');
       const row = document.createElement('div');
       row.className = 'cc-token-row';
       row.dataset.tokenId = token.id;
       row.innerHTML = `
         <div class="cc-token-row-info">
           <span class="cc-token-row-name">${token.name}</span>
-          <span class="cc-token-row-meta">Created ${new Date(token.created_at).toLocaleDateString()} · ${expires}</span>
+          <span class="cc-token-row-meta" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            Created ${new Date(token.created_at).toLocaleDateString()} · ${expires}
+            <span style="display:flex;gap:4px;">${scopeBadges}</span>
+          </span>
         </div>
         <button class="cc-danger-btn cc-revoke-btn" data-token-id="${token.id}" type="button" style="font-size:11.5px;padding:6px 10px;">Revoke</button>
       `;
@@ -523,12 +582,16 @@ const isLocalhost = mcpBaseUrl.includes('localhost') || mcpBaseUrl.includes('127
       if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
       if (err) err.classList.remove('visible');
 
+      // Build requested scopes from toggle state
+      var requestedScopes = ['docs:read'];
+      if (includeWrite) requestedScopes.push('workspace:write');
+
       try {
         const res = await fetch(`${API}/api/mcp-tokens`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'Claude Desktop' }),
+          body: JSON.stringify({ name: 'Claude Desktop', requested_scopes: requestedScopes }),
         });
         if (!res.ok) throw new Error(`API ${res.status}`);
         const data = await res.json();

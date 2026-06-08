@@ -13,6 +13,10 @@ const secret = new TextEncoder().encode(config.JWT_SECRET);
 
 const createSchema = z.object({
   name: z.string().min(1).max(100).default('Claude Desktop'),
+  // Optional subset of scopes the caller wants on this token.
+  // If omitted, all scopes allowed by the caller's role are granted.
+  // Requested scopes are capped to what the role allows — cannot escalate.
+  requested_scopes: z.array(z.string().min(1).max(64)).optional(),
 });
 
 export const mcpTokenRoutes: FastifyPluginAsync = async (app) => {
@@ -70,7 +74,18 @@ export const mcpTokenRoutes: FastifyPluginAsync = async (app) => {
         )
         .limit(1),
     );
-    const scopes = scopesForRole(membership?.role ?? 'viewer');
+    const allowedScopes = scopesForRole(membership?.role ?? 'viewer');
+
+    // If the caller requested specific scopes, cap them to what their role allows.
+    // docs:read is always included regardless (minimum viable token).
+    const scopes: string[] = parsed.data.requested_scopes
+      ? [
+          'docs:read',
+          ...parsed.data.requested_scopes.filter(
+            (s) => s !== 'docs:read' && allowedScopes.includes(s),
+          ),
+        ]
+      : allowedScopes;
 
     // Insert the metadata row first so we can capture the generated jti.
     const row = await withTenant(auth.tenant_id, async (tx) => {
