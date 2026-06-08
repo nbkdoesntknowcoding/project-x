@@ -1,17 +1,19 @@
 /**
  * OAuth Bearer token validation for MCP endpoints.
  *
- * Validates RS256-signed OAuth 2.1 access tokens (Phase A).
- * Also accepts the existing HS256 app JWTs so Claude Desktop via
- * mcp-remote continues to work during the transition period.
+ * Priority order (A.4 — Universal Compatibility):
+ *   1. mnema_api_xxx prefix → static API key table (ChatGPT, Codex, REST clients)
+ *   2. RS256 JWT → OAuth 2.1 access token (claude.ai, Phase A)
+ *   3. HS256 JWT → legacy app JWT (Claude Desktop via mcp-remote)
  *
  * The resolved auth context is attached to req.oauth for downstream handlers.
- * The workspace_id from the OAuth JWT becomes the RLS tenant for all DB queries.
+ * The workspace_id becomes the RLS tenant for all DB queries.
  */
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { config } from '../../config/env.js';
 import { verifyOAuthAccessToken, type OAuthJwtPayload } from '../jwt.js';
 import { verifyMcpToken } from '../../mcp/auth.js';
+import { resolveApiKey, expandApiKeyScopes } from '../../lib/api-keys.js';
 
 export interface OAuthContext {
   userId: string;
@@ -19,7 +21,7 @@ export interface OAuthContext {
   scope: string[];
   clientId: string;
   jti: string | null;
-  tokenType: 'oauth' | 'legacy';
+  tokenType: 'api_key' | 'oauth' | 'legacy';
 }
 
 declare module 'fastify' {
@@ -50,7 +52,30 @@ export async function requireOAuthBearer(
 
   const token = auth.slice(7);
 
-  // 1. Try OAuth RS256 token first
+  // 1. Static API key (mnema_api_ prefix) — used by ChatGPT, Codex, REST clients
+  if (token.startsWith('mnema_api_')) {
+    const apiKeyCtx = await resolveApiKey(token);
+    if (apiKeyCtx) {
+      req.oauth = {
+        userId: apiKeyCtx.userId,
+        workspaceId: apiKeyCtx.workspaceId,
+        scope: expandApiKeyScopes(apiKeyCtx.scopes),
+        clientId: 'api-key',
+        jti: null,
+        tokenType: 'api_key',
+      };
+      return;
+    }
+    // Known prefix but key not found/revoked → 401 immediately (no further attempts)
+    reply.status(401).send({
+      jsonrpc: '2.0',
+      error: { code: -32001, message: 'Unauthorized', data: { reason: 'api_key_invalid_or_revoked' } },
+      id: null,
+    });
+    return;
+  }
+
+  // 2. Try OAuth RS256 token
   const oauthResult = await verifyOAuthAccessToken(token, `${config.OAUTH_ISSUER}/mcp`);
   if (oauthResult.valid) {
     const p = oauthResult.payload as OAuthJwtPayload;

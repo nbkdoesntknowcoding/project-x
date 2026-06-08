@@ -19,7 +19,7 @@ export function generateApiKey(): { plaintext: string; hash: string; prefix: str
 
 export async function resolveApiKey(
   bearerToken: string,
-): Promise<{ workspaceId: string; scopes: string[] } | null> {
+): Promise<{ userId: string; workspaceId: string; scopes: string[] } | null> {
   if (!bearerToken?.startsWith('mnema_api_')) return null;
 
   const hash = crypto.createHash('sha256').update(bearerToken).digest('hex');
@@ -44,7 +44,7 @@ export async function resolveApiKey(
     .where(eq(apiKeys.id, key.id))
     .catch(() => {});
 
-  return { workspaceId: key.workspaceId, scopes: key.scopes };
+  return { userId: key.createdBy, workspaceId: key.workspaceId, scopes: key.scopes };
 }
 
 /**
@@ -56,4 +56,29 @@ export function validateScopes(scopes: unknown): string[] {
   if (!Array.isArray(scopes) || scopes.length === 0) return ['read'];
   const valid = scopes.filter((s): s is string => typeof s === 'string' && VALID_SCOPES.has(s));
   return valid.length > 0 ? valid : ['read'];
+}
+
+/**
+ * Expand API key coarse scopes to internal MCP tool-level scopes.
+ *
+ * API key scopes  → internal scopes consumed by requireScope() / requireWriteScope()
+ *   read          → docs:read  (default — can search and read docs)
+ *   write         → docs:read + workspace:write  (can use propose_doc_write etc)
+ *   tasks         → docs:read + workspace:write + tasks  (write + dev task tools)
+ *
+ * This matches the expansion logic for OAuth tokens in require-bearer.ts so
+ * tool handlers don't need to distinguish between token types.
+ */
+export function expandApiKeyScopes(rawScopes: string[]): string[] {
+  const expanded = new Set<string>(['docs:read']); // always included
+  for (const s of rawScopes) {
+    if (s === 'write' || s === 'tasks') {
+      expanded.add('workspace:write');
+      expanded.add('docs:write');
+    }
+    if (s === 'tasks') {
+      expanded.add('tasks');
+    }
+  }
+  return [...expanded];
 }
