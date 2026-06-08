@@ -22,6 +22,8 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
   const isOnFlows = currentPath.startsWith('/app/flows');
   const isOnClaude = currentPath === '/app/connections/claude';
   const isOnDrive = currentPath === '/app/connections/drive';
+  const isOnNotifications = currentPath.startsWith('/app/notifications');
+  const isOnTrash = currentPath.startsWith('/app/trash');
   const isOnKanban    = currentPath.startsWith('/app/kanban');
   const isOnSessions  = currentPath.startsWith('/app/sessions');
   const isOnCost      = currentPath.startsWith('/app/cost');
@@ -227,6 +229,40 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
               </svg>
             </span>
             <span className="sb-label">Google Drive</span>
+          </span>
+        </a>
+      </div>
+
+      {/* ── ACCOUNT ─────────────────────────────── */}
+      <div className="sb-section">
+        <div className="sb-section-head"><span>Account</span></div>
+
+        <a
+          href="/app/notifications"
+          className={`sb-row${isOnNotifications ? ' active' : ''}`}
+        >
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+              </svg>
+            </span>
+            <span className="sb-label">Notifications</span>
+          </span>
+        </a>
+
+        <a
+          href="/app/trash"
+          className={`sb-row${isOnTrash ? ' active' : ''}`}
+        >
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </span>
+            <span className="sb-label">Trash</span>
           </span>
         </a>
       </div>
