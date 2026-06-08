@@ -66,11 +66,16 @@ const envSchema = z.object({
     .string()
     .default('http://localhost:5173,http://localhost:5175,http://localhost:6274'),
 
-  // Origins permitted to POST to /mcp. Comma-separated. Browser clients only;
-  // the claude.ai connector and MCP Inspector are explicitly listed.
+  // Origins permitted to POST to /mcp and /mcp/http.
+  // Comma-separated. Includes remote clients: ChatGPT, OpenAI API, Codex.
+  // Non-browser clients that omit Origin entirely are always allowed through.
   MCP_ORIGIN_ALLOWLIST: z
     .string()
-    .default('http://localhost:5173,http://localhost:5175,http://localhost:6274'),
+    .default(
+      'http://localhost:5173,http://localhost:5175,http://localhost:6274,' +
+      'https://chatgpt.com,https://chat.openai.com,https://api.openai.com,' +
+      'https://platform.openai.com,https://claude.ai',
+    ),
 
   // Voyage AI (Phase 3.1)
   // The user obtained this from voyageai.com — the worker crashes loudly

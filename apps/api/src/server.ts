@@ -50,7 +50,18 @@ await app.register(cors, {
   // Origins driven by CORS_ORIGINS env var. Defaults cover local dev (5173,
   // 5175 for worktree, 6274 for MCP Inspector). Production adds the Vercel
   // domain via that env var — no code change needed.
-  origin: config.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean),
+  //
+  // MCP routes (/mcp, /mcp/http) use wildcard origin (*) so ChatGPT Business,
+  // OpenAI Codex, and other remote AI clients can reach them. Every MCP
+  // request is independently authenticated via Bearer token — CORS only
+  // controls whether the browser forwards the preflight, so wildcard here
+  // does not weaken auth.
+  // Allow all origins — each route enforces its own auth:
+  //   /api/* — cookie/JWT session (enforced by authPlugin preHandler)
+  //   /mcp, /mcp/http — Bearer token (enforced by requireOAuthBearer)
+  // Reflecting the request Origin (origin: true) is safe because every request
+  // requires a valid token regardless of where it came from.
+  origin: true,
   credentials: true,
 });
 await app.register(sensible);

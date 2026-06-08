@@ -47,115 +47,155 @@ function send401(reply: FastifyReply): FastifyReply {
     });
 }
 
-export const mcpPlugin: FastifyPluginAsync = fp(async (app) => {
-  app.post(
-    '/mcp',
-    { config: { mcpRoute: true } },
-    async (req, reply) => {
-      // 1. Origin allowlist (browser CSRF defense). Non-browser clients
-      //    (curl, claude.ai's connector backend) typically omit Origin —
-      //    we only enforce the check when the header is present.
-      const origin = req.headers.origin;
-      if (origin && !mcpConfig.originAllowlist.includes(origin)) {
-        req.log.warn({ origin }, 'mcp: rejecting disallowed Origin');
-        return reply.code(403).send({
-          jsonrpc: '2.0',
-          error: { code: -32600, message: 'Origin not allowed' },
-          id: null,
-        });
-      }
+import type { FastifyRequest } from 'fastify';
 
-      // 2. Bearer validation — supports both OAuth RS256 (Phase A) and
-      //    legacy HS256 app JWTs (Claude Desktop via mcp-remote).
-      await requireOAuthBearer(req, reply);
-      if (reply.sent) return; // 401 already sent by requireOAuthBearer
+/**
+ * CORS headers added to every MCP response so remote clients
+ * (ChatGPT Business, OpenAI API, Codex) can reach the endpoint.
+ * The wildcard origin is safe here because every request is
+ * independently authenticated via Bearer token — CORS only
+ * controls whether the browser forwards the preflight.
+ */
+function addMcpCorsHeaders(reply: FastifyReply): void {
+  reply
+    .header('Access-Control-Allow-Origin', '*')
+    .header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    .header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+}
 
-      const oauthCtx = req.oauth!;
+/**
+ * Shared handler for both POST /mcp and POST /mcp/http.
+ *
+ * /mcp  — legacy path, kept for Claude Desktop, Cursor, Cline, mcp-remote
+ * /mcp/http — standard Streamable HTTP path required by ChatGPT Business,
+ *             Codex, and any client following the 2025-11-05 MCP spec
+ */
+async function handleMcpRequest(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  // CORS — applied to all MCP responses so remote clients can reach us.
+  addMcpCorsHeaders(reply);
 
-      // 3. Subscription gate — blocks halted/cancelled/paused workspaces.
-      //    Free-plan workspaces (no subscription row) are allowed through.
-      const gate = await checkSubscriptionGate(oauthCtx.workspaceId);
-      if (!gate.allowed) {
-        return reply.code(402).send({
+  // 1. Origin allowlist (browser CSRF defense). Non-browser clients
+  //    (curl, claude.ai's connector backend, ChatGPT) typically omit Origin —
+  //    we only enforce the check when the header is present.
+  const origin = req.headers.origin;
+  if (origin && !mcpConfig.originAllowlist.includes(origin)) {
+    req.log.warn({ origin }, 'mcp: rejecting disallowed Origin');
+    return reply.code(403).send({
+      jsonrpc: '2.0',
+      error: { code: -32600, message: 'Origin not allowed' },
+      id: null,
+    });
+  }
+
+  // 2. Bearer validation — supports both OAuth RS256 (Phase A) and
+  //    legacy HS256 app JWTs (Claude Desktop via mcp-remote).
+  await requireOAuthBearer(req, reply);
+  if (reply.sent) return; // 401 already sent by requireOAuthBearer
+
+  const oauthCtx = req.oauth!;
+
+  // 3. Subscription gate — blocks halted/cancelled/paused workspaces.
+  //    Free-plan workspaces (no subscription row) are allowed through.
+  const gate = await checkSubscriptionGate(oauthCtx.workspaceId);
+  if (!gate.allowed) {
+    return reply.code(402).send({
+      jsonrpc: '2.0',
+      error: {
+        code: -32004,
+        message: gate.message,
+        data: {
+          subscription_status: gate.status,
+          billing_url: `${process.env.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in'}/app/settings/billing`,
+        },
+      },
+      id: null,
+    });
+  }
+
+  // 4. Record last-used for legacy mcp_tokens (fire-and-forget).
+  if (oauthCtx.tokenType === 'legacy' && oauthCtx.jti) {
+    db.update(mcpTokens)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(mcpTokens.jti, oauthCtx.jti))
+      .execute()
+      .catch(() => { /* non-critical */ });
+  }
+
+  // 5. Build per-request auth context for tool handlers.
+  // Phase 1 AgentLens: fetch workspace mode so dev tools can be conditionally
+  // registered. Fire-and-forget approach: fetch with a short-circuit default.
+  let workspaceMode: string | undefined;
+  try {
+    const wsRows = await db
+      .select({ mode: workspaces.mode })
+      .from(workspaces)
+      .where(eq(workspaces.id, oauthCtx.workspaceId))
+      .limit(1);
+    workspaceMode = wsRows[0]?.mode;
+  } catch {
+    // Non-critical — dev tools will just not be registered
+    workspaceMode = undefined;
+  }
+
+  const authCtx = {
+    user_id: oauthCtx.userId,
+    tenant_id: oauthCtx.workspaceId,
+    email: '',  // not available on OAuth tokens; tools don't use it
+    scopes: oauthCtx.scope,
+    jwt_id: oauthCtx.jti,
+    workspaceMode,
+  };
+
+  // 6. Build per-request server with the verified context captured in
+  //    its handler closures. This is the only safe place to bind ctx.
+  const server = createMcpServer(authCtx);
+
+  try {
+    await handleStreamableHttp(req, reply, server);
+  } catch (err) {
+    if (err instanceof McpForbiddenError) {
+      if (!reply.sent && !reply.raw.headersSent) {
+        reply.code(403).send({
           jsonrpc: '2.0',
           error: {
-            code: -32004,
-            message: gate.message,
-            data: {
-              subscription_status: gate.status,
-              billing_url: `${process.env.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in'}/app/settings/billing`,
-            },
+            code: -32002,
+            message: 'Forbidden',
+            data: { required_scope: err.requiredScope },
           },
           id: null,
         });
       }
+      return;
+    }
+    req.log.error({ err }, 'mcp: transport error');
+    if (!reply.sent && !reply.raw.headersSent) {
+      reply.code(500).send({
+        jsonrpc: '2.0',
+        error: { code: -32603, message: 'Internal server error' },
+        id: null,
+      });
+    }
+  }
+}
 
-      // 4. Record last-used for legacy mcp_tokens (fire-and-forget).
-      if (oauthCtx.tokenType === 'legacy' && oauthCtx.jti) {
-        db.update(mcpTokens)
-          .set({ lastUsedAt: new Date() })
-          .where(eq(mcpTokens.jti, oauthCtx.jti))
-          .execute()
-          .catch(() => { /* non-critical */ });
-      }
+export const mcpPlugin: FastifyPluginAsync = fp(async (app) => {
+  const routeOpts = { config: { mcpRoute: true } };
 
-      // 5. Build per-request auth context for tool handlers.
-      // Phase 1 AgentLens: fetch workspace mode so dev tools can be conditionally
-      // registered. Fire-and-forget approach: fetch with a short-circuit default.
-      let workspaceMode: string | undefined;
-      try {
-        const wsRows = await db
-          .select({ mode: workspaces.mode })
-          .from(workspaces)
-          .where(eq(workspaces.id, oauthCtx.workspaceId))
-          .limit(1);
-        workspaceMode = wsRows[0]?.mode;
-      } catch {
-        // Non-critical — dev tools will just not be registered
-        workspaceMode = undefined;
-      }
+  // OPTIONS preflight for both endpoints — needed by ChatGPT browser-side calls.
+  app.options('/mcp', routeOpts, async (_req, reply) => {
+    addMcpCorsHeaders(reply);
+    reply.code(204).send();
+  });
+  app.options('/mcp/http', routeOpts, async (_req, reply) => {
+    addMcpCorsHeaders(reply);
+    reply.code(204).send();
+  });
 
-      const authCtx = {
-        user_id: oauthCtx.userId,
-        tenant_id: oauthCtx.workspaceId,
-        email: '',  // not available on OAuth tokens; tools don't use it
-        scopes: oauthCtx.scope,
-        jwt_id: oauthCtx.jti,
-        workspaceMode,
-      };
+  // POST /mcp — original endpoint, kept for Claude Desktop, Cursor, mcp-remote.
+  app.post('/mcp', routeOpts, handleMcpRequest);
 
-      // 6. Build per-request server with the verified context captured in
-      //    its handler closures. This is the only safe place to bind ctx.
-      const server = createMcpServer(authCtx);
-
-      try {
-        await handleStreamableHttp(req, reply, server);
-      } catch (err) {
-        if (err instanceof McpForbiddenError) {
-          // Tool-scope check rejected the call. Wired here so 2.3+ doesn't
-          // have to revisit this file.
-          if (!reply.sent && !reply.raw.headersSent) {
-            reply.code(403).send({
-              jsonrpc: '2.0',
-              error: {
-                code: -32002,
-                message: 'Forbidden',
-                data: { required_scope: err.requiredScope },
-              },
-              id: null,
-            });
-          }
-          return;
-        }
-        req.log.error({ err }, 'mcp: transport error');
-        if (!reply.sent && !reply.raw.headersSent) {
-          reply.code(500).send({
-            jsonrpc: '2.0',
-            error: { code: -32603, message: 'Internal server error' },
-            id: null,
-          });
-        }
-      }
-    },
-  );
+  // POST /mcp/http — Streamable HTTP alias required by ChatGPT Business/Enterprise,
+  // OpenAI Codex, and any client following the MCP 2025-11-05 spec that expects
+  // a dedicated /mcp/http path distinct from the SSE path.
+  app.post('/mcp/http', routeOpts, handleMcpRequest);
 });
