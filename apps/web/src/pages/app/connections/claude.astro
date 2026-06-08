@@ -33,19 +33,22 @@ try {
   }
 } catch { /* API offline */ }
 
-// Fetch the caller's role so we know which scopes they can request.
+// Fetch the caller's role + workspace mode so we know which scopes/tools apply.
 const WRITE_ROLES = new Set(['owner', 'admin', 'editor']);
 let userRole = 'viewer';
+let workspaceMode = 'knowledge';
 try {
   const meRes = await fetch(`${apiUrl}/api/auth/me`, {
     headers: { Cookie: `boppl_jwt=${auth.jwt}` },
   });
   if (meRes.ok) {
-    const meBody = (await meRes.json()) as { role?: string };
+    const meBody = (await meRes.json()) as { role?: string; workspace?: { mode?: string } };
     if (meBody.role) userRole = meBody.role;
+    if (meBody.workspace?.mode) workspaceMode = meBody.workspace.mode;
   }
 } catch { /* API offline */ }
 const canWrite = WRITE_ROLES.has(userRole);
+const isDevWorkspace = workspaceMode === 'dev_project';
 
 const hasToken = tokens.length > 0;
 // "Live" = a token has been used by Claude in the last 2 hours
@@ -451,6 +454,40 @@ const isLocalhost = mcpBaseUrl.includes('localhost') || mcpBaseUrl.includes('127
           )}
         </div>
       </div>
+
+      <!-- DEV TOOLS (dev_project workspaces only) -->
+      {isDevWorkspace && (
+        <div class="cc-section">
+          <div class="cc-sec-label">Dev / Kanban tools</div>
+          <p style="font-size:13px;color:var(--ink-muted);margin:0 0 12px;">
+            Your workspace is in <strong style="color:var(--ink);font-weight:500;">dev_project</strong> mode — the full AgentLens task layer is automatically enabled on every token. These tools cannot be toggled per-token; they follow the workspace mode.
+          </p>
+          <div class="cc-scopes">
+            {[
+              { name: 'get_next_task',      desc: 'Pick the next backlog task to work on.' },
+              { name: 'claim_task',         desc: 'Claim a task and move it to in-progress.' },
+              { name: 'complete_task',      desc: 'Mark a task done and log a summary.' },
+              { name: 'create_task',        desc: 'Create a one-off task in the backlog.' },
+              { name: 'create_sprints',     desc: 'Decompose a spec doc into multi-sprint plans with tasks.' },
+              { name: 'list_project_tasks', desc: 'List all tasks in the current project.' },
+              { name: 'log_blocker',        desc: 'Log a blocker against the active task.' },
+              { name: 'log_milestone',      desc: 'Record a project milestone.' },
+              { name: 'get_current_session',desc: 'Get context about the current Claude session.' },
+              { name: 'get_cost_summary',   desc: 'Summarise token cost for this session.' },
+              { name: 'get_skill_files',    desc: 'Read workspace skill/prompt files.' },
+            ].map(tool => (
+              <div class="cc-scope-row">
+                <span class="cc-scope-check">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                </span>
+                <span class="cc-scope-name" style="font-size:11.5px;">{tool.name}</span>
+                <span class="cc-scope-desc">{tool.desc}</span>
+                <span class="cc-scope-tag">AUTO-ON</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <!-- ACTIVE TOKENS LIST -->
       {hasToken && tokens.length > 0 && (
