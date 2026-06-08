@@ -92,7 +92,7 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
 
     const q = (req.query as Record<string, string>) ?? {};
-    const limit = Math.min(Number(q.limit ?? 50), 100);
+    const limit = Math.min(Number(q.limit ?? 100), 500);
     const statusFilter = q.status;
     const priorityFilter = q.priority;
     const cursor = q.cursor as string | undefined;

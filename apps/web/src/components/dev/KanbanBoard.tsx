@@ -81,11 +81,20 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
     if (dismissed === 'dismissed') setBannerDismissed(true);
   }, [workspaceId]);
 
-  // Fetch tasks
+  // Fetch ALL tasks — loop cursor pagination so no tasks are hidden
   const fetchTasks = useCallback(async () => {
     try {
-      const data = await apiFetch<{ tasks: Task[] }>('/api/tasks');
-      setTasks(data.tasks);
+      const all: Task[] = [];
+      let cursor: string | null = null;
+      do {
+        const url = cursor
+          ? `/api/tasks?limit=500&cursor=${encodeURIComponent(cursor)}`
+          : '/api/tasks?limit=500';
+        const data = await apiFetch<{ tasks: Task[]; next_cursor: string | null }>(url);
+        all.push(...data.tasks);
+        cursor = data.next_cursor ?? null;
+      } while (cursor);
+      setTasks(all);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load tasks');
