@@ -59,8 +59,7 @@ const APPS: AppEntry[] = [
     name: 'ChatGPT',
     icon: '⟁',
     hookSupport: 'none',
-    hookNote: 'REST API (no MCP)',
-    apiOnly: true,
+    hookNote: 'Business/Pro/API',
   },
   {
     key: 'cursor',
@@ -256,12 +255,53 @@ export function ConnectApps({ workspaceId }: ConnectAppsProps): JSX.Element {
                       borderTop: '1px solid rgba(255,255,255,0.06)',
                     }}
                   >
-                    {app.apiOnly ? (
+                    {app.key === 'chatgpt' ? (
+                      <div style={{ paddingTop: '14px' }}>
+                        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 12px' }}>
+                          ChatGPT now supports MCP natively. Paste the URL below in your ChatGPT Business admin panel,
+                          ChatGPT Developer Mode, or OpenAI API tools array.
+                        </p>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <a
+                            href="/connect/chatgpt"
+                            target="_blank" rel="noopener noreferrer"
+                            style={{
+                              padding: '6px 14px', borderRadius: '6px',
+                              background: 'rgba(99,102,241,0.15)',
+                              border: '1px solid rgba(99,102,241,0.3)',
+                              color: '#a5b4fc', fontSize: '13px', textDecoration: 'none',
+                            }}
+                          >
+                            Setup guide →
+                          </a>
+                          <button
+                            onClick={() => { void copyText('https://api.theboringpeople.in/mcp/http', 'chatgpt-mcp-url'); }}
+                            style={{
+                              padding: '6px 14px', borderRadius: '6px',
+                              border: '1px solid rgba(255,255,255,0.1)',
+                              background: 'transparent', color: 'var(--text-secondary)',
+                              fontSize: '13px', cursor: 'pointer',
+                            }}
+                          >
+                            {copied === 'chatgpt-mcp-url' ? 'Copied!' : 'Copy MCP URL'}
+                          </button>
+                          <button
+                            onClick={() => { void copyText('https://api.theboringpeople.in/.well-known/ai-plugin.json', 'codex-plugin-url'); }}
+                            style={{
+                              padding: '6px 14px', borderRadius: '6px',
+                              border: '1px solid rgba(255,255,255,0.1)',
+                              background: 'transparent', color: 'var(--text-secondary)',
+                              fontSize: '13px', cursor: 'pointer',
+                            }}
+                          >
+                            {copied === 'codex-plugin-url' ? 'Copied!' : 'Copy Codex plugin URL'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : app.key === 'gemini' ? (
                       <div style={{ paddingTop: '14px' }}>
                         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 10px' }}>
-                          {app.key === 'chatgpt'
-                            ? 'Connect via ChatGPT GPT Actions using your Mnema API key and the OpenAPI spec.'
-                            : 'Connect via Gemini function calling using your Mnema API key.'}
+                          Connect via Gemini function calling using your Mnema API key.
                         </p>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <a
@@ -275,32 +315,17 @@ export function ConnectApps({ workspaceId }: ConnectAppsProps): JSX.Element {
                           >
                             Manage API keys →
                           </a>
-                          {app.key === 'chatgpt' && (
-                            <button
-                              onClick={() => { void copyText('https://mnema.theboringpeople.in/api/public/openapi.json', 'openapi-url'); }}
-                              style={{
-                                padding: '6px 14px', borderRadius: '6px',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                background: 'transparent', color: 'var(--text-secondary)',
-                                fontSize: '13px', cursor: 'pointer',
-                              }}
-                            >
-                              {copied === 'openapi-url' ? 'Copied!' : 'Copy OpenAPI URL'}
-                            </button>
-                          )}
-                          {app.key === 'gemini' && (
-                            <button
-                              onClick={() => { void copyText('https://mnema.theboringpeople.in/api/public/gemini-functions.json', 'gemini-fn-url'); }}
-                              style={{
-                                padding: '6px 14px', borderRadius: '6px',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                background: 'transparent', color: 'var(--text-secondary)',
-                                fontSize: '13px', cursor: 'pointer',
-                              }}
-                            >
-                              {copied === 'gemini-fn-url' ? 'Copied!' : 'Copy function declarations URL'}
-                            </button>
-                          )}
+                          <button
+                            onClick={() => { void copyText('https://mnema.theboringpeople.in/api/public/gemini-functions.json', 'gemini-fn-url'); }}
+                            style={{
+                              padding: '6px 14px', borderRadius: '6px',
+                              border: '1px solid rgba(255,255,255,0.1)',
+                              background: 'transparent', color: 'var(--text-secondary)',
+                              fontSize: '13px', cursor: 'pointer',
+                            }}
+                          >
+                            {copied === 'gemini-fn-url' ? 'Copied!' : 'Copy function declarations URL'}
+                          </button>
                         </div>
                       </div>
                     ) : (
@@ -336,6 +361,26 @@ export function ConnectApps({ workspaceId }: ConnectAppsProps): JSX.Element {
                             >
                               {snippet}
                             </pre>
+                          </div>
+                        )}
+
+                        {/* One-click deep link for Cursor and Windsurf */}
+                        {(app.key === 'cursor' || app.key === 'windsurf') && (
+                          <div>
+                            <p style={{ margin: '0 0 8px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                              One-click install (opens {app.name} and adds Mnema automatically):
+                            </p>
+                            <a
+                              href={`/install/${app.key}`}
+                              style={{
+                                display: 'inline-block', padding: '6px 14px', borderRadius: '6px',
+                                background: 'rgba(99,102,241,0.15)',
+                                border: '1px solid rgba(99,102,241,0.3)',
+                                color: '#a5b4fc', fontSize: '13px', textDecoration: 'none',
+                              }}
+                            >
+                              Connect {app.name} →
+                            </a>
                           </div>
                         )}
 
