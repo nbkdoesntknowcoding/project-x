@@ -15,7 +15,11 @@ export default defineConfig({
   site: process.env.PUBLIC_SITE_URL ?? 'https://mnema.theboringpeople.in',
   // Use @astrojs/vercel when building on Vercel; fall back to standalone
   // Node.js server for local dev and manual builds.
-  adapter: isVercel ? vercel() : node({ mode: 'standalone' }),
+  adapter: isVercel
+    ? vercel({
+        webAnalytics: { enabled: true },
+      })
+    : node({ mode: 'standalone' }),
   integrations: [
     react(),
     sitemap(),

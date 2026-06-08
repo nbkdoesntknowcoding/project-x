@@ -29,6 +29,7 @@
     "@prosemirror-adapter/react": "^0.5.3",
     "@sentry/astro": "^10.53.1",
     "@tailwindcss/vite": "^4.0.0",
+    "@vercel/analytics": "^2.0.1",
     "@workos-inc/node": "^7.0.0",
     "@xyflow/react": "^12.10.2",
     "astro": "^5.0.0",
