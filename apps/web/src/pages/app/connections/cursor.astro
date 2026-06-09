@@ -138,11 +138,11 @@ const statusLabel = liveConnection ? 'Active' : hasToken ? 'Token issued — not
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-direction:column;align-items:flex-end;gap:6px;">
-            {/* One-click — only active after a JWT is generated this session */}
-            <a id="cc-deeplink-btn" href="#" class="cc-btn-pri" style="opacity:0.4;pointer-events:none;cursor:not-allowed;" aria-disabled="true">
+            {/* One-click — enabled after token generated this session */}
+            <button id="cc-deeplink-btn" type="button" class="cc-btn-pri" disabled style="opacity:0.4;cursor:not-allowed;">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
               Open in Cursor
-            </a>
+            </button>
             {!hasToken
               ? <button class="cc-btn-sec" id="cc-connect-btn" type="button">Generate token first</button>
               : <button class="cc-btn-sec" id="cc-add-btn" type="button">
@@ -152,6 +152,11 @@ const statusLabel = liveConnection ? 'Active' : hasToken ? 'Token issued — not
             }
           </div>
         </div>
+        {/* Shown if the cursor:// scheme isn't handled by the browser */}
+        <p id="cc-deeplink-fallback" style="display:none;margin-top:8px;font-size:12.5px;color:var(--ink-muted);">
+          Cursor didn't open? Make sure Cursor is installed and has been launched at least once, then try again. Or copy the config snippet in step 3 below and paste it manually.
+        </p>
+
         <div class="cc-token-box" id="cc-token-box">
           <div class="cc-token-label">Your MCP Bearer token — copy it now</div>
           <div class="cc-token-value" id="cc-token-value"></div>
@@ -310,11 +315,12 @@ const statusLabel = liveConnection ? 'Active' : hasToken ? 'Token issued — not
         const encoded = btoa(cfgStr).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
         const deepBtn = document.getElementById('cc-deeplink-btn');
         if (deepBtn) {
-          deepBtn.href = `cursor://anysphere.cursor-deeplink/mcp/install?name=Mnema&config=${encoded}`;
+          const deepUrl = `cursor://anysphere.cursor-deeplink/mcp/install?name=Mnema&config=${encoded}`;
+          deepBtn.disabled = false;
           deepBtn.style.opacity = '1';
-          deepBtn.style.pointerEvents = 'auto';
           deepBtn.style.cursor = 'pointer';
-          deepBtn.removeAttribute('aria-disabled');
+          // Store URL as data attr; click handler reads it
+          deepBtn.dataset.deeplink = deepUrl;
         }
 
         // Swap label
@@ -333,8 +339,34 @@ const statusLabel = liveConnection ? 'Active' : hasToken ? 'Token issued — not
       document.querySelector(`[data-token-id="${id}"]`)?.remove();
       const list=document.getElementById('cc-token-list'); if(list&&list.children.length===0){const sec=document.getElementById('cc-tokens-section');if(sec)sec.style.display='none';setStatus('inactive');}
     }
-    document.getElementById('cc-connect-btn')?.addEventListener('click',generateToken);
-    document.getElementById('cc-add-btn')?.addEventListener('click',generateToken);
+    // Wire generate buttons — use { once: false } but guard with data-wired to prevent duplicates
+    function wireBtn(id) {
+      const el = document.getElementById(id);
+      if (el && !el.dataset.wired) { el.dataset.wired = '1'; el.addEventListener('click', generateToken); }
+    }
+    wireBtn('cc-connect-btn');
+    wireBtn('cc-add-btn');
+
+    // Deep link button — fires the cursor:// scheme via window.location, shows fallback if not handled
+    const deepBtn = document.getElementById('cc-deeplink-btn');
+    if (deepBtn && !deepBtn.dataset.wired) {
+      deepBtn.dataset.wired = '1';
+      deepBtn.addEventListener('click', () => {
+        const url = deepBtn.dataset.deeplink;
+        if (!url) return;
+        // Try to open via iframe trick (avoids browser blocking user-initiated navigation)
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+        try { iframe.contentWindow.location.href = url; } catch {}
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          // If still on page after 1.5s, the scheme likely didn't launch — show fallback
+          const fb = document.getElementById('cc-deeplink-fallback');
+          if (fb) { fb.style.display = ''; }
+        }, 1500);
+      });
+    }
     document.querySelectorAll('.cc-revoke-btn').forEach(b=>b.addEventListener('click',()=>revokeToken(b.dataset.tokenId)));
     document.getElementById('cc-revoke-all-btn')?.addEventListener('click',async()=>{
       if(!confirm('Revoke ALL tokens? Cursor will lose access immediately.')) return;
