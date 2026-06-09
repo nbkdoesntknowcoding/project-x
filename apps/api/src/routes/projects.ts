@@ -56,20 +56,20 @@ async function uniqueProjectSlug(
 
 const createProjectSchema = z.object({
   name:          z.string().min(1).max(200),
-  description:   z.string().max(2000).optional(),
+  description:   z.string().max(2000).nullable().optional(),
   color:         z.string().max(20).optional(),
   icon:          z.string().max(50).optional(),
-  githubRepoUrl: z.string().url().optional().or(z.literal('')),
-});
+  githubRepoUrl: z.string().url().nullable().optional().or(z.literal('')),
+}).passthrough(); // folderIds and other extra fields are handled separately
 
 const updateProjectSchema = z.object({
   name:          z.string().min(1).max(200).optional(),
-  description:   z.string().max(2000).optional(),
+  description:   z.string().max(2000).nullable().optional(),
   color:         z.string().max(20).optional(),
   icon:          z.string().max(50).optional(),
   status:        z.enum(['active', 'paused', 'completed', 'archived']).optional(),
-  githubRepoUrl: z.string().url().optional().or(z.literal('')),
-});
+  githubRepoUrl: z.string().url().nullable().optional().or(z.literal('')),
+}).passthrough(); // allow extra fields like folderIds to be ignored
 
 // ── task-counts helper (raw SQL for speed) ────────────────────────────────────
 
