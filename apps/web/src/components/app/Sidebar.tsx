@@ -25,6 +25,7 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
   const isOnChatGPT     = currentPath === '/app/connections/chatgpt';
   const isOnCursor      = currentPath === '/app/connections/cursor';
   const isOnWindsurf    = currentPath === '/app/connections/windsurf';
+  const isOnAntigravity = currentPath === '/app/connections/antigravity';
   const isOnAllConns    = currentPath === '/app/settings/connect-apps';
   const isOnNotifications = currentPath.startsWith('/app/notifications');
   const isOnTrash = currentPath.startsWith('/app/trash');
@@ -272,6 +273,18 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
               </svg>
             </span>
             <span className="sb-label">Windsurf</span>
+          </span>
+        </a>
+
+        {/* Antigravity */}
+        <a href="/app/connections/antigravity" className={`sb-row${isOnAntigravity ? ' active' : ''}`}>
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+              </svg>
+            </span>
+            <span className="sb-label">Antigravity</span>
           </span>
         </a>
 
