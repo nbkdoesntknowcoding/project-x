@@ -18,6 +18,9 @@ import { REMOVE_FLOW_NODE_TOOL, removeFlowNode } from './remove-flow-node.js';
 import { RENAME_FOLDER_TOOL, renameFolder } from './rename-folder.js';
 import { SEARCH_DOCS_TOOL, searchDocs } from './search-docs.js';
 import { UPDATE_FLOW_NODE_TOOL, updateFlowNode } from './update-flow-node.js';
+// Sprint 4 Chunk E — project tools (both workspace modes)
+import { GET_PROJECT_TOOL, getProject } from './get-project.js';
+import { LIST_PROJECTS_TOOL, listProjects } from './list-projects.js';
 
 /**
  * The production tool catalog. The MCP server reads this on each request
@@ -93,6 +96,9 @@ export const PRODUCTION_TOOLS: readonly ToolDescriptor[] = [
   { spec: REMOVE_FLOW_EDGE_TOOL, handler: removeFlowEdge },
   // Phase 9.5: notify_members — sends in-app notifications to workspace members.
   { spec: NOTIFY_MEMBERS_TOOL, handler: notifyMembers },
+  // Sprint 4 E.1-E.2: project tools — available in both workspace modes.
+  { spec: LIST_PROJECTS_TOOL, handler: listProjects },
+  { spec: GET_PROJECT_TOOL, handler: getProject },
 ];
 
 export function listToolSpecs(): McpToolSpec[] {

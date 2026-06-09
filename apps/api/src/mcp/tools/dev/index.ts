@@ -50,6 +50,10 @@ export const GET_NEXT_TASK_TOOL = {
         type: 'string',
         description: 'Column to pull from: "backlog" (default) or "audit_fix".',
       },
+      project: {
+        type: 'string',
+        description: 'Optional project slug or UUID to filter tasks by project.',
+      },
     },
     additionalProperties: false,
   },
@@ -131,6 +135,7 @@ export const LIST_PROJECT_TASKS_TOOL = {
       status:   { type: 'string', description: 'Filter by status: backlog, in_progress, review, audit_fix, done.' },
       priority: { type: 'string', description: 'Filter by priority: low, medium, high, critical.' },
       limit:    { type: 'number', description: 'Max tasks to return (default: 20, max: 100).' },
+      project:  { type: 'string', description: 'Optional project slug or UUID to filter tasks by project.' },
     },
     additionalProperties: false,
   },
@@ -179,6 +184,7 @@ const listTasksArgs = z.object({
   status:   z.string().optional(),
   priority: z.string().optional(),
   limit:    z.number().int().min(1).max(100).optional(),
+  project:  z.string().optional(),
 });
 
 const getSkillFilesArgs = z.object({
@@ -189,8 +195,6 @@ const getSkillFilesArgs = z.object({
 // D.1: get_next_task
 // ──────────────────────────────────────────────────────────────────────────────
 export async function getNextTask(ctx: McpAuthContext, rawArgs: Record<string, unknown>) {
-  if (ctx.workspaceMode !== 'dev_project') return devModeError();
-
   const statusFilter = typeof rawArgs.status === 'string' ? rawArgs.status : 'backlog';
   if (statusFilter !== 'backlog' && statusFilter !== 'audit_fix') {
     return {
@@ -199,18 +203,40 @@ export async function getNextTask(ctx: McpAuthContext, rawArgs: Record<string, u
     };
   }
 
+  // Resolve optional project filter (slug or UUID)
+  let projectId: string | null = null;
+  if (typeof rawArgs.project === 'string' && rawArgs.project.trim()) {
+    const { projects } = await import('../../../db/schema.js');
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const identifier = rawArgs.project.trim();
+    const proj = await db.query.projects.findFirst({
+      where: and(
+        eq(projects.workspaceId, ctx.tenant_id),
+        UUID_RE.test(identifier) ? eq(projects.id, identifier) : eq(projects.slug, identifier),
+      ),
+    });
+    if (!proj) {
+      return { content: `No project found matching "${identifier}".`, structuredContent: { task: null } };
+    }
+    projectId = proj.id;
+  }
+
+  const filters = [eq(tasks.workspaceId, ctx.tenant_id), eq(tasks.status, statusFilter)];
+  if (projectId) filters.push(eq(tasks.projectId, projectId));
+
   const taskRows = await withTenant(ctx.tenant_id, async (tx) =>
     tx
       .select()
       .from(tasks)
-      .where(and(eq(tasks.workspaceId, ctx.tenant_id), eq(tasks.status, statusFilter)))
+      .where(and(...filters))
       .orderBy(asc(tasks.boardOrder))
-      .limit(20), // fetch up to 20, then sort by priority client-side
+      .limit(20),
   );
 
   if (taskRows.length === 0) {
+    const projectNote = projectId ? ` in project filter` : '';
     return {
-      content: `No tasks found in ${statusFilter} column.`,
+      content: `No tasks found in ${statusFilter} column${projectNote}.`,
       structuredContent: { task: null, linkedDoc: null },
     };
   }
@@ -461,8 +487,6 @@ export async function logBlocker(ctx: McpAuthContext, rawArgs: Record<string, un
 // D.5: list_project_tasks
 // ──────────────────────────────────────────────────────────────────────────────
 export async function listProjectTasks(ctx: McpAuthContext, rawArgs: Record<string, unknown>) {
-  if (ctx.workspaceMode !== 'dev_project') return devModeError();
-
   const args = listTasksArgs.safeParse(rawArgs);
   if (!args.success) {
     return { content: `Invalid arguments: ${args.error.message}`, structuredContent: { error: 'invalid_args' } };
@@ -473,6 +497,23 @@ export async function listProjectTasks(ctx: McpAuthContext, rawArgs: Record<stri
   const filters: ReturnType<typeof eq>[] = [eq(tasks.workspaceId, ctx.tenant_id)];
   if (args.data.status)   filters.push(eq(tasks.status, args.data.status));
   if (args.data.priority) filters.push(eq(tasks.priority, args.data.priority));
+
+  // Optional project filter
+  if (args.data.project) {
+    const { projects } = await import('../../../db/schema.js');
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const identifier = args.data.project.trim();
+    const proj = await db.query.projects.findFirst({
+      where: and(
+        eq(projects.workspaceId, ctx.tenant_id),
+        UUID_RE.test(identifier) ? eq(projects.id, identifier) : eq(projects.slug, identifier),
+      ),
+    });
+    if (!proj) {
+      return { content: `No project found matching "${identifier}".`, structuredContent: { tasks: [], total: 0, filtered: true } };
+    }
+    filters.push(eq(tasks.projectId, proj.id));
+  }
 
   const taskRows = await withTenant(ctx.tenant_id, async (tx) =>
     tx
