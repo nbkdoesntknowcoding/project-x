@@ -3,7 +3,6 @@ import BaseLayout from './BaseLayout.astro';
 import { Sidebar } from '../components/app/Sidebar';
 import { NotificationBell } from '../components/app/NotificationBell';
 import { WorkspaceSwitcher } from '../components/nav/WorkspaceSwitcher';
-import { CommandPalette } from '../components/nav/CommandPalette';
 import { DevSearch } from '../components/dev/DevSearch';
 import { WorkspaceModeToggle } from '../components/app/WorkspaceModeToggle';
 
@@ -270,9 +269,6 @@ if (auth) {
     {workspaceMode === 'dev_project' && (
       <DevSearch workspaceMode={workspaceMode} client:load />
     )}
-
-    <!-- COMMAND PALETTE (⌘K) -->
-    <CommandPalette client:load />
 
     <!-- STATUS BAR -->
     <footer class="ap-statusbar">
