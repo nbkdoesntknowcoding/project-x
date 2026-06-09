@@ -259,19 +259,9 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
 
   // ── Phase 10: model-visible propose_* tools (["model"]) ────────────────────
   // Shared registration helper for propose_* tools (open the write-preview UI).
-  //
-  // Claude Desktop: resourceUri triggers the native write-preview panel.
-  // All other clients (Cursor, Windsurf, API, etc.): no panel support —
-  // return plain text with the proposal content + confirm instructions.
-  const isClaudeDesktop = (): boolean => {
-    try {
-      const v = mcpServer.server.getClientVersion();
-      return typeof v?.name === 'string' && v.name.toLowerCase().includes('claude');
-    } catch {
-      return false;
-    }
-  };
-
+  // The preview panel works in both Claude Desktop and Cursor/Windsurf —
+  // Cursor loads the panel HTML via the ext-apps resourceUri, which now uses
+  // a data: URL fallback so VSCode webview CSP doesn't block it.
   const registerProposeTool = (
     name: string,
     spec: { description: string; inputSchema: object; annotations?: Record<string, unknown> },
@@ -280,22 +270,14 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
       a: Record<string, unknown>,
     ) => Promise<{ content: string; structuredContent: Record<string, unknown>; error?: string; message?: string }>,
   ) => {
-    // Only Claude Desktop can render the native preview panel.
-    // For all other clients omit resourceUri so the model handles approval inline.
-    const claudeDesktop = isClaudeDesktop();
-
-    // registerAppTool always reads _meta.ui so _meta must always be present.
-    // For Claude Desktop we set resourceUri so the native preview panel opens.
-    // For all other clients we omit resourceUri — no panel, inline approval flow.
+    // registerAppTool unconditionally reads _meta.ui — must always be present.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const toolConfig: any = {
       description: spec.description,
       inputSchema: jsonSchemaToZodShape(spec.inputSchema),
       annotations: spec.annotations,
       _meta: {
-        ui: claudeDesktop
-          ? { resourceUri: WRITE_PREVIEW_RESOURCE_URI, visibility: ['model'] }
-          : {},
+        ui: { resourceUri: WRITE_PREVIEW_RESOURCE_URI, visibility: ['model'] },
       },
     };
 
@@ -311,19 +293,11 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
             return {
               isError: true,
               content: [{ type: 'text' as const, text: result.message ?? result.error }],
-              // Always include structuredContent — panel won't open without it.
               structuredContent: { error: result.error, message: result.message ?? result.error },
             };
           }
-
-          // Non-Claude-Desktop clients: prepend approval instructions so the
-          // model shows the diff inline and asks the user before committing.
-          const textContent = isClaudeDesktop()
-            ? result.content
-            : `${result.content}\n\n---\n**⬆ Show the above proposal to the user and ask: "Approve this change?"**\nIf they say yes, call \`confirm_doc_write\` with the proposal_token from structuredContent. Do NOT commit without explicit approval.`;
-
           return {
-            content: [{ type: 'text' as const, text: textContent }],
+            content: [{ type: 'text' as const, text: result.content }],
             structuredContent: result.structuredContent,
           };
         } catch (err) {

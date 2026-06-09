@@ -600,16 +600,34 @@ function diag(msg, color) {
 
 function main() {
   var root = document.getElementById('root');
+  var sdk  = window.__sdk;
+  if (!sdk) { diag('SDK missing', '#FF7A8A'); showError(root, 'SDK not found.'); return; }
   diag('Loading SDK…');
 
-  var blob = new Blob([window.__sdk], { type: 'text/javascript' });
-  var url  = URL.createObjectURL(blob);
-  import(url).then(function(mod) {
-    URL.revokeObjectURL(url);
-    diag('SDK loaded. Connecting…');
+  // Try data: URL first (works in Cursor/VSCode webview whose CSP blocks blob:).
+  // Fall back to blob: (works in Claude Desktop Electron).
+  var dataUrl = 'data:text/javascript;charset=utf-8,' + encodeURIComponent(sdk);
 
-    var App = mod.App;
-    var PostMessageTransport = mod.PostMessageTransport;
+  import(dataUrl).then(function(mod) {
+    diag('SDK loaded (data:). Connecting…');
+    startApp(mod.App, mod.PostMessageTransport, root);
+  }).catch(function() {
+    // data: blocked too — try blob: (Claude Desktop path)
+    var blob = new Blob([sdk], { type: 'text/javascript' });
+    var blobUrl = URL.createObjectURL(blob);
+    import(blobUrl).then(function(mod) {
+      URL.revokeObjectURL(blobUrl);
+      diag('SDK loaded (blob:). Connecting…');
+      startApp(mod.App, mod.PostMessageTransport, root);
+    }).catch(function(err) {
+      diag('Connect failed: ' + String(err), '#FF7A8A');
+      showError(root, 'Failed to connect: ' + String(err));
+    });
+  });
+}
+
+function startApp(App, PostMessageTransport, root) {
+  diag('Connecting…');
 
     var app = new App({ name: 'mnema-write-preview', version: '1.0.0' }, {}, { autoResize: true });
 
@@ -704,13 +722,13 @@ function main() {
       }
     };
 
-    return app.connect(new PostMessageTransport(window.parent, window.parent));
-  }).then(function() {
-    diag('Connected — awaiting tool result…', '#6BE39B');
-  }).catch(function(err) {
-    diag('Connect failed: ' + String(err), '#FF7A8A');
-    showError(document.getElementById('root'), 'Failed to connect: ' + String(err));
-  });
+  app.connect(new PostMessageTransport(window.parent, window.parent))
+    .then(function() {
+      diag('Connected — awaiting tool result…', '#6BE39B');
+    }).catch(function(err) {
+      diag('Connect failed: ' + String(err), '#FF7A8A');
+      showError(root, 'Failed to connect: ' + String(err));
+    });
 }
 
 main();
