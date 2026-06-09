@@ -153,6 +153,38 @@ export const invitations = pgTable(
 // parent_id → parent_folder_id for consistency with the MCP API surface.
 // The DB column remains `parent_id` for backwards compatibility; the
 // TypeScript field is parentFolderId.
+// ── Projects (Chunk C — MCP Universal Compatibility + Project Management) ─────
+// A project is a named initiative with its own folder structure and task board.
+// Available in BOTH knowledge and dev_project workspace modes.
+// project_id is nullable on tasks and folders — existing workspaces without
+// projects continue to work exactly as before.
+export const projects = pgTable(
+  'projects',
+  {
+    id:           uuid('id').primaryKey().defaultRandom(),
+    workspaceId:  uuid('workspace_id').notNull()
+                  .references(() => workspaces.id, { onDelete: 'cascade' }),
+    name:         text('name').notNull(),
+    slug:         text('slug').notNull(),
+    // Auto-generated: lowercase + hyphens, e.g. "BOPPL Context Engine" → "boppl-context-engine"
+    description:  text('description'),
+    color:        text('color').notNull().default('#52525b'),
+    // Lucide icon name: 'folder'|'code'|'rocket'|'brain'|'bolt'|'layers'
+    icon:         text('icon').notNull().default('folder'),
+    githubRepoUrl: text('github_repo_url'),
+    status:       text('status').notNull().default('active'),
+    // Values: 'active' | 'paused' | 'completed' | 'archived'
+    boardOrder:   integer('board_order').notNull().default(0),
+    createdBy:    uuid('created_by').references(() => workspaceMembers.userId, { onDelete: 'set null' }),
+    createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:    timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    slugWorkspaceUniq: unique('projects_slug_workspace_idx').on(table.slug, table.workspaceId),
+    workspaceIdx:      index('projects_workspace_idx').on(table.workspaceId),
+  }),
+);
+
 export const folders = pgTable(
   'folders',
   {
@@ -160,6 +192,8 @@ export const folders = pgTable(
     workspaceId: uuid('workspace_id')
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // Nullable FK to projects — null means the folder is not part of a project.
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     // Self-referential FK for nested folders. Null = root folder.
     // FK constraint lives in the DB (migration 0009/0012); Drizzle doesn't
@@ -174,7 +208,8 @@ export const folders = pgTable(
   },
   (table) => ({
     workspaceIdx: index('folders_workspace_idx').on(table.workspaceId),
-    parentIdx: index('folders_parent_idx').on(table.parentFolderId),
+    parentIdx:    index('folders_parent_idx').on(table.parentFolderId),
+    projectIdx:   index('folders_project_idx').on(table.projectId),
   }),
 );
 
@@ -763,6 +798,9 @@ export const tasks = pgTable(
     tags:               text('tags').array(),
     // Simple string array, no separate tags table for Phase 1
 
+    // Nullable FK to projects — tasks can exist without a project.
+    projectId:          uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+
     createdAt:          timestamp('created_at').notNull().defaultNow(),
     updatedAt:          timestamp('updated_at').notNull().defaultNow(),
     completedAt:        timestamp('completed_at'),
@@ -771,6 +809,7 @@ export const tasks = pgTable(
     workspaceIdx: index('tasks_workspace_id_idx').on(table.workspaceId),
     statusIdx:    index('tasks_status_idx').on(table.status),
     orderIdx:     index('tasks_board_order_idx').on(table.boardOrder),
+    projectIdx:   index('tasks_project_idx').on(table.projectId),
   }),
 );
 

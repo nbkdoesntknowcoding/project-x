@@ -155,6 +155,32 @@ export const foldersRoutes: FastifyPluginAsync = async (app) => {
     return { folder: { id: updated.id, name: updated.name } };
   });
 
+  // Link / unlink a folder to/from a project
+  // PATCH /api/folders/:id/project  { project_id: "<uuid>" | null }
+  app.patch<{ Params: { id: string } }>('/api/folders/:id/project', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params;
+    if (!isUuid(id)) return reply.code(400).send({ error: 'bad_id' });
+
+    const body = req.body as { project_id?: string | null };
+    const projectId = body.project_id ?? null;
+    if (projectId !== null && !isUuid(projectId)) {
+      return reply.code(400).send({ error: 'bad_project_id' });
+    }
+
+    const updated = await withTenant(req.auth.tenant_id, async (tx) => {
+      const rows = await tx
+        .update(folders)
+        .set({ projectId, updatedAt: new Date() })
+        .where(and(eq(folders.id, id), eq(folders.workspaceId, req.auth!.tenant_id)))
+        .returning();
+      return rows[0];
+    });
+
+    if (!updated) return reply.code(404).send({ error: 'not_found' });
+    return reply.send({ folder: { id: updated.id, name: updated.name, projectId: updated.projectId } });
+  });
+
   // Delete a folder (docs inside become unfiled; subfolders become root)
   app.delete<{ Params: { id: string } }>('/api/folders/:id', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });

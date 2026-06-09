@@ -34,6 +34,7 @@ const createTaskSchema = z.object({
   estimatedCostUsd: z.number().nonnegative().optional(),
   tags:             z.array(z.string().max(50)).max(20).optional(),
   docId:            z.string().uuid().optional(),
+  projectId:        z.string().uuid().optional().nullable(),
 });
 
 const updateTaskSchema = z.object({
@@ -45,6 +46,7 @@ const updateTaskSchema = z.object({
   githubPrUrl:      z.string().url().optional().nullable(),
   assignedMemberId: z.string().uuid().optional().nullable(),
   docId:            z.string().uuid().optional().nullable(),
+  projectId:        z.string().uuid().optional().nullable(),
   // Status changes are NOT allowed via PATCH — use dedicated transition endpoints
 });
 
@@ -158,6 +160,7 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
           estimatedCostUsd: parsed.data.estimatedCostUsd ?? null,
           tags:             parsed.data.tags ?? null,
           docId:            parsed.data.docId ?? null,
+          projectId:        parsed.data.projectId ?? null,
           status:           'backlog',
           boardOrder,
         })
@@ -204,6 +207,7 @@ export const tasksRoutes: FastifyPluginAsync = async (app) => {
     if ('githubPrUrl' in parsed.data)               updates.githubPrUrl = parsed.data.githubPrUrl ?? null;
     if ('assignedMemberId' in parsed.data)          updates.assignedMemberId = parsed.data.assignedMemberId ?? null;
     if ('docId' in parsed.data)                     updates.docId = parsed.data.docId ?? null;
+    if ('projectId' in parsed.data)                 updates.projectId = parsed.data.projectId ?? null;
 
     if (Object.keys(updates).length === 0) {
       return reply.code(400).send({ error: 'nothing_to_update' });
