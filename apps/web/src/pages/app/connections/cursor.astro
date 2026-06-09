@@ -281,33 +281,51 @@ const statusLabel = liveConnection ? 'Active' : hasToken ? 'Token issued — not
       list.appendChild(row); row.querySelector('.cc-revoke-btn')?.addEventListener('click',()=>revokeToken(token.id));
     }
     async function generateToken() {
-      const btn=document.getElementById('cc-connect-btn')??document.getElementById('cc-add-btn');
-      const box=document.getElementById('cc-token-box'); const val=document.getElementById('cc-token-value'); const err=document.getElementById('cc-err');
-      if(btn){btn.disabled=true;btn.textContent='Generating…';} if(err) err.classList.remove('visible');
-      try {
-        const res=await fetch(`${API}/api/mcp-tokens`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Cursor',requested_scopes:['docs:read','workspace:write']})});
-        if(!res.ok) throw new Error();
-        const data=await res.json();
-        if(val) val.textContent=data.jwt; if(box) box.classList.add('visible');
+      const btn = document.getElementById('cc-connect-btn') ?? document.getElementById('cc-add-btn');
+      const box = document.getElementById('cc-token-box');
+      const val = document.getElementById('cc-token-value');
+      const err = document.getElementById('cc-err');
+      const originalLabel = btn ? btn.textContent : '';
 
-        // ── Activate the one-click deep link with the real JWT ──
-        const jwt=data.jwt;
-        const configObj={type:'sse',url:`${mcpEndpoint}?token=${encodeURIComponent(jwt)}`};
-        const encoded=btoa(JSON.stringify(configObj)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-        const deepLinkBtn=document.getElementById('cc-deeplink-btn');
-        if(deepLinkBtn){
-          deepLinkBtn.href=`cursor://anysphere.cursor-deeplink/mcp/install?name=Mnema&config=${encoded}`;
-          deepLinkBtn.style.opacity='1'; deepLinkBtn.style.pointerEvents=''; deepLinkBtn.style.cursor='pointer';
-          deepLinkBtn.removeAttribute('aria-disabled');
+      if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+      if (err) err.classList.remove('visible');
+
+      try {
+        const res = await fetch('/api/mcp-tokens', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Cursor', requested_scopes: ['docs:read', 'workspace:write'] }),
+        });
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const data = await res.json();
+
+        // Show token
+        if (val) val.textContent = data.jwt;
+        if (box) box.classList.add('visible');
+
+        // Activate one-click deep link with real JWT
+        const jwt = data.jwt;
+        const cfgStr = JSON.stringify({ type: 'sse', url: `${mcpEndpoint}?token=${encodeURIComponent(jwt)}` });
+        const encoded = btoa(cfgStr).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const deepBtn = document.getElementById('cc-deeplink-btn');
+        if (deepBtn) {
+          deepBtn.href = `cursor://anysphere.cursor-deeplink/mcp/install?name=Mnema&config=${encoded}`;
+          deepBtn.style.opacity = '1';
+          deepBtn.style.pointerEvents = 'auto';
+          deepBtn.style.cursor = 'pointer';
+          deepBtn.removeAttribute('aria-disabled');
         }
 
-        // Swap "Generate token first" → "New token"
-        const connectBtn=document.getElementById('cc-connect-btn');
-        if(connectBtn){connectBtn.id='cc-add-btn';connectBtn.textContent='New token';connectBtn.disabled=false;}
-
-        addTokenRow(data.token); setStatus('pending');
-      } catch { if(err) err.classList.add('visible'); }
-      finally { const b=document.getElementById('cc-connect-btn')??document.getElementById('cc-add-btn'); if(b&&!b.disabled){}else if(b){b.disabled=false;} }
+        // Swap label
+        if (btn) { btn.id = 'cc-add-btn'; btn.textContent = 'New token'; btn.disabled = false; }
+        addTokenRow(data.token);
+        setStatus('pending');
+      } catch (e) {
+        if (err) { err.textContent = `Failed to generate token — ${e.message ?? 'check API is running'}`; err.classList.add('visible'); }
+        // Always re-enable the button so the user can retry
+        if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+      }
     }
     async function revokeToken(id) {
       if(!confirm('Revoke this token?')) return;
