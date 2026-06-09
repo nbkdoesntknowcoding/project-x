@@ -363,7 +363,14 @@ export function ProjectsPage(): JSX.Element {
             const docsHref = firstFolder ? `/app/content?folder=${firstFolder.id}` : '/app/content';
 
             return (
-              <div key={p.id} style={{ ...glassCard, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 11 }}>
+              <div key={p.id}
+                onClick={(e) => {
+                  // Don't navigate if user clicked a link/button inside the card
+                  if ((e.target as HTMLElement).closest('a, button')) return;
+                  window.location.href = docsHref;
+                }}
+                style={{ ...glassCard, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 11, cursor: 'pointer' }}
+              >
 
                 {/* Header: icon + color dot + name + menu */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
