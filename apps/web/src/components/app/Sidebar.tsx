@@ -20,8 +20,12 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
   const isOnContent =
     currentPath === '/app/content' || currentPath.startsWith('/app/content');
   const isOnFlows = currentPath.startsWith('/app/flows');
-  const isOnClaude = currentPath === '/app/connections/claude';
-  const isOnDrive = currentPath === '/app/connections/drive';
+  const isOnClaude      = currentPath === '/app/connections/claude';
+  const isOnDrive       = currentPath === '/app/connections/drive';
+  const isOnChatGPT     = currentPath === '/app/connections/chatgpt';
+  const isOnCursor      = currentPath === '/app/connections/cursor';
+  const isOnWindsurf    = currentPath === '/app/connections/windsurf';
+  const isOnAllConns    = currentPath === '/app/settings/connect-apps';
   const isOnNotifications = currentPath.startsWith('/app/notifications');
   const isOnTrash = currentPath.startsWith('/app/trash');
   const isOnProjects  = currentPath.startsWith('/app/projects');
@@ -214,26 +218,65 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
 
       {/* ── CONNECTIONS ──────────────────────────── */}
       <div className="sb-section">
-        <div className="sb-section-head"><span>Connections</span></div>
+        <div className="sb-section-head">
+          <span>Connections</span>
+          <a href="/app/settings/connect-apps" className="sb-section-action" title="All connections">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </a>
+        </div>
 
-        <a
-          href="/app/connections/claude"
-          className={`sb-row${isOnClaude ? ' active' : ''}`}
-        >
+        {/* Claude Desktop */}
+        <a href="/app/connections/claude" className={`sb-row${isOnClaude ? ' active' : ''}`}>
           <span className="sb-l">
             <span className="sb-icon">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/>
               </svg>
             </span>
-            <span className="sb-label">Claude</span>
+            <span className="sb-label">Claude Desktop</span>
           </span>
         </a>
 
-        <a
-          href="/app/connections/drive"
-          className={`sb-row${isOnDrive ? ' active' : ''}`}
-        >
+        {/* ChatGPT */}
+        <a href="/app/connections/chatgpt" className={`sb-row${isOnChatGPT ? ' active' : ''}`}>
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </span>
+            <span className="sb-label">ChatGPT</span>
+          </span>
+        </a>
+
+        {/* Cursor */}
+        <a href="/app/connections/cursor" className={`sb-row${isOnCursor ? ' active' : ''}`}>
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+              </svg>
+            </span>
+            <span className="sb-label">Cursor</span>
+          </span>
+        </a>
+
+        {/* Windsurf */}
+        <a href="/app/connections/windsurf" className={`sb-row${isOnWindsurf ? ' active' : ''}`}>
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+              </svg>
+            </span>
+            <span className="sb-label">Windsurf</span>
+          </span>
+        </a>
+
+        {/* Google Drive */}
+        <a href="/app/connections/drive" className={`sb-row${isOnDrive ? ' active' : ''}`}>
           <span className="sb-l">
             <span className="sb-icon">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

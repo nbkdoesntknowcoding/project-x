@@ -26,6 +26,21 @@
   color: var(--ink-muted);
 }
 
+.sb-section-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--ink-muted);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+.sb-section-head:hover .sb-section-action { opacity: 1; }
+.sb-section-action:hover { background: var(--surface-3); color: var(--ink); }
+
 .sb-row {
   display: flex;
   align-items: center;

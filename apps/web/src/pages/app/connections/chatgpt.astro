@@ -1,0 +1,117 @@
+---
+import AppLayout from '../../../layouts/AppLayout.astro';
+
+const auth = Astro.locals.auth;
+if (!auth) return Astro.redirect('/auth/login');
+
+const mcpHttpUrl = 'https://api.theboringpeople.in/mcp/http';
+const codexPluginUrl = 'https://api.theboringpeople.in/.well-known/ai-plugin.json';
+
+// Get an API key for the user
+const apiUrl = (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+type TokenRow = { id: string; name: string; scopes: string[]; created_at: string };
+let tokens: TokenRow[] = [];
+try {
+  const res = await fetch(`${apiUrl}/api/mcp-tokens`, { headers: { Cookie: `boppl_jwt=${auth.jwt}` } });
+  if (res.ok) tokens = ((await res.json()) as { tokens: TokenRow[] }).tokens ?? [];
+} catch { /* offline */ }
+const firstKey = tokens[0];
+---
+
+<AppLayout title="ChatGPT Connection">
+  <style is:global>
+    .cgpt-wrap { max-width: 680px; margin: 0 auto; padding: 40px 32px 80px; font-family: var(--sans); }
+    .cgpt-pre  { font: 500 11px/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); margin: 0 0 12px; }
+    .cgpt-h1   { margin: 0 0 6px; font: 500 28px/1.15 var(--sans); letter-spacing: -0.02em; color: var(--ink); }
+    .cgpt-sub  { margin: 0 0 36px; font-size: 14px; color: var(--ink-soft); }
+    .cgpt-card { background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; padding: 20px 22px; margin-bottom: 16px; }
+    .cgpt-card h3 { margin: 0 0 4px; font: 600 14px/1 var(--sans); color: var(--ink); }
+    .cgpt-card p  { margin: 0 0 14px; font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+    .cgpt-steps { margin: 0 0 14px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .cgpt-steps li { display: flex; align-items: baseline; gap: 10px; font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+    .cgpt-steps li span.n { font: 600 11px/1 var(--mono); color: var(--ink-muted); width: 16px; flex-shrink: 0; }
+    .cgpt-url  { display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; }
+    .cgpt-url code { flex: 1; font: 500 12.5px/1 var(--mono); color: var(--ink); word-break: break-all; }
+    .cgpt-copy { flex-shrink: 0; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line-strong); background: transparent; color: var(--ink-soft); font: 500 12px var(--sans); cursor: pointer; }
+    .cgpt-copy:hover { background: var(--surface-3); color: var(--ink); }
+    .cgpt-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 4px; font: 500 10px/1 var(--mono); letter-spacing: 0.05em; }
+    .cgpt-badge.new { background: rgba(107,227,155,0.12); color: var(--status-sync); border: 1px solid rgba(107,227,155,0.28); }
+    .cgpt-badge.pro { background: rgba(124,156,255,0.12); color: var(--status-info); border: 1px solid rgba(124,156,255,0.28); }
+    .cgpt-divider { height: 1px; background: var(--line); margin: 28px 0; }
+  </style>
+
+  <div class="cgpt-wrap">
+    <p class="cgpt-pre">Connections</p>
+    <h1 class="cgpt-h1">ChatGPT</h1>
+    <p class="cgpt-sub">Connect Mnema to ChatGPT Business, Pro/Plus Developer Mode, or the OpenAI API via native MCP.</p>
+
+    <!-- ChatGPT Business / Enterprise -->
+    <div class="cgpt-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <h3>ChatGPT Business / Enterprise</h3>
+        <span class="cgpt-badge new">ADMIN</span>
+      </div>
+      <p>Go to <strong>admin.openai.com → Connectors → Add custom</strong>, paste the URL below and add your Bearer token.</p>
+      <ol class="cgpt-steps">
+        <li><span class="n">1</span>Open admin.openai.com → Connectors → Add custom connector</li>
+        <li><span class="n">2</span>Paste the MCP HTTP URL below</li>
+        <li><span class="n">3</span>Set authentication to Bearer and paste your Mnema API key</li>
+      </ol>
+      <div class="cgpt-url">
+        <code id="cgpt-url-biz">{mcpHttpUrl}</code>
+        <button class="cgpt-copy" onclick={`navigator.clipboard.writeText('${mcpHttpUrl}').then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)})`}>Copy</button>
+      </div>
+    </div>
+
+    <!-- ChatGPT Pro/Plus Developer Mode -->
+    <div class="cgpt-card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <h3>ChatGPT Pro / Plus</h3>
+        <span class="cgpt-badge pro">DEVELOPER MODE</span>
+      </div>
+      <p>Enable Developer Mode in ChatGPT settings, then add Mnema as a custom MCP server.</p>
+      <ol class="cgpt-steps">
+        <li><span class="n">1</span>ChatGPT → Settings → Beta features → Enable Developer Mode</li>
+        <li><span class="n">2</span>In the chat, click the tools icon → Add MCP server</li>
+        <li><span class="n">3</span>Paste the URL below and your Mnema API key as the Bearer token</li>
+      </ol>
+      <div class="cgpt-url">
+        <code>{mcpHttpUrl}</code>
+        <button class="cgpt-copy" onclick={`navigator.clipboard.writeText('${mcpHttpUrl}').then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)})`}>Copy</button>
+      </div>
+    </div>
+
+    <!-- OpenAI API -->
+    <div class="cgpt-card">
+      <h3 style="margin-bottom:8px;">OpenAI API (code)</h3>
+      <p>Add Mnema as a native MCP tool in your API calls.</p>
+      <div class="cgpt-url" style="flex-direction:column;align-items:flex-start;">
+        <code style="white-space:pre;font-size:12px;line-height:1.6;">{`{
+  "type": "mcp",
+  "server_label": "mnema",
+  "server_url": "${mcpHttpUrl}",
+  "headers": { "Authorization": "Bearer YOUR_MNEMA_API_KEY" }
+}`}</code>
+        <button class="cgpt-copy" style="margin-top:8px;" onclick={`navigator.clipboard.writeText(JSON.stringify({"type":"mcp","server_label":"mnema","server_url":"${mcpHttpUrl}","headers":{"Authorization":"Bearer YOUR_MNEMA_API_KEY"}},null,2)).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy snippet',1500)})`}>Copy snippet</button>
+      </div>
+    </div>
+
+    <!-- Codex plugin -->
+    <div class="cgpt-card">
+      <h3 style="margin-bottom:8px;">OpenAI Codex</h3>
+      <p>Register Mnema as a Codex plugin using the manifest URL below.</p>
+      <div class="cgpt-url">
+        <code>{codexPluginUrl}</code>
+        <button class="cgpt-copy" onclick={`navigator.clipboard.writeText('${codexPluginUrl}').then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',1500)})`}>Copy</button>
+      </div>
+    </div>
+
+    {firstKey && (
+      <div class="cgpt-divider" />
+      <p style="font-size:13px;color:var(--ink-muted);">
+        Your API key: <code style="font:500 12px var(--mono);color:var(--ink);background:var(--surface-2);padding:2px 7px;border-radius:5px;">{firstKey.name}</code> — 
+        <a href="/app/settings/api-keys" style="color:var(--accent);">manage keys →</a>
+      </p>
+    )}
+  </div>
+</AppLayout>
