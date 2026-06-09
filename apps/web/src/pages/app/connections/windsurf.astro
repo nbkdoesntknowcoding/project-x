@@ -23,8 +23,6 @@ const liveConnection = tokens.some(t => t.last_used_at && (Date.now() - new Date
 const hasToken = tokens.length > 0;
 const statusLabel = liveConnection ? 'Active' : hasToken ? 'Token issued — not connected' : 'Not connected';
 
-const firstTokenId = tokens[0]?.id ?? '';
-const deepLinkHref = firstTokenId ? `/install/windsurf?workspaceToken=${firstTokenId}` : '/install/windsurf';
 ---
 
 <style>
@@ -286,6 +284,20 @@ const deepLinkHref = firstTokenId ? `/install/windsurf?workspaceToken=${firstTok
         if(!res.ok) throw new Error();
         const data=await res.json();
         if(val) val.textContent=data.jwt; if(box) box.classList.add('visible');
+
+        // Activate one-click deep link with real JWT
+        const jwt=data.jwt;
+        const configObj={type:'sse',url:`${mcpEndpoint}?token=${encodeURIComponent(jwt)}`};
+        const encoded=btoa(JSON.stringify(configObj)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+        const deepLinkBtn=document.getElementById('cc-deeplink-btn');
+        if(deepLinkBtn){
+          deepLinkBtn.href=`windsurf://codeium.windsurf-deeplink/mcp/install?name=Mnema&config=${encoded}`;
+          deepLinkBtn.style.opacity='1'; deepLinkBtn.style.pointerEvents=''; deepLinkBtn.style.cursor='pointer';
+          deepLinkBtn.removeAttribute('aria-disabled');
+        }
+        const connectBtn=document.getElementById('cc-connect-btn');
+        if(connectBtn){connectBtn.id='cc-add-btn';connectBtn.textContent='New token';connectBtn.disabled=false;}
+
         addTokenRow(data.token); setStatus('pending');
       } catch { if(err) err.classList.add('visible'); }
       finally { if(btn){btn.disabled=false;btn.textContent='New token';} }
@@ -296,6 +308,7 @@ const deepLinkHref = firstTokenId ? `/install/windsurf?workspaceToken=${firstTok
       document.querySelector(`[data-token-id="${id}"]`)?.remove();
       const list=document.getElementById('cc-token-list'); if(list&&list.children.length===0){const sec=document.getElementById('cc-tokens-section');if(sec)sec.style.display='none';setStatus('inactive');}
     }
+    document.getElementById('cc-connect-btn')?.addEventListener('click',generateToken);
     document.getElementById('cc-add-btn')?.addEventListener('click',generateToken);
     document.querySelectorAll('.cc-revoke-btn').forEach(b=>b.addEventListener('click',()=>revokeToken(b.dataset.tokenId)));
     document.getElementById('cc-revoke-all-btn')?.addEventListener('click',async()=>{

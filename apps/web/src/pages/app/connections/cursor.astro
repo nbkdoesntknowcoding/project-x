@@ -23,8 +23,6 @@ const liveConnection = tokens.some(t => t.last_used_at && (Date.now() - new Date
 const hasToken = tokens.length > 0;
 const statusLabel = liveConnection ? 'Active' : hasToken ? 'Token issued — not connected' : 'Not connected';
 
-const firstTokenId = tokens[0]?.id ?? '';
-const deepLinkHref = firstTokenId ? `/install/cursor?workspaceToken=${firstTokenId}` : '/install/cursor';
 ---
 
 <style>
@@ -139,15 +137,19 @@ const deepLinkHref = firstTokenId ? `/install/cursor?workspaceToken=${firstToken
               </div>
             </div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <a class="cc-btn-pri" href={deepLinkHref}>
+          <div style="display:flex;gap:8px;align-items:center;flex-direction:column;align-items:flex-end;gap:6px;">
+            {/* One-click — only active after a JWT is generated this session */}
+            <a id="cc-deeplink-btn" href="#" class="cc-btn-pri" style="opacity:0.4;pointer-events:none;cursor:not-allowed;" aria-disabled="true">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-              One-click install
+              Open in Cursor
             </a>
-            <button class="cc-btn-sec" id="cc-add-btn" type="button">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              New token
-            </button>
+            {!hasToken
+              ? <button class="cc-btn-sec" id="cc-connect-btn" type="button">Generate token first</button>
+              : <button class="cc-btn-sec" id="cc-add-btn" type="button">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  New token
+                </button>
+            }
           </div>
         </div>
         <div class="cc-token-box" id="cc-token-box">
@@ -182,7 +184,7 @@ const deepLinkHref = firstTokenId ? `/install/cursor?workspaceToken=${firstToken
         <div class="cc-steps">
           <div class={`cc-step${hasToken ? ' done' : ''}`}>
             <span class="cc-step-num">{hasToken ? <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> : '1'}</span>
-            <div class="cc-step-body">Click <b>One-click install</b> — this opens Cursor and adds Mnema automatically. Or click <b>New token</b> to generate a Bearer token for manual setup.</div>
+            <div class="cc-step-body">Click <b>Generate token first</b> — this creates your token and activates the <b>Open in Cursor</b> button. Then click it to install Mnema in Cursor automatically.</div>
           </div>
           <div class="cc-step">
             <span class="cc-step-num">2</span>
@@ -279,16 +281,33 @@ const deepLinkHref = firstTokenId ? `/install/cursor?workspaceToken=${firstToken
       list.appendChild(row); row.querySelector('.cc-revoke-btn')?.addEventListener('click',()=>revokeToken(token.id));
     }
     async function generateToken() {
-      const btn=document.getElementById('cc-add-btn'); const box=document.getElementById('cc-token-box'); const val=document.getElementById('cc-token-value'); const err=document.getElementById('cc-err');
+      const btn=document.getElementById('cc-connect-btn')??document.getElementById('cc-add-btn');
+      const box=document.getElementById('cc-token-box'); const val=document.getElementById('cc-token-value'); const err=document.getElementById('cc-err');
       if(btn){btn.disabled=true;btn.textContent='Generating…';} if(err) err.classList.remove('visible');
       try {
         const res=await fetch(`${API}/api/mcp-tokens`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Cursor',requested_scopes:['docs:read','workspace:write']})});
         if(!res.ok) throw new Error();
         const data=await res.json();
         if(val) val.textContent=data.jwt; if(box) box.classList.add('visible');
+
+        // ── Activate the one-click deep link with the real JWT ──
+        const jwt=data.jwt;
+        const configObj={type:'sse',url:`${mcpEndpoint}?token=${encodeURIComponent(jwt)}`};
+        const encoded=btoa(JSON.stringify(configObj)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+        const deepLinkBtn=document.getElementById('cc-deeplink-btn');
+        if(deepLinkBtn){
+          deepLinkBtn.href=`cursor://anysphere.cursor-deeplink/mcp/install?name=Mnema&config=${encoded}`;
+          deepLinkBtn.style.opacity='1'; deepLinkBtn.style.pointerEvents=''; deepLinkBtn.style.cursor='pointer';
+          deepLinkBtn.removeAttribute('aria-disabled');
+        }
+
+        // Swap "Generate token first" → "New token"
+        const connectBtn=document.getElementById('cc-connect-btn');
+        if(connectBtn){connectBtn.id='cc-add-btn';connectBtn.textContent='New token';connectBtn.disabled=false;}
+
         addTokenRow(data.token); setStatus('pending');
       } catch { if(err) err.classList.add('visible'); }
-      finally { if(btn){btn.disabled=false;btn.textContent='New token';} }
+      finally { const b=document.getElementById('cc-connect-btn')??document.getElementById('cc-add-btn'); if(b&&!b.disabled){}else if(b){b.disabled=false;} }
     }
     async function revokeToken(id) {
       if(!confirm('Revoke this token?')) return;
@@ -296,6 +315,7 @@ const deepLinkHref = firstTokenId ? `/install/cursor?workspaceToken=${firstToken
       document.querySelector(`[data-token-id="${id}"]`)?.remove();
       const list=document.getElementById('cc-token-list'); if(list&&list.children.length===0){const sec=document.getElementById('cc-tokens-section');if(sec)sec.style.display='none';setStatus('inactive');}
     }
+    document.getElementById('cc-connect-btn')?.addEventListener('click',generateToken);
     document.getElementById('cc-add-btn')?.addEventListener('click',generateToken);
     document.querySelectorAll('.cc-revoke-btn').forEach(b=>b.addEventListener('click',()=>revokeToken(b.dataset.tokenId)));
     document.getElementById('cc-revoke-all-btn')?.addEventListener('click',async()=>{
