@@ -1,7 +1,14 @@
 // DESIGN APPLIED: 2026-05-27
 
-import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
+import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { T } from '../../lib/dev-tokens';
+
+interface Project {
+  id: string;
+  name: string;
+  slug: string;
+  color: string;
+}
 import { AddTaskModal } from './AddTaskModal';
 import { DevSetupBanner } from './DevSetupBanner';
 import { KanbanColumn } from './KanbanColumn';
@@ -73,6 +80,9 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [devConfig, setDevConfig] = useState<DevConfig | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectFilter, setProjectFilter] = useState<string>('all'); // slug or 'all'
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const sseRef = useRef<EventSource | null>(null);
 
   // Check if banner was previously dismissed
@@ -80,6 +90,16 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
     const dismissed = localStorage.getItem(`mnema_setup_banner_${workspaceId}`);
     if (dismissed === 'dismissed') setBannerDismissed(true);
   }, [workspaceId]);
+
+  // Load projects for filter pill + read ?project= from URL
+  useEffect(() => {
+    void apiFetch<{ projects: Project[] }>('/api/projects?status=active')
+      .then((d) => setProjects(d.projects))
+      .catch(() => {});
+    const params = new URLSearchParams(window.location.search);
+    const p = params.get('project');
+    if (p) setProjectFilter(p);
+  }, []);
 
   // Fetch ALL tasks — loop cursor pagination so no tasks are hidden
   const fetchTasks = useCallback(async () => {
@@ -159,9 +179,29 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
     };
   }, [workspaceId]);
 
+  // Active project for filter
+  const activeProject = useMemo(
+    () => projects.find((p) => p.slug === projectFilter) ?? null,
+    [projects, projectFilter],
+  );
+
+  // Filtered tasks (by project if set)
+  const filteredTasks = useMemo(
+    () => projectFilter === 'all'
+      ? tasks
+      : tasks.filter((t) => t.projectId === activeProject?.id),
+    [tasks, projectFilter, activeProject],
+  );
+
+  // Project id → project map for badge lookup
+  const projectById = useMemo(
+    () => Object.fromEntries(projects.map((p) => [p.id, p])),
+    [projects],
+  );
+
   // Group tasks by status, sorted by boardOrder
   const tasksByStatus = COLUMNS.reduce<Record<string, Task[]>>((acc, col) => {
-    acc[col.id] = tasks
+    acc[col.id] = filteredTasks
       .filter((t) => t.status === col.id)
       .sort((a, b) => a.boardOrder - b.boardOrder);
     return acc;
@@ -236,16 +276,19 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
     [tasks, tasksByStatus, fetchTasks],
   );
 
-  // Add task to backlog
+  // Add task to backlog (auto-assign project if filter active)
   const handleAddTask = useCallback(
-    async (title: string, description?: string, priority?: string) => {
+    async (title: string, description?: string, priority?: string, projectId?: string | null) => {
       await apiFetch('/api/tasks', {
         method: 'POST',
-        body: JSON.stringify({ title, description, priority: priority ?? 'medium' }),
+        body: JSON.stringify({
+          title, description, priority: priority ?? 'medium',
+          ...(projectId ? { projectId } : activeProject ? { projectId: activeProject.id } : {}),
+        }),
       });
       await fetchTasks();
     },
-    [fetchTasks],
+    [fetchTasks, activeProject],
   );
 
   // Save task edits (PATCH) — board live-updates via SSE
@@ -357,6 +400,42 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
             {tasks.length} task{tasks.length !== 1 ? 's' : ''}
           </p>
         </div>
+        {/* Project filter pill */}
+        {projects.length > 0 && (
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowProjectDropdown((v) => !v)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '6px 12px', borderRadius: 8,
+                border: `0.5px solid ${T.glassBorder}`, background: T.glass,
+                color: T.textSecondary, fontSize: 12, cursor: 'pointer', fontFamily: T.fontUI,
+              }}
+            >
+              {activeProject && <div style={{ width: 8, height: 8, borderRadius: '50%', background: activeProject.color }} />}
+              {activeProject ? activeProject.name : 'All projects'}
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            {showProjectDropdown && (
+              <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 50, background: T.surface2, border: `0.5px solid ${T.glassBorder}`, borderRadius: 10, minWidth: 180, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}
+                onMouseLeave={() => setShowProjectDropdown(false)}
+              >
+                <button onClick={() => { setProjectFilter('all'); setShowProjectDropdown(false); const u = new URL(window.location.href); u.searchParams.delete('project'); window.history.replaceState({}, '', u); }}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', background: projectFilter === 'all' ? T.surface3 : 'transparent', border: 'none', color: projectFilter === 'all' ? T.textPrimary : T.textSecondary, fontSize: 13, cursor: 'pointer', fontFamily: T.fontUI }}>
+                  All projects
+                </button>
+                {projects.map((p) => (
+                  <button key={p.id} onClick={() => { setProjectFilter(p.slug); setShowProjectDropdown(false); const u = new URL(window.location.href); u.searchParams.set('project', p.slug); window.history.replaceState({}, '', u); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '9px 14px', background: projectFilter === p.slug ? T.surface3 : 'transparent', border: 'none', color: projectFilter === p.slug ? T.textPrimary : T.textSecondary, fontSize: 13, cursor: 'pointer', fontFamily: T.fontUI }}>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <button
           onClick={() => { setShowAddModal(true); }}
           style={{
@@ -408,6 +487,8 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
             onTaskDrop={handleTaskDrop}
             onAddTask={col.id === 'backlog' ? () => { setShowAddModal(true); } : undefined}
             onTaskClick={setSelectedTask}
+            projectById={projectById}
+            showProjectBadges={projects.length > 1 && projectFilter === 'all'}
           />
         ))}
       </div>
@@ -417,6 +498,8 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
         <AddTaskModal
           onAdd={handleAddTask}
           onClose={() => { setShowAddModal(false); }}
+          projects={projects}
+          defaultProjectId={activeProject?.id ?? null}
         />
       )}
 

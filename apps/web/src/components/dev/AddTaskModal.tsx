@@ -3,9 +3,13 @@
 import { type JSX, useState } from 'react';
 import { T, glassCard } from '../../lib/dev-tokens';
 
+interface ProjectOption { id: string; name: string; color: string; }
+
 interface AddTaskModalProps {
-  onAdd: (title: string, description?: string, priority?: string) => Promise<void>;
+  onAdd: (title: string, description?: string, priority?: string, projectId?: string | null) => Promise<void>;
   onClose: () => void;
+  projects?: ProjectOption[];
+  defaultProjectId?: string | null;
 }
 
 const PRIORITIES = ['low', 'medium', 'high', 'critical'];
@@ -17,10 +21,11 @@ const PRIORITY_COLORS: Record<string, string> = {
   critical: T.critical,
 };
 
-export function AddTaskModal({ onAdd, onClose }: AddTaskModalProps): JSX.Element {
+export function AddTaskModal({ onAdd, onClose, projects = [], defaultProjectId = null }: AddTaskModalProps): JSX.Element {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('medium');
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(defaultProjectId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,7 +35,7 @@ export function AddTaskModal({ onAdd, onClose }: AddTaskModalProps): JSX.Element
     setSubmitting(true);
     setError(null);
     try {
-      await onAdd(title.trim(), description.trim() || undefined, priority);
+      await onAdd(title.trim(), description.trim() || undefined, priority, selectedProjectId);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create task');
@@ -116,6 +121,26 @@ export function AddTaskModal({ onAdd, onClose }: AddTaskModalProps): JSX.Element
               style={{ ...inputStyle, resize: 'vertical' }}
             />
           </div>
+
+          {/* Project selector */}
+          {projects.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: T.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Project</label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => setSelectedProjectId(null)}
+                  style={{ padding: '5px 12px', borderRadius: 8, border: `0.5px solid ${selectedProjectId === null ? T.glassBorderStrong : T.glassBorder}`, background: selectedProjectId === null ? T.surface3 : T.glass, color: selectedProjectId === null ? T.textPrimary : T.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: T.fontUI }}>
+                  No project
+                </button>
+                {projects.map((p) => (
+                  <button key={p.id} type="button" onClick={() => setSelectedProjectId(p.id)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: `0.5px solid ${selectedProjectId === p.id ? T.glassBorderStrong : T.glassBorder}`, background: selectedProjectId === p.id ? T.surface3 : T.glass, color: selectedProjectId === p.id ? T.textPrimary : T.textMuted, fontSize: 12, cursor: 'pointer', fontFamily: T.fontUI }}>
+                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: p.color }} />
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Priority */}
           <div style={{ marginBottom: 22 }}>

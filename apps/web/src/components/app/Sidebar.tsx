@@ -24,6 +24,7 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
   const isOnDrive = currentPath === '/app/connections/drive';
   const isOnNotifications = currentPath.startsWith('/app/notifications');
   const isOnTrash = currentPath.startsWith('/app/trash');
+  const isOnProjects  = currentPath.startsWith('/app/projects');
   const isOnKanban    = currentPath.startsWith('/app/kanban');
   const isOnSessions  = currentPath.startsWith('/app/sessions');
   const isOnCost      = currentPath.startsWith('/app/cost');
@@ -140,6 +141,17 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
       {isDevProject && (
         <div className="sb-section">
           <div className="sb-section-head"><span>Dev</span></div>
+
+          <a href="/app/projects" className={`sb-row${isOnProjects ? ' active' : ''}`}>
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/>
+                </svg>
+              </span>
+              <span className="sb-label">Projects</span>
+            </span>
+          </a>
 
           <a href="/app/kanban" className={`sb-row${isOnKanban ? ' active' : ''}`}>
             <span className="sb-l">

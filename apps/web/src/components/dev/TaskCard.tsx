@@ -19,6 +19,7 @@ export interface Task {
   retryCount: number;
   boardOrder: number;
   tags: string[] | null;
+  projectId: string | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -27,6 +28,9 @@ export interface Task {
 interface TaskCardProps {
   task: Task;
   isDragging?: boolean;
+  projectName?: string;
+  projectColor?: string;
+  showProjectBadge?: boolean;
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -36,7 +40,7 @@ const PRIORITY_COLORS: Record<string, string> = {
   low:      T.low,
 };
 
-export function TaskCard({ task, isDragging }: TaskCardProps): JSX.Element {
+export function TaskCard({ task, isDragging, projectName, projectColor, showProjectBadge }: TaskCardProps): JSX.Element {
   const priorityColor = PRIORITY_COLORS[task.priority] ?? PRIORITY_COLORS.medium!;
   const statusColors = T.sbadge[task.status as keyof typeof T.sbadge] ?? T.sbadge.backlog;
 
@@ -83,6 +87,14 @@ export function TaskCard({ task, isDragging }: TaskCardProps): JSX.Element {
       }}>
         {task.title}
       </p>
+
+      {/* Project badge — shown when multiple projects exist */}
+      {showProjectBadge && projectName && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 6 }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: projectColor ?? T.textMuted, flexShrink: 0 }} />
+          <span style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontUI, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{projectName}</span>
+        </div>
+      )}
 
       {/* Meta row */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>

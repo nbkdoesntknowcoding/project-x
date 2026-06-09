@@ -27,6 +27,8 @@ function groupBySprint(
   return order.map((s) => ({ sprint: s, tasks: seen.get(s)! }));
 }
 
+interface ProjectInfo { id: string; name: string; color: string; }
+
 interface KanbanColumnProps {
   id: string;
   label: string;
@@ -35,6 +37,8 @@ interface KanbanColumnProps {
   onTaskDrop: (taskId: string, targetStatus: string, targetIndex: number) => void;
   onAddTask?: () => void;
   onTaskClick?: (task: Task) => void;
+  projectById?: Record<string, ProjectInfo>;
+  showProjectBadges?: boolean;
 }
 
 export function KanbanColumn({
@@ -45,6 +49,8 @@ export function KanbanColumn({
   onTaskDrop,
   onAddTask,
   onTaskClick,
+  projectById = {},
+  showProjectBadges = false,
 }: KanbanColumnProps): JSX.Element {
   const groups = groupBySprint(tasks);
 
@@ -203,7 +209,12 @@ export function KanbanColumn({
                     onClick={() => onTaskClick?.(task)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <TaskCard task={task} />
+                    <TaskCard
+                      task={task}
+                      showProjectBadge={showProjectBadges}
+                      projectName={task.projectId ? projectById[task.projectId]?.name : undefined}
+                      projectColor={task.projectId ? projectById[task.projectId]?.color : undefined}
+                    />
                   </div>
                 ))}
               </div>
