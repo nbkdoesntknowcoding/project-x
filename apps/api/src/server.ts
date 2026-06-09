@@ -43,6 +43,7 @@ import { publicV1Routes } from './routes/public/v1.js';
 import { openApiRoutes } from './routes/public/openapi.js';
 import { geminiRoutes } from './routes/public/gemini.js';
 import { installRoutes } from './routes/public/install.js';
+import { projectsRoutes } from './routes/projects.js';
 
 const app = Fastify({ logger: loggerOptions });
 
@@ -97,6 +98,7 @@ await app.register(publicV1Routes);
 await app.register(openApiRoutes);
 await app.register(geminiRoutes);
 await app.register(installRoutes);
+  await app.register(projectsRoutes);
 await app.register(oauthPlugin);
 await app.register(mcpPlugin);
 
