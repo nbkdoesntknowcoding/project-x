@@ -94,10 +94,20 @@ function Modal({ onClose, children }: { onClose: () => void; children: React.Rea
 
 // ── Project form (shared by Create + Edit) ────────────────────────────────────
 
+interface AllFolder {
+  id: string;
+  name: string;
+  parent_folder_id: string | null;
+  doc_count: number;
+}
+
 interface ProjectFormProps {
   initial?: Partial<Project>;
   submitLabel: string;
-  onSubmit: (data: { name: string; description: string; color: string; icon: string; githubRepoUrl: string }) => Promise<void>;
+  onSubmit: (data: {
+    name: string; description: string; color: string; icon: string;
+    githubRepoUrl: string; folderIds: string[];
+  }) => Promise<void>;
   onClose: () => void;
 }
 
@@ -107,8 +117,32 @@ function ProjectForm({ initial, submitLabel, onSubmit, onClose }: ProjectFormPro
   const [color, setColor] = useState(initial?.color ?? PROJECT_COLORS[0]!);
   const [icon, setIcon] = useState(initial?.icon ?? 'folder');
   const [githubRepoUrl, setGithubRepoUrl] = useState(initial?.githubRepoUrl ?? '');
+  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(
+    new Set(initial?.folders?.map((f) => f.id) ?? []),
+  );
+  const [allFolders, setAllFolders] = useState<AllFolder[]>([]);
+  const [folderSearch, setFolderSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch all workspace folders on mount
+  useEffect(() => {
+    apiFetch<{ folders: AllFolder[] }>('/api/folders')
+      .then((d) => setAllFolders(d.folders ?? []))
+      .catch(() => {});
+  }, []);
+
+  const filteredFolders = allFolders.filter((f) =>
+    f.name.toLowerCase().includes(folderSearch.toLowerCase()),
+  );
+
+  function toggleFolder(id: string) {
+    setSelectedFolderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   const input: React.CSSProperties = {
     width: '100%', padding: '8px 12px', borderRadius: 9,
@@ -126,7 +160,11 @@ function ProjectForm({ initial, submitLabel, onSubmit, onClose }: ProjectFormPro
     if (!name.trim()) return;
     setSaving(true); setError(null);
     try {
-      await onSubmit({ name: name.trim(), description: description.trim(), color, icon, githubRepoUrl: githubRepoUrl.trim() });
+      await onSubmit({
+        name: name.trim(), description: description.trim(), color, icon,
+        githubRepoUrl: githubRepoUrl.trim(),
+        folderIds: Array.from(selectedFolderIds),
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
     } finally {
@@ -142,32 +180,99 @@ function ProjectForm({ initial, submitLabel, onSubmit, onClose }: ProjectFormPro
       </div>
       <div style={{ marginBottom: 13 }}>
         <label style={label}>Description</label>
-        <textarea style={{ ...input, height: 68, resize: 'none' }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
+        <textarea style={{ ...input, height: 60, resize: 'none' }} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
       </div>
+
+      {/* Folder picker */}
       <div style={{ marginBottom: 13 }}>
-        <label style={label}>Colour</label>
-        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-          {PROJECT_COLORS.map((c) => (
-            <button key={c} type="button" onClick={() => setColor(c)}
-              style={{ width: 20, height: 20, borderRadius: '50%', background: c, border: color === c ? `2.5px solid ${T.textPrimary}` : '2.5px solid transparent', cursor: 'pointer', padding: 0 }} />
-          ))}
+        <label style={label}>
+          Link folders
+          {selectedFolderIds.size > 0 && (
+            <span style={{ marginLeft: 6, color: T.accent, fontWeight: 600 }}>{selectedFolderIds.size} selected</span>
+          )}
+        </label>
+        <div style={{ border: `0.5px solid ${T.glassBorder}`, borderRadius: 9, overflow: 'hidden', background: T.surface2 }}>
+          {/* Search inside picker */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderBottom: `0.5px solid ${T.glassBorder}` }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.textMuted} strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <input
+              value={folderSearch}
+              onChange={(e) => setFolderSearch(e.target.value)}
+              placeholder="Search folders…"
+              style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontSize: 12.5, color: T.textPrimary, fontFamily: T.fontUI }}
+            />
+          </div>
+          {/* Folder list */}
+          <div style={{ maxHeight: 168, overflowY: 'auto' }}>
+            {filteredFolders.length === 0 ? (
+              <p style={{ margin: 0, padding: '12px 12px', fontSize: 12, color: T.textMuted, textAlign: 'center' }}>
+                {allFolders.length === 0 ? 'No folders in workspace yet' : 'No folders match'}
+              </p>
+            ) : (
+              filteredFolders.map((f) => {
+                const selected = selectedFolderIds.has(f.id);
+                return (
+                  <button key={f.id} type="button" onClick={() => toggleFolder(f.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                      padding: '8px 12px', border: 'none', textAlign: 'left',
+                      background: selected ? `rgba(255,179,112,0.08)` : 'transparent',
+                      cursor: 'pointer', fontFamily: T.fontUI,
+                      borderBottom: `0.5px solid ${T.line}`,
+                    }}
+                  >
+                    {/* Checkbox */}
+                    <span style={{
+                      width: 15, height: 15, borderRadius: 4, flexShrink: 0,
+                      border: `1.5px solid ${selected ? T.accent : T.glassBorder}`,
+                      background: selected ? T.accent : 'transparent',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {selected && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#0A0B0D" strokeWidth="3.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>}
+                    </span>
+                    {/* Folder icon */}
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={selected ? T.accent : T.textMuted} strokeWidth="1.8" strokeLinecap="round" style={{ flexShrink: 0 }}><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z"/></svg>
+                    <span style={{ flex: 1, fontSize: 13, color: selected ? T.textPrimary : T.textSecondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                    <span style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontMono, flexShrink: 0 }}>{f.doc_count} doc{f.doc_count !== 1 ? 's' : ''}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+        <p style={{ margin: '5px 0 0', fontSize: 11, color: T.textMuted }}>
+          Selected folders open when you click the project. New folders are auto-created if none selected.
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 13 }}>
+        <div style={{ flex: 1 }}>
+          <label style={label}>Colour</label>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+            {PROJECT_COLORS.map((c) => (
+              <button key={c} type="button" onClick={() => setColor(c)}
+                style={{ width: 20, height: 20, borderRadius: '50%', background: c, border: color === c ? `2.5px solid ${T.textPrimary}` : '2.5px solid transparent', cursor: 'pointer', padding: 0 }} />
+            ))}
+          </div>
+        </div>
+        <div>
+          <label style={label}>Icon</label>
+          <div style={{ display: 'flex', gap: 5 }}>
+            {ICON_OPTIONS.map((opt) => (
+              <button key={opt.key} type="button" onClick={() => setIcon(opt.key)}
+                style={{ width: 30, height: 30, borderRadius: 7, border: `0.5px solid ${icon === opt.key ? T.glassBorderStrong : T.glassBorder}`, background: icon === opt.key ? T.surface3 : T.surface2, color: icon === opt.key ? T.textPrimary : T.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {opt.svg}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
-      <div style={{ marginBottom: 13 }}>
-        <label style={label}>Icon</label>
-        <div style={{ display: 'flex', gap: 6 }}>
-          {ICON_OPTIONS.map((opt) => (
-            <button key={opt.key} type="button" onClick={() => setIcon(opt.key)}
-              style={{ width: 32, height: 32, borderRadius: 7, border: `0.5px solid ${icon === opt.key ? T.glassBorderStrong : T.glassBorder}`, background: icon === opt.key ? T.surface3 : T.surface2, color: icon === opt.key ? T.textPrimary : T.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {opt.svg}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div style={{ marginBottom: 20 }}>
+
+      <div style={{ marginBottom: 18 }}>
         <label style={label}>GitHub repo URL</label>
         <input style={input} value={githubRepoUrl} onChange={(e) => setGithubRepoUrl(e.target.value)} placeholder="https://github.com/org/repo" />
       </div>
+
       {error && <p style={{ fontSize: 12, color: T.red, margin: '0 0 10px' }}>{error}</p>}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <button type="button" onClick={onClose}
@@ -298,19 +403,38 @@ export function ProjectsPage(): JSX.Element {
 
   useEffect(() => { void load(); }, []);
 
-  async function handleCreate(data: { name: string; description: string; color: string; icon: string; githubRepoUrl: string }) {
-    await apiFetch('/api/projects', {
+  // Link a set of folder IDs to a project (and unlink any previously linked folders not in the new set)
+  async function syncFolders(projectId: string, selectedIds: string[], existingFolders: Folder[]) {
+    const existingIds = new Set(existingFolders.map((f) => f.id));
+    const toLink   = selectedIds.filter((id) => !existingIds.has(id));
+    const toUnlink = existingFolders.filter((f) => !selectedIds.includes(f.id)).map((f) => f.id);
+    await Promise.all([
+      ...toLink.map((id) => apiFetch(`/api/folders/${id}/project`, { method: 'PATCH', body: JSON.stringify({ project_id: projectId }) })),
+      ...toUnlink.map((id) => apiFetch(`/api/folders/${id}/project`, { method: 'PATCH', body: JSON.stringify({ project_id: null }) })),
+    ]);
+  }
+
+  async function handleCreate(data: { name: string; description: string; color: string; icon: string; githubRepoUrl: string; folderIds: string[] }) {
+    const result = await apiFetch<{ project: { id: string } }>('/api/projects', {
       method: 'POST',
       body: JSON.stringify({ ...data, description: data.description || undefined, githubRepoUrl: data.githubRepoUrl || undefined }),
     });
+    // Link selected folders to the new project
+    if (data.folderIds.length > 0) {
+      await Promise.all(
+        data.folderIds.map((id) => apiFetch(`/api/folders/${id}/project`, { method: 'PATCH', body: JSON.stringify({ project_id: result.project.id }) })),
+      );
+    }
     await load();
   }
 
-  async function handleEdit(p: Project, data: { name: string; description: string; color: string; icon: string; githubRepoUrl: string }) {
+  async function handleEdit(p: Project, data: { name: string; description: string; color: string; icon: string; githubRepoUrl: string; folderIds: string[] }) {
     await apiFetch(`/api/projects/${p.id}`, {
       method: 'PATCH',
       body: JSON.stringify({ ...data, description: data.description || null, githubRepoUrl: data.githubRepoUrl || null }),
     });
+    // Sync folder links
+    await syncFolders(p.id, data.folderIds, p.folders ?? []);
     await load();
   }
 
