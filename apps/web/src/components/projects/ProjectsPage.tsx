@@ -192,7 +192,7 @@ export function ProjectsPage(): JSX.Element {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.textPrimary, letterSpacing: '-0.02em', fontFamily: T.fontDisplay }}>Projects</h1>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.textPrimary, letterSpacing: '-0.02em', fontFamily: T.fontUI }}>Projects</h1>
           <p style={{ margin: '3px 0 0', fontSize: 12, color: T.textMuted }}>{projects.length} active project{projects.length !== 1 ? 's' : ''}</p>
         </div>
         <button
@@ -237,7 +237,8 @@ export function ProjectsPage(): JSX.Element {
 
                 {/* Footer */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {/* Left: counts + GitHub */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontMono }}>{totalTasks} task{totalTasks !== 1 ? 's' : ''}</span>
                     {p.githubRepoUrl && (
                       <a href={p.githubRepoUrl} target="_blank" rel="noopener noreferrer" style={{ color: T.textMuted, display: 'flex', alignItems: 'center' }}>
@@ -245,12 +246,36 @@ export function ProjectsPage(): JSX.Element {
                       </a>
                     )}
                   </div>
-                  <a
-                    href={`/app/kanban?project=${p.slug}`}
-                    style={{ fontSize: 12, color: T.accent, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
-                  >
-                    Open →
-                  </a>
+
+                  {/* Right: Docs + Kanban action buttons */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <a
+                      href="/app/content"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        fontSize: 12, color: T.textSecondary, fontWeight: 500,
+                        textDecoration: 'none', padding: '4px 10px', borderRadius: 7,
+                        border: `0.5px solid ${T.glassBorder}`, background: T.glass,
+                        fontFamily: T.fontUI,
+                      }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                      Docs
+                    </a>
+                    <a
+                      href={`/app/kanban?project=${p.slug}`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 5,
+                        fontSize: 12, color: T.accent, fontWeight: 600,
+                        textDecoration: 'none', padding: '4px 10px', borderRadius: 7,
+                        border: `0.5px solid rgba(255,179,112,0.3)`, background: `rgba(255,179,112,0.08)`,
+                        fontFamily: T.fontUI,
+                      }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="5" height="18" rx="1"/><rect x="10" y="3" width="5" height="13" rx="1"/><rect x="17" y="3" width="5" height="9" rx="1"/></svg>
+                      Kanban
+                    </a>
+                  </div>
                 </div>
               </div>
             );

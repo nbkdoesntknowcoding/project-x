@@ -460,7 +460,7 @@ const statLab: React.CSSProperties = {
 };
 
 const statVal: React.CSSProperties = {
-  fontFamily:    T.fontDisplay,
+  fontFamily:    T.fontUI,
   fontSize:      36,
   fontWeight:    400,
   color:         T.textPrimary,

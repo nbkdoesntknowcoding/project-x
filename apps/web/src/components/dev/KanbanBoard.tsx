@@ -387,7 +387,7 @@ export function KanbanBoard({ workspaceId }: KanbanBoardProps): JSX.Element {
             fontSize:   20,
             fontWeight: 700,
             color:      T.textPrimary,
-            fontFamily: T.fontDisplay,
+            fontFamily: T.fontUI,
             letterSpacing: '-0.02em',
           }}>
             Board
