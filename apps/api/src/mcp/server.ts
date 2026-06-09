@@ -284,14 +284,19 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
     // For all other clients omit resourceUri so the model handles approval inline.
     const claudeDesktop = isClaudeDesktop();
 
+    // registerAppTool always reads _meta.ui so _meta must always be present.
+    // For Claude Desktop we set resourceUri so the native preview panel opens.
+    // For all other clients we omit resourceUri — no panel, inline approval flow.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const toolConfig: any = {
       description: spec.description,
       inputSchema: jsonSchemaToZodShape(spec.inputSchema),
       annotations: spec.annotations,
-      ...(claudeDesktop
-        ? { _meta: { ui: { resourceUri: WRITE_PREVIEW_RESOURCE_URI, visibility: ['model'] } } }
-        : {}),
+      _meta: {
+        ui: claudeDesktop
+          ? { resourceUri: WRITE_PREVIEW_RESOURCE_URI, visibility: ['model'] }
+          : {},
+      },
     };
 
     registerAppTool(
