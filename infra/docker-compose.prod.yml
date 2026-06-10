@@ -1,0 +1,119 @@
+name: mnema-prod   # UNIQUE — isolates from every other project on this VPS
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+
+  caddy:
+    image: caddy:2-alpine
+    <<: *restart
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:    { condition: service_healthy }
+      collab: { condition: service_started }
+    networks: [internal]
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    <<: *restart
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgres://boppl:${POSTGRES_PASSWORD:?}@postgres:5432/boppl_context
+      REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379
+      NODE_ENV: production
+      COLLAB_INTERNAL_URL: http://collab:1234
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    networks: [internal]
+
+  collab:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile.collab
+    <<: *restart
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgres://boppl:${POSTGRES_PASSWORD:?}@postgres:5432/boppl_context
+      NODE_ENV: production
+      COLLAB_PORT: "1234"
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [internal]
+
+  workers:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile.workers
+    <<: *restart
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgres://boppl:${POSTGRES_PASSWORD:?}@postgres:5432/boppl_context
+      REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379
+      NODE_ENV: production
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis:    { condition: service_healthy }
+    networks: [internal]
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    <<: *restart
+    environment:
+      POSTGRES_USER: boppl
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: boppl_context
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U boppl -d boppl_context"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [internal]
+    # NOT exposed to host — only accessible inside the mnema-prod network
+
+  redis:
+    image: redis:7.4-alpine
+    <<: *restart
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:?}
+      - --appendonly
+      - yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks: [internal]
+    # NOT exposed to host
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redis_data:
+  caddy_data:
+  caddy_config:

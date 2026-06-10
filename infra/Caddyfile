@@ -1,0 +1,23 @@
+api.theboringpeople.in {
+    encode gzip
+
+    # Hocuspocus WebSocket — path-based routing on the same domain.
+    # Vercel sets PUBLIC_COLLAB_URL=wss://api.theboringpeople.in/collab
+    @collab {
+        path /collab*
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    reverse_proxy @collab collab:1234
+
+    # Everything else → main Fastify API
+    reverse_proxy api:8080 {
+        health_uri    /health
+        health_interval 15s
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}

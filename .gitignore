@@ -8,3 +8,8 @@ dist
 .astro
 .vercel
 apps/api/keys/
+
+# Infra secrets — never commit
+infra/.env
+infra/.env.*
+!infra/.env.prod.example

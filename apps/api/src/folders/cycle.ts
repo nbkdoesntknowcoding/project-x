@@ -1,7 +1,5 @@
 import { and, eq, isNull } from 'drizzle-orm';
-import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { folders } from '../db/schema.js';
-import type * as schema from '../db/schema.js';
 
 /**
  * Returns true if making folderId's parent = newParentId would create a cycle.
@@ -9,7 +7,8 @@ import type * as schema from '../db/schema.js';
  * Walk UP from newParentId toward root — if we encounter folderId, it's a cycle.
  */
 export async function wouldCreateCycle(
-  db: NodePgDatabase<typeof schema>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: any,
   workspaceId: string,
   folderId: string,
   newParentId: string | null,
@@ -23,7 +22,8 @@ export async function wouldCreateCycle(
     if (cursor === folderId) return true;
     if (seen.has(cursor)) break; // defensive: stop on existing corruption
     seen.add(cursor);
-    const rows = await db
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows: any[] = await db
       .select({ parentFolderId: folders.parentFolderId })
       .from(folders)
       .where(

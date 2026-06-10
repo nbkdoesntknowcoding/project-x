@@ -38,8 +38,8 @@ export const installRoutes: FastifyPluginAsync = async (app) => {
 
     // Cursor deep link format: cursor://anysphere.cursor-deeplink/mcp/install
     return reply.redirect(
-      302,
       `cursor://anysphere.cursor-deeplink/mcp/install?name=Mnema&config=${encoded}`,
+      302,
     );
   });
 
@@ -95,8 +95,8 @@ export const installRoutes: FastifyPluginAsync = async (app) => {
 
     // Windsurf deep link scheme (Codeium/Windsurf uses same pattern)
     return reply.redirect(
-      302,
       `windsurf://codeium.windsurf-deeplink/mcp/install?name=Mnema&config=${encoded}`,
+      302,
     );
   });
 
