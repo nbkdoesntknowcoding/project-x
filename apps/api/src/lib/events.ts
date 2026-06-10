@@ -77,7 +77,8 @@ export type WorkspaceEvent =
   | { type: 'session_cost_updated'; data: SessionCostUpdatedPayload }
   | { type: 'session_started';      data: SessionStartedPayload }
   | { type: 'session_ended';        data: SessionEndedPayload }
-  | { type: 'optimization_findings_updated'; data: { newCount: number } };
+  | { type: 'optimization_findings_updated'; data: { newCount: number } }
+  | { type: 'attachment_ready'; data: { attachmentId: string; docId: string | null; format: string } };
 
 type WorkspaceEventListener = (event: WorkspaceEvent) => void;
 
