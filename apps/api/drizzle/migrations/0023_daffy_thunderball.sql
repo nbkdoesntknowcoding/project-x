@@ -34,7 +34,7 @@ ALTER TABLE "attachments" ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "attachments_workspace_isolation"
   ON "attachments"
   USING (
-    workspace_id = current_setting('app.current_workspace_id', true)::uuid
+    workspace_id = current_setting('app.tenant_id', true)::uuid
     OR current_setting('app.bypass_rls', true) = 'on'
   );
 
