@@ -8,6 +8,8 @@ import { withTenant } from '../db/with-tenant.js';
 import { config } from '../config/env.js';
 import { ingestDocx } from '../lib/documents/ingest-docx.js';
 import { ingestPdf } from '../lib/documents/ingest-pdf.js';
+import { generateDocx } from '../lib/documents/generate-docx.js';
+import { pdfGenerationQueue } from '../queue/pdf-generation.js';
 import {
   uploadAttachment,
   getSignedAttachmentUrl,
@@ -217,5 +219,101 @@ export const documentFilesRoutes: FastifyPluginAsync = async (app) => {
 
     const url = await getSignedAttachmentUrl(row.r2Key);
     return reply.redirect(url, 302);
+  });
+
+  // ── POST /api/document-files/export ───────────────────────────────────────
+  app.post('/api/document-files/export', async (req, reply) => {
+    if (!req.auth) return reply.status(401).send({ error: 'unauthorized' });
+    if (!requireR2(reply)) return;
+
+    const { docId, format } = req.body as { docId?: string; format?: string };
+    if (!docId || !format || !['docx', 'pdf'].includes(format)) {
+      return reply.status(400).send({ error: 'invalid_params', message: 'docId and format (docx|pdf) required' });
+    }
+
+    const workspaceId = req.auth.tenant_id;
+
+    const [doc] = await withTenant(workspaceId, (tx) =>
+      tx.select({ id: docs.id, title: docs.title, markdown: docs.markdown })
+        .from(docs)
+        .where(and(eq(docs.id, docId), eq(docs.workspaceId, workspaceId)))
+        .limit(1),
+    );
+    if (!doc) return reply.status(404).send({ error: 'doc_not_found' });
+
+    // Create pending attachment record
+    const [attachment] = await withTenant(workspaceId, (tx) =>
+      tx.insert(attachments).values({
+        workspaceId,
+        docId,
+        type:   'export',
+        format: format as 'docx' | 'pdf',
+        r2Key:  '', // filled in after upload
+        status: format === 'docx' ? 'processing' : 'pending',
+      }).returning(),
+    );
+    if (!attachment) return reply.status(500).send({ error: 'db_error' });
+
+    if (format === 'docx') {
+      try {
+        const buffer   = await generateDocx(doc.markdown, { title: doc.title });
+        const filename = `${doc.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.docx`;
+        const { r2Key } = await uploadAttachment(workspaceId, buffer, 'docx', filename);
+
+        await withTenant(workspaceId, (tx) =>
+          tx.update(attachments)
+            .set({ r2Key, status: 'ready', sizeBytes: buffer.length, updatedAt: new Date() })
+            .where(eq(attachments.id, attachment.id)),
+        );
+
+        const downloadUrl = await getSignedAttachmentUrl(r2Key);
+        return reply.send({ attachmentId: attachment.id, downloadUrl, status: 'ready' });
+      } catch (err) {
+        await withTenant(workspaceId, (tx) =>
+          tx.update(attachments)
+            .set({ status: 'failed', errorMessage: String(err), updatedAt: new Date() })
+            .where(eq(attachments.id, attachment.id)),
+        );
+        throw err;
+      }
+    }
+
+    // PDF: enqueue async job
+    await pdfGenerationQueue.add('generate-pdf', {
+      attachmentId: attachment.id,
+      docId,
+      workspaceId,
+      title: doc.title,
+    });
+    return reply.send({ attachmentId: attachment.id, status: 'pending' });
+  });
+
+  // ── GET /api/document-files/export/:attachmentId/status ──────────────────
+  app.get('/api/document-files/export/:attachmentId/status', async (req, reply) => {
+    if (!req.auth) return reply.status(401).send({ error: 'unauthorized' });
+    if (!requireR2(reply)) return;
+
+    const { attachmentId } = req.params as { attachmentId: string };
+    const [row] = await withTenant(req.auth.tenant_id, (tx) =>
+      tx.select({
+        status:       attachments.status,
+        r2Key:        attachments.r2Key,
+        errorMessage: attachments.errorMessage,
+      })
+        .from(attachments)
+        .where(and(
+          eq(attachments.id, attachmentId),
+          eq(attachments.workspaceId, req.auth!.tenant_id),
+        ))
+        .limit(1),
+    );
+    if (!row) return reply.status(404).send({ error: 'not_found' });
+
+    const downloadUrl =
+      row.status === 'ready' && row.r2Key
+        ? await getSignedAttachmentUrl(row.r2Key)
+        : undefined;
+
+    return reply.send({ status: row.status, downloadUrl, errorMessage: row.errorMessage });
   });
 };
