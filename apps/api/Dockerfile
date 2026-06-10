@@ -14,12 +14,15 @@ COPY apps/api/package.json ./apps/api/
 # Install all deps (including devDeps needed for tsc)
 RUN pnpm install --frozen-lockfile
 
-# Copy source
+# Copy source + configs
 COPY packages/ ./packages/
 COPY apps/api/ ./apps/api/
 COPY tsconfig.base.json ./
 
-# Build
+# Build packages/schema first (API imports from its compiled output)
+RUN pnpm --filter @boppl/schema build
+
+# Build the API
 RUN pnpm --filter @boppl/api build
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
@@ -29,7 +32,6 @@ RUN corepack enable && corepack prepare pnpm@10.23.0 --activate
 
 WORKDIR /app
 
-# Copy workspace manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/schema/package.json ./packages/schema/
@@ -38,10 +40,10 @@ COPY apps/api/package.json ./apps/api/
 # Production deps only
 RUN pnpm install --frozen-lockfile --prod
 
-# Copy compiled output
+# Copy compiled output from builder
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/packages/shared ./packages/shared
-COPY --from=builder /app/packages/schema ./packages/schema
+COPY --from=builder /app/packages/schema/dist ./packages/schema/dist
 
 # Migrations folder needed at runtime for drizzle
 COPY apps/api/drizzle ./apps/api/drizzle
