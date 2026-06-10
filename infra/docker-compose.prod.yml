@@ -5,23 +5,16 @@ x-restart: &restart
 
 services:
 
-  caddy:
-    image: caddy:2-alpine
-    <<: *restart
-    ports:
-      - "80:80"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-    depends_on:
-      api:    { condition: service_healthy }
-      collab: { condition: service_started }
-    networks: [internal]
+  # No Caddy — DP project's Caddy on port 80/443 handles all traffic.
+  # Ports bound to 127.0.0.1 so DP Caddy can reach them via localhost.
 
   api:
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
     <<: *restart
+    ports:
+      - "127.0.0.1:8082:8080"
     env_file: [.env]
     environment:
       DATABASE_URL: postgres://boppl:${POSTGRES_PASSWORD:?}@postgres:5432/boppl_context
@@ -46,6 +39,8 @@ services:
       context: ..
       dockerfile: apps/api/Dockerfile.collab
     <<: *restart
+    ports:
+      - "127.0.0.1:1235:1234"
     env_file: [.env]
     environment:
       DATABASE_URL: postgres://boppl:${POSTGRES_PASSWORD:?}@postgres:5432/boppl_context
@@ -113,5 +108,3 @@ networks:
 volumes:
   pgdata:
   redis_data:
-  caddy_data:
-  caddy_config:
