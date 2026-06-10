@@ -1,4 +1,5 @@
-import type { DocFull } from '@boppl/shared';
+import type { DocFull, SourceAttachment } from '@boppl/shared';
+import { OriginalFileViewer } from './OriginalFileViewer.js';
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
 import type { EditorView } from 'prosemirror-view';
 import { api, setAuthToken } from '../../lib/api';
@@ -16,6 +17,7 @@ interface DocPageProps {
   jwt: string;
   user: { id: string; email: string };
   collabUrl?: string;
+  activeView?: 'edit' | 'original';
 }
 
 type Role = 'owner' | 'editor' | 'viewer' | null;
@@ -35,7 +37,8 @@ type Role = 'owner' | 'editor' | 'viewer' | null;
  * The toolbar lives fixed in the bottom-right corner of the viewport so it
  * doesn't compete with the doc title for visual attention.
  */
-export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX.Element {
+export function DocPage({ initialDoc, jwt, user, collabUrl, activeView = 'edit' }: DocPageProps): JSX.Element {
+  const sa = initialDoc.sourceAttachment as SourceAttachment | null | undefined;
   const [title, setTitle] = useState(initialDoc.title);
   const [savedTitle, setSavedTitle] = useState(initialDoc.title);
 
@@ -170,6 +173,29 @@ export function DocPage({ initialDoc, jwt, user, collabUrl }: DocPageProps): JSX
       return next;
     });
   }, []);
+
+  // When showing the original file viewer, render it full-height outside the normal layout
+  if (sa && activeView === 'original') {
+    return (
+      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '10px 20px 6px', borderBottom: '1px solid var(--line)' }}>
+          <input
+            className="doc-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onBlur={handleTitleBlur}
+            placeholder="Untitled"
+            autoComplete="off"
+            spellCheck
+            style={{ width: '100%' }}
+          />
+        </div>
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <OriginalFileViewer attachmentId={sa.id} format={sa.format} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="doc-page">

@@ -1,6 +1,9 @@
 import { eq, and } from 'drizzle-orm';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import multipart from '@fastify/multipart';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import mammoth from 'mammoth';
+import { r2, R2_BUCKET } from '../lib/storage/r2-client.js';
 import { randomUUID } from 'node:crypto';
 import { db } from '../db/index.js';
 import { attachments, docs } from '../db/schema.js';
@@ -318,5 +321,88 @@ export const documentFilesRoutes: FastifyPluginAsync = async (app) => {
         : undefined;
 
     return reply.send({ status: row.status, downloadUrl, errorMessage: row.errorMessage });
+  });
+
+  // ── GET /api/document-files/:attachmentId/viewer-url ──────────────────────
+  // Returns a fresh signed URL for the original file (called on tab open).
+  app.get('/api/document-files/:attachmentId/viewer-url', async (req, reply) => {
+    if (!req.auth) return reply.status(401).send({ error: 'unauthorized' });
+    if (!requireR2(reply)) return;
+
+    const { attachmentId } = req.params as { attachmentId: string };
+    const [row] = await withTenant(req.auth.tenant_id, (tx) =>
+      tx.select({ r2Key: attachments.r2Key, format: attachments.format, originalName: attachments.originalName })
+        .from(attachments)
+        .where(and(eq(attachments.id, attachmentId), eq(attachments.workspaceId, req.auth!.tenant_id)))
+        .limit(1),
+    );
+    if (!row) return reply.status(404).send({ error: 'not_found' });
+
+    const url = await getSignedAttachmentUrl(row.r2Key);
+    return reply.send({ url, format: row.format, originalName: row.originalName });
+  });
+
+  // ── GET /api/document-files/:attachmentId/html ────────────────────────────
+  // Converts a DOCX attachment to HTML for the in-browser viewer.
+  app.get('/api/document-files/:attachmentId/html', async (req, reply) => {
+    if (!req.auth) return reply.status(401).send({ error: 'unauthorized' });
+    if (!requireR2(reply)) return;
+
+    const { attachmentId } = req.params as { attachmentId: string };
+    const [row] = await withTenant(req.auth.tenant_id, (tx) =>
+      tx.select({ r2Key: attachments.r2Key, format: attachments.format })
+        .from(attachments)
+        .where(and(eq(attachments.id, attachmentId), eq(attachments.workspaceId, req.auth!.tenant_id)))
+        .limit(1),
+    );
+    if (!row) return reply.status(404).send({ error: 'not_found' });
+    if (row.format !== 'docx') return reply.status(400).send({ error: 'not_docx', message: 'Only DOCX files can be converted to HTML' });
+
+    // Fetch DOCX buffer from R2
+    const s3Res = await r2().send(new GetObjectCommand({ Bucket: R2_BUCKET(), Key: row.r2Key }));
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of s3Res.Body as AsyncIterable<Uint8Array>) {
+      chunks.push(chunk);
+    }
+    const buffer = Buffer.concat(chunks);
+
+    const { value: bodyHtml } = await mammoth.convertToHtml({ buffer });
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 14px;
+    line-height: 1.7;
+    color: #1a1a1a;
+    background: #fff;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 40px 48px 80px;
+  }
+  h1 { font-size: 2em; margin: 0 0 .5em; }
+  h2 { font-size: 1.5em; margin: 1.5em 0 .4em; }
+  h3 { font-size: 1.17em; margin: 1.2em 0 .3em; }
+  p  { margin: 0 0 .9em; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 13px; }
+  th { background: #f3f4f6; font-weight: 600; text-align: left; padding: 6px 10px; border: 1px solid #d1d5db; }
+  td { padding: 5px 10px; border: 1px solid #e5e7eb; }
+  tr:nth-child(even) td { background: #fafafa; }
+  pre { background: #f6f8fa; border: 1px solid #e5e7eb; border-radius: 4px; padding: 12px; font-size: 12px; overflow-x: auto; }
+  code { font-family: 'Courier New', monospace; font-size: 12px; background: #f6f8fa; padding: 1px 4px; border-radius: 3px; }
+  pre code { background: none; padding: 0; }
+  img { max-width: 100%; height: auto; }
+  ul, ol { padding-left: 1.5em; margin: 0 0 .9em; }
+</style>
+</head>
+<body>${bodyHtml}</body>
+</html>`;
+
+    return reply.type('text/html').send(html);
   });
 };

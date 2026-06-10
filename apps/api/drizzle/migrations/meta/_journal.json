@@ -162,6 +162,13 @@
       "when": 1780931052462,
       "tag": "0022_exotic_maggott",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1781103290439,
+      "tag": "0023_daffy_thunderball",
+      "breakpoints": true
     }
   ]
 }

@@ -33,14 +33,27 @@ const { doc } = (await response.json()) as { doc: DocFull };
 // Back navigation: respect ?back= param so folder context is preserved
 const rawBack = Astro.url.searchParams.get('back') ?? '';
 const backUrl = rawBack.startsWith('/app/') ? rawBack : '/app/content';
+const sourceAttachment = doc.sourceAttachment ?? null;
+
+// View toggle: ?view=original shows the original file, default is 'edit'
+const rawView = Astro.url.searchParams.get('view');
+const activeView: 'edit' | 'original' = (rawView === 'original' && sourceAttachment) ? 'original' : 'edit';
 ---
 
-<DocLayout title={doc.title || 'Untitled'} docType={doc.type} email={auth.email} backUrl={backUrl}>
+<DocLayout
+  title={doc.title || 'Untitled'}
+  docType={doc.type}
+  email={auth.email}
+  backUrl={backUrl}
+  sourceAttachment={sourceAttachment}
+  activeView={activeView}
+>
   <DocPage
     initialDoc={doc}
     jwt={auth.jwt}
     user={{ id: auth.user_id, email: auth.email }}
     collabUrl={collabUrl}
+    activeView={activeView}
     client:only="react"
   />
 </DocLayout>

@@ -5,5 +5,6 @@ export type {
   DocSavePayload,
   DocSaveResponse,
   DocSummary,
+  SourceAttachment,
 } from './types/doc.js';
 export type { Workspace, WorkspaceMember, WorkspaceRole } from './types/workspace.js';

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { writeMarkdownIntoLiveDoc } from '../collab/writeback.js';
 import { db } from '../db/index.js';
-import { docs } from '../db/schema.js';
+import { attachments, docs } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { contentHash, emptyYjsState } from '../lib/yjs.js';
 import { enforceFreeDocLimit } from '../plugins/free-limits.js';
@@ -101,8 +101,10 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
           folder_id: docs.folderId,
           created_at: docs.createdAt,
           updated_at: docs.updatedAt,
+          source_attachment_format: attachments.format,
         })
         .from(docs)
+        .leftJoin(attachments, eq(docs.sourceAttachmentId, attachments.id))
         .where(and(...conditions))
         .orderBy(desc(docs.updatedAt))
         .limit(100);
@@ -226,16 +228,24 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
     const { id } = req.params;
     if (!isUuid(id)) return reply.code(400).send({ error: 'bad_id' });
 
-    const row = await withTenant(req.auth.tenant_id, async (tx) => {
+    const result = await withTenant(req.auth.tenant_id, async (tx) => {
       const rows = await tx
-        .select()
+        .select({
+          doc: docs,
+          attachmentId:       attachments.id,
+          attachmentFormat:   attachments.format,
+          attachmentName:     attachments.originalName,
+          attachmentSize:     attachments.sizeBytes,
+        })
         .from(docs)
+        .leftJoin(attachments, eq(docs.sourceAttachmentId, attachments.id))
         .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
         .limit(1);
       return rows[0];
     });
 
-    if (!row) return reply.code(404).send({ error: 'not_found' });
+    if (!result) return reply.code(404).send({ error: 'not_found' });
+    const { doc: row } = result;
 
     return {
       doc: {
@@ -248,6 +258,12 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
         public_token: row.publicToken,
         created_at: row.createdAt,
         updated_at: row.updatedAt,
+        sourceAttachment: result.attachmentId ? {
+          id:           result.attachmentId,
+          format:       result.attachmentFormat as 'docx' | 'pdf',
+          originalName: result.attachmentName,
+          sizeBytes:    result.attachmentSize,
+        } : null,
       },
     };
   });

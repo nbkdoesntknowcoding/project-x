@@ -22,6 +22,7 @@ interface DocSummary {
   type: string;
   folder_id: string | null;
   updated_at: string;
+  source_attachment_format?: 'docx' | 'pdf' | null;
 }
 
 interface FolderSummary {
@@ -108,16 +109,20 @@ const workspaceName = domainPart
   ? domainPart.charAt(0).toUpperCase() + domainPart.slice(1)
   : 'Workspace';
 
-function extClass(type: string): string {
-  return type === 'engineering' ? 'eng'
-    : type === 'instruction' ? 'inst'
-    : type === 'snippet' ? 'snip'
+function extClass(d: DocSummary): string {
+  if (d.source_attachment_format === 'pdf')  return 'pdf';
+  if (d.source_attachment_format === 'docx') return 'docx';
+  return d.type === 'engineering' ? 'eng'
+    : d.type === 'instruction' ? 'inst'
+    : d.type === 'snippet' ? 'snip'
     : 'md';
 }
-function extLabel(type: string): string {
-  return type === 'engineering' ? 'ENG'
-    : type === 'instruction' ? 'INST'
-    : type === 'snippet' ? 'SNIP'
+function extLabel(d: DocSummary): string {
+  if (d.source_attachment_format === 'pdf')  return 'PDF';
+  if (d.source_attachment_format === 'docx') return 'DOCX';
+  return d.type === 'engineering' ? 'ENG'
+    : d.type === 'instruction' ? 'INST'
+    : d.type === 'snippet' ? 'SNIP'
     : 'MD';
 }
 
@@ -280,6 +285,8 @@ const totalItems = isInsideFolder
   .co-fi.eng .ext-tag  { background: linear-gradient(180deg, #7C9CFF, #4A67D9); }
   .co-fi.inst .ext-tag { background: linear-gradient(180deg, #FFB370, #FF7A8A); color: var(--on-ink); }
   .co-fi.snip .ext-tag { background: linear-gradient(180deg, #6BE39B, #2B9B9B); color: var(--on-ink); }
+  .co-fi.pdf .ext-tag  { background: linear-gradient(180deg, #f87171, #dc2626); }
+  .co-fi.docx .ext-tag { background: linear-gradient(180deg, #60a5fa, #2563eb); }
 
   /* LIST VIEW */
   .co-list { display: flex; flex-direction: column; }
@@ -335,6 +342,8 @@ const totalItems = isInsideFolder
   .co-file-ico.eng .ext  { background: linear-gradient(180deg, #7C9CFF, #4A67D9); }
   .co-file-ico.inst .ext { background: linear-gradient(180deg, #FFB370, #FF7A8A); color: var(--on-ink); }
   .co-file-ico.snip .ext { background: linear-gradient(180deg, #6BE39B, #2B9B9B); color: var(--on-ink); }
+  .co-file-ico.pdf .ext  { background: linear-gradient(180deg, #f87171, #dc2626); }
+  .co-file-ico.docx .ext { background: linear-gradient(180deg, #60a5fa, #2563eb); }
 
   /* EMPTY STATE */
   .co-empty {
@@ -753,8 +762,8 @@ const totalItems = isInsideFolder
             {/* ICON GRID */}
             <div class="co-icon-grid">
               {(isInsideFolder ? docs : unfiledDocs).map((d) => {
-                const ext = extClass(d.type);
-                const label = extLabel(d.type);
+                const ext = extClass(d);
+                const label = extLabel(d);
                 return (
                   <a href={`/app/content/${d.id}?back=${backParam}`} class="co-tile" draggable="true" data-doc-id={d.id}>
                     <div class="ico-wrap">
@@ -785,8 +794,8 @@ const totalItems = isInsideFolder
               </div>
               {(isInsideFolder ? docs : unfiledDocs).map((d) => {
                 const unread = unreadByDoc.get(d.id) ?? 0;
-                const ext = extClass(d.type);
-                const label = extLabel(d.type);
+                const ext = extClass(d);
+                const label = extLabel(d);
                 return (
                   <a href={`/app/content/${d.id}?back=${backParam}`} class="co-lr" draggable="true" data-doc-id={d.id}>
                     <div class="co-ic">
