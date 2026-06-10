@@ -241,6 +241,9 @@ export const docs = pgTable(
     // Phase sharing: public reader link
     isPublic:    boolean('is_public').notNull().default(false),
     publicToken: uuid('public_token').unique(),
+    // DOCX/PDF support: set when this doc was created by ingesting an uploaded file.
+    // FK to attachments.id is defined in migration SQL (circular ref workaround).
+    sourceAttachmentId: uuid('source_attachment_id'),
   },
   (table) => ({
     workspacePathUnique: unique().on(table.workspaceId, table.path),
@@ -1041,5 +1044,52 @@ export const notifications = pgTable(
   },
   (table) => ({
     recipientIdx: index('notifications_recipient_idx').on(table.recipientId, table.createdAt),
+  }),
+);
+
+// ── DOCX / PDF attachments ────────────────────────────────────────────────────
+// Stores metadata for uploaded source files (DOCX/PDF ingested as docs) and
+// generated export files (DOCX/PDF rendered on demand). Binary content lives
+// in R2; only the key and metadata are stored here.
+export const attachments = pgTable(
+  'attachments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    // docId = null for standalone attachments; set after ingestion creates the doc
+    docId: uuid('doc_id').references(() => docs.id, { onDelete: 'set null' }),
+
+    // 'source' = uploaded by user (DOCX/PDF ingested)
+    // 'export' = generated on demand (DOCX/PDF rendered from a Mnema doc)
+    type: text('type').notNull(),
+
+    // 'docx' | 'pdf'
+    format: text('format').notNull(),
+
+    originalName: text('original_name'),
+
+    // R2 object key: attachments/{workspaceId}/{uuid}.{ext}
+    r2Key: text('r2_key').notNull(),
+
+    sizeBytes: integer('size_bytes'),
+    mimeType:  text('mime_type'),
+
+    // 'pending' | 'processing' | 'ready' | 'failed'
+    status:       text('status').notNull().default('pending'),
+    errorMessage: text('error_message'),
+
+    // Extraction metadata
+    pageCount: integer('page_count'),
+    usedOcr:   boolean('used_ocr').notNull().default(false),
+
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    workspaceIdx: index('attachments_workspace_idx').on(table.workspaceId),
+    docIdx:       index('attachments_doc_idx').on(table.docId),
+    statusIdx:    index('attachments_status_idx').on(table.status),
   }),
 );
