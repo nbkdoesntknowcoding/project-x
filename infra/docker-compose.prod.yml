@@ -44,6 +44,7 @@ services:
     env_file: [.env]
     environment:
       DATABASE_URL: postgres://boppl:${POSTGRES_PASSWORD:?}@postgres:5432/boppl_context
+      REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379
       NODE_ENV: production
       COLLAB_PORT: "1234"
     depends_on:
