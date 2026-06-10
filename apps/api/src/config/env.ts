@@ -140,6 +140,19 @@ const envSchema = z.object({
   RAZORPAY_WEBHOOK_SECRET: z.string().min(1),
   RAZORPAY_ENVIRONMENT: z.enum(['test', 'live']).default('test'),
 
+  // Cloudflare R2 (DOCX/PDF attachment storage — optional; upload/export routes
+  // return 503 if not configured rather than crashing the whole server)
+  R2_ACCOUNT_ID:        z.string().min(1).optional(),
+  R2_ACCESS_KEY_ID:     z.string().min(1).optional(),
+  R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  R2_BUCKET_NAME:       z.string().min(1).optional(),
+  R2_PUBLIC_URL:        z.string().url().optional(),
+
+  // DOCX/PDF feature
+  MISTRAL_API_KEY:       z.string().min(1).optional(),
+  PDF_RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
+  MAX_UPLOAD_SIZE_MB:    z.coerce.number().int().positive().default(50),
+
   // OAuth 2.1 Authorization Server (Phase A)
   // Externally-visible issuer URL — equals MCP_BASE_URL in practice.
   // The `iss` claim in every OAuth-issued JWT and the base for all AS URLs.
