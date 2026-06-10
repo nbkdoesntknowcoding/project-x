@@ -5,27 +5,17 @@ x-restart: &restart
 
 services:
 
-  caddy:
-    image: caddy:2-alpine
-    <<: *restart
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      api:    { condition: service_healthy }
-      collab: { condition: service_started }
-    networks: [internal]
+  # Caddy removed — Cloudflare Tunnel handles TLS termination.
+  # api and collab are bound to 127.0.0.1 only so cloudflared can reach them
+  # but they are never exposed to the open internet.
 
   api:
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
     <<: *restart
+    ports:
+      - "127.0.0.1:8080:8080"
     env_file: [.env]
     environment:
       DATABASE_URL: postgres://boppl:${POSTGRES_PASSWORD:?}@postgres:5432/boppl_context
@@ -48,6 +38,8 @@ services:
       context: ..
       dockerfile: apps/api/Dockerfile.collab
     <<: *restart
+    ports:
+      - "127.0.0.1:1234:1234"
     env_file: [.env]
     environment:
       DATABASE_URL: postgres://boppl:${POSTGRES_PASSWORD:?}@postgres:5432/boppl_context
@@ -115,5 +107,3 @@ networks:
 volumes:
   pgdata:
   redis_data:
-  caddy_data:
-  caddy_config:
