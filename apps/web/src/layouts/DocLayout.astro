@@ -237,6 +237,10 @@ try {
       background: var(--canvas);
       position: relative;
     }
+    .dl-main.is-original {
+      overflow: hidden;
+      background: #111;
+    }
 
     /* STATUS BAR */
     .dl-statusbar {
@@ -370,7 +374,7 @@ try {
     </div>
 
     <!-- MAIN CONTENT -->
-    <main class="dl-main">
+    <main class:list={['dl-main', { 'is-original': activeView === 'original' }]}>
       <slot />
     </main>
 

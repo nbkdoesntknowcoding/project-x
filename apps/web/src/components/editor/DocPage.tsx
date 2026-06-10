@@ -174,25 +174,11 @@ export function DocPage({ initialDoc, jwt, user, collabUrl, activeView = 'edit' 
     });
   }, []);
 
-  // When showing the original file viewer, render it full-height outside the normal layout
+  // Full-height original file viewer — no extra chrome, fills the dark dl-main container
   if (sa && activeView === 'original') {
     return (
-      <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '10px 20px 6px', borderBottom: '1px solid var(--line)' }}>
-          <input
-            className="doc-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={handleTitleBlur}
-            placeholder="Untitled"
-            autoComplete="off"
-            spellCheck
-            style={{ width: '100%' }}
-          />
-        </div>
-        <div style={{ flex: 1, overflow: 'hidden' }}>
-          <OriginalFileViewer attachmentId={sa.id} format={sa.format} />
-        </div>
+      <div style={{ width: '100%', height: '100%' }}>
+        <OriginalFileViewer attachmentId={sa.id} format={sa.format} />
       </div>
     );
   }
