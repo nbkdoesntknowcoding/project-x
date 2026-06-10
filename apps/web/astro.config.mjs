@@ -13,6 +13,11 @@ const isVercel = !!process.env.VERCEL;
 export default defineConfig({
   output: 'server',
   site: process.env.PUBLIC_SITE_URL ?? 'https://mnema.theboringpeople.in',
+  security: {
+    // JWT-based auth on every API request makes Astro's CSRF origin check
+    // redundant — and it blocks multipart form POSTs from the browser.
+    checkOrigin: false,
+  },
   // Use @astrojs/vercel when building on Vercel; fall back to standalone
   // Node.js server for local dev and manual builds.
   adapter: isVercel ? vercel() : node({ mode: 'standalone' }),
