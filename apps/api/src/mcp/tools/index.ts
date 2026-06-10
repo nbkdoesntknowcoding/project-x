@@ -21,6 +21,12 @@ import { UPDATE_FLOW_NODE_TOOL, updateFlowNode } from './update-flow-node.js';
 // Sprint 4 Chunk E — project tools (both workspace modes)
 import { GET_PROJECT_TOOL, getProject } from './get-project.js';
 import { LIST_PROJECTS_TOOL, listProjects } from './list-projects.js';
+// DOCX/PDF tools (both workspace modes)
+import {
+  UPLOAD_DOC_FILE_TOOL, uploadDocFile,
+  EXPORT_DOC_TOOL, exportDoc,
+  GET_DOC_SOURCE_FILE_TOOL, getDocSourceFile,
+} from './document-files.js';
 
 /**
  * The production tool catalog. The MCP server reads this on each request
@@ -99,6 +105,10 @@ export const PRODUCTION_TOOLS: readonly ToolDescriptor[] = [
   // Sprint 4 E.1-E.2: project tools — available in both workspace modes.
   { spec: LIST_PROJECTS_TOOL, handler: listProjects },
   { spec: GET_PROJECT_TOOL, handler: getProject },
+  // DOCX/PDF file tools — available in both workspace modes.
+  { spec: UPLOAD_DOC_FILE_TOOL, handler: uploadDocFile },
+  { spec: EXPORT_DOC_TOOL, handler: exportDoc },
+  { spec: GET_DOC_SOURCE_FILE_TOOL, handler: getDocSourceFile },
 ];
 
 export function listToolSpecs(): McpToolSpec[] {
