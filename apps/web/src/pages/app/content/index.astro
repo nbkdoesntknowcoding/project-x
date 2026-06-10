@@ -1257,7 +1257,11 @@ const totalItems = isInsideFolder
       e.preventDefault();
       osDropCounter = 0;
       if (dropOverlay) dropOverlay.classList.remove('visible');
-      void importFiles(e.dataTransfer.files);
+      const files = Array.from(e.dataTransfer.files);
+      const docxPdf = files.filter(f => /\.(docx|pdf)$/i.test(f.name));
+      const mdTxt   = files.filter(f => /\.(md|txt|markdown)$/i.test(f.name));
+      if (docxPdf.length) void importDocxPdf(docxPdf[0]);
+      if (mdTxt.length)   void importFiles(mdTxt);
     });
   </script>
 </AppLayout>
