@@ -48,6 +48,9 @@ COPY --from=builder /app/packages/schema/dist ./packages/schema/dist
 # Migrations folder needed at runtime for drizzle
 COPY apps/api/drizzle ./apps/api/drizzle
 
+# Static templates (not emitted by tsc — copy from source)
+COPY apps/api/src/templates ./apps/api/dist/templates
+
 EXPOSE 8080
 ENV NODE_ENV=production
 
