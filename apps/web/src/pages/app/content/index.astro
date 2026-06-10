@@ -898,8 +898,10 @@ const totalItems = isInsideFolder
       if (docxLabel) docxLabel.title = `Processing ${file.name}...`;
 
       const form = new FormData();
-      form.append('file', file, file.name);
+      // folderId must come BEFORE the file — multipart only captures fields
+      // that appear before the file part in the stream.
       if (folderParam) form.append('folderId', folderParam);
+      form.append('file', file, file.name);
 
       try {
         const res = await fetch('/api/document-files/upload', {
