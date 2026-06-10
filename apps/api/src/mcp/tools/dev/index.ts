@@ -987,6 +987,10 @@ export const CREATE_TASK_TOOL = {
         type: 'string',
         description: 'UUID of a spec/PRD doc to link this task to.',
       },
+      project_id: {
+        type: 'string',
+        description: 'UUID of the project to assign this task to. Task will appear in that project\'s Kanban board.',
+      },
     },
     required: ['title'],
     additionalProperties: false,
@@ -1033,6 +1037,7 @@ export async function createTask(
     sprint:      z.string().optional(),
     tags:        z.array(z.string()).optional(),
     doc_id:      z.string().uuid().optional(),
+    project_id:  z.string().uuid().optional(),
   }).strict();
 
   const args = argsSchema.parse(rawArgs);
@@ -1078,6 +1083,7 @@ export async function createTask(
       assignedMemberId: assignedMemberId ?? null,
       tags:             allTags.length > 0 ? allTags : null,
       docId:            args.doc_id ?? null,
+      projectId:        args.project_id ?? null,
       boardOrder:       newOrder,
       status:           'backlog',
     }).returning(),

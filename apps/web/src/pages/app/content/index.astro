@@ -778,7 +778,7 @@ const totalItems = isInsideFolder
                 <span>UPDATED</span>
                 <span>FOLDER</span>
               </div>
-              {(isInsideFolder ? docs : docs).map((d) => {
+              {(isInsideFolder ? docs : unfiledDocs).map((d) => {
                 const unread = unreadByDoc.get(d.id) ?? 0;
                 const ext = extClass(d.type);
                 const label = extLabel(d.type);
