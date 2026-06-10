@@ -102,6 +102,22 @@ services:
     networks: [internal]
     # NOT exposed to host
 
+  onlyoffice:
+    image: onlyoffice/documentserver:latest
+    <<: *restart
+    ports:
+      - "127.0.0.1:1236:80"   # DP Caddy proxies docs.theboringpeople.in → this
+    environment:
+      - JWT_ENABLED=true
+      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET:?}
+      - JWT_HEADER=Authorization
+      - JWT_IN_BODY=true
+    volumes:
+      - oo_data:/var/www/onlyoffice/Data
+      - oo_logs:/var/log/onlyoffice
+      - oo_cache:/var/lib/onlyoffice
+    networks: [internal]
+
 networks:
   internal:
     driver: bridge
@@ -109,3 +125,6 @@ networks:
 volumes:
   pgdata:
   redis_data:
+  oo_data:
+  oo_logs:
+  oo_cache:

@@ -12,7 +12,7 @@ interface Props {
   email?: string;
   backUrl?: string;
   sourceAttachment?: SourceAttachment | null;
-  activeView?: 'edit' | 'original';
+  activeView?: 'edit' | 'original' | 'mnema';
 }
 
 const { title, docType = 'doc', workspaceName: wsProp, email, backUrl = '/app/content', sourceAttachment, activeView = 'edit' } = Astro.props;
@@ -22,6 +22,7 @@ const _back = Astro.url.searchParams.get('back');
 const _backParam = _back ? `back=${encodeURIComponent(_back)}&` : '';
 const viewEditHref     = `${Astro.url.pathname}?${_backParam}view=edit`;
 const viewOriginalHref = `${Astro.url.pathname}?${_backParam}view=original`;
+const viewMnemaHref    = `${Astro.url.pathname}?${_backParam}view=mnema`;
 
 const auth = Astro.locals.auth;
 if (!auth) {
@@ -292,10 +293,16 @@ try {
         <span class="here">{title || 'Untitled'}</span>
       </div>
       <div class="dl-tb-right">
-        {sourceAttachment && (
+        {sourceAttachment && sourceAttachment.format === 'docx' && (
           <div class="dl-eb-view-toggle" style="margin-right:6px;">
-            <a href={viewEditHref}     class:list={['dl-eb-view-btn', { active: activeView === 'edit'     }]}>Edit</a>
-            <a href={viewOriginalHref} class:list={['dl-eb-view-btn', { active: activeView === 'original' }]}>{sourceAttachment.format === 'pdf' ? 'PDF' : 'DOCX'}</a>
+            <a href={viewEditHref}  class:list={['dl-eb-view-btn', { active: activeView === 'edit'  }]}>Word</a>
+            <a href={viewMnemaHref} class:list={['dl-eb-view-btn', { active: activeView === 'mnema' }]}>Mnema</a>
+          </div>
+        )}
+        {sourceAttachment && sourceAttachment.format === 'pdf' && (
+          <div class="dl-eb-view-toggle" style="margin-right:6px;">
+            <a href={viewMnemaHref}    class:list={['dl-eb-view-btn', { active: activeView === 'mnema' || activeView === 'edit' }]}>Mnema</a>
+            <a href={viewOriginalHref} class:list={['dl-eb-view-btn', { active: activeView === 'original' }]}>PDF</a>
           </div>
         )}
         <a href="/app/settings" class="dl-icon-btn" title="Settings">
@@ -338,7 +345,7 @@ try {
 
     <!-- EDIT BAR -->
     <div class="dl-editbar">
-      {activeView === 'edit' && (<>
+      {(activeView === 'edit' && (!sourceAttachment || sourceAttachment.format !== 'docx') || activeView === 'mnema') && (<>
         <div class="dl-eb-group">
           <button class="dl-eb-heading" title="Block type">
             <span>Paragraph</span>
@@ -374,7 +381,7 @@ try {
     </div>
 
     <!-- MAIN CONTENT -->
-    <main class:list={['dl-main', { 'is-original': activeView === 'original' }]}>
+    <main class:list={['dl-main', { 'is-original': activeView === 'original' || (activeView === 'edit' && !!sourceAttachment && sourceAttachment.format === 'docx') }]}>
       <slot />
     </main>
 

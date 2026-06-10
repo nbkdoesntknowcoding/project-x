@@ -35,9 +35,17 @@ const rawBack = Astro.url.searchParams.get('back') ?? '';
 const backUrl = rawBack.startsWith('/app/') ? rawBack : '/app/content';
 const sourceAttachment = doc.sourceAttachment ?? null;
 
-// View toggle: ?view=original shows the original file, default is 'edit'
+// View routing:
+//   DOCX docs:  'edit' (default) → OnlyOffice | 'mnema' → ProseMirror editor
+//   PDF docs:   'edit'/'mnema' (default) → ProseMirror editor | 'original' → PDF viewer
+//   Other docs: always 'edit' (ProseMirror editor, no toggle shown)
 const rawView = Astro.url.searchParams.get('view');
-const activeView: 'edit' | 'original' = (rawView === 'original' && sourceAttachment) ? 'original' : 'edit';
+let activeView: 'edit' | 'original' | 'mnema' = 'edit';
+if (sourceAttachment?.format === 'docx') {
+  activeView = rawView === 'mnema' ? 'mnema' : 'edit';
+} else if (sourceAttachment?.format === 'pdf') {
+  activeView = rawView === 'original' ? 'original' : 'edit';
+}
 ---
 
 <DocLayout

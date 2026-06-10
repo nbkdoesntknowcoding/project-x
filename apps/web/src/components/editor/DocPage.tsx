@@ -1,5 +1,6 @@
 import type { DocFull, SourceAttachment } from '@boppl/shared';
 import { OriginalFileViewer } from './OriginalFileViewer.js';
+import { OnlyOfficeEditor } from './OnlyOfficeEditor.js';
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
 import type { EditorView } from 'prosemirror-view';
 import { api, setAuthToken } from '../../lib/api';
@@ -17,7 +18,7 @@ interface DocPageProps {
   jwt: string;
   user: { id: string; email: string };
   collabUrl?: string;
-  activeView?: 'edit' | 'original';
+  activeView?: 'edit' | 'original' | 'mnema';
 }
 
 type Role = 'owner' | 'editor' | 'viewer' | null;
@@ -174,7 +175,16 @@ export function DocPage({ initialDoc, jwt, user, collabUrl, activeView = 'edit' 
     });
   }, []);
 
-  // Full-height original file viewer — no extra chrome, fills the dark dl-main container
+  // DOCX in 'edit' mode → OnlyOffice (full-height, dark container)
+  if (sa && sa.format === 'docx' && activeView === 'edit') {
+    return (
+      <div style={{ width: '100%', height: '100%' }}>
+        <OnlyOfficeEditor attachmentId={sa.id} />
+      </div>
+    );
+  }
+
+  // PDF viewer or explicit 'original' view
   if (sa && activeView === 'original') {
     return (
       <div style={{ width: '100%', height: '100%' }}>
@@ -182,6 +192,8 @@ export function DocPage({ initialDoc, jwt, user, collabUrl, activeView = 'edit' 
       </div>
     );
   }
+
+  // 'mnema' view for DOCX docs falls through to the normal ProseMirror editor below
 
   return (
     <div className="doc-page">

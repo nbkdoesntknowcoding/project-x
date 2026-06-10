@@ -153,6 +153,11 @@ const envSchema = z.object({
   PDF_RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
   MAX_UPLOAD_SIZE_MB:    z.coerce.number().int().positive().default(50),
 
+  // OnlyOffice Document Server
+  ONLYOFFICE_API_URL:      z.string().url().optional(), // public URL browser loads SDK from
+  ONLYOFFICE_INTERNAL_URL: z.string().url().optional(), // internal Docker URL for callback base
+  ONLYOFFICE_JWT_SECRET:   z.string().min(1).optional(), // shared secret for request signing
+
   // OAuth 2.1 Authorization Server (Phase A)
   // Externally-visible issuer URL — equals MCP_BASE_URL in practice.
   // The `iss` claim in every OAuth-issued JWT and the base for all AS URLs.
