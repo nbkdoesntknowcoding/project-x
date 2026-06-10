@@ -42,9 +42,10 @@ const handler: APIRoute = async (context) => {
   };
 
   if (isBodyMethod) {
-    // Read body as text first — forwarding the raw ReadableStream with
-    // duplex:'half' throws on Vercel's Node.js runtime for POST requests.
-    init.body = await request.text();
+    // Multipart/form-data is binary — must use arrayBuffer, not text().
+    // For JSON/text payloads text() works fine too, but arrayBuffer is safe
+    // for all content types and avoids corrupting binary uploads.
+    init.body = await request.arrayBuffer();
   }
 
   let upstream: Response;
