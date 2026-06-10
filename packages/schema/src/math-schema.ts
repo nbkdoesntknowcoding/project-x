@@ -1,7 +1,10 @@
+import type { MilkdownPlugin } from '@milkdown/ctx';
 import { $node, $remark } from '@milkdown/utils';
 import remarkMath from 'remark-math';
 
-export const remarkMathPlugin = $remark('remark-math', () => remarkMath);
+// Cast to `never` to stop TypeScript inferring Options from the transitive
+// mdast-util-math dep — avoids TS2742 "type cannot be named" errors on emit.
+export const remarkMathPlugin = $remark('remark-math', () => remarkMath as never);
 
 export const mathInlineNode = $node('math_inline', () => ({
   group: 'inline',
@@ -83,4 +86,4 @@ export const mathBlockNode = $node('math_block', () => ({
  * $$...$$ math syntax. Both the browser editor and the headless Node bridge
  * import this from here so the schema is authoritative in one place.
  */
-export const mathSchemaPlugin = [remarkMathPlugin, mathInlineNode, mathBlockNode].flat();
+export const mathSchemaPlugin: MilkdownPlugin[] = [remarkMathPlugin, mathInlineNode, mathBlockNode].flat();

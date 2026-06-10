@@ -323,6 +323,9 @@ importers:
         specifier: ^13.6.0
         version: 13.6.30
     devDependencies:
+      '@milkdown/ctx':
+        specifier: 7.21.1
+        version: 7.21.1
       '@types/jsdom':
         specifier: ^28.0.3
         version: 28.0.3
