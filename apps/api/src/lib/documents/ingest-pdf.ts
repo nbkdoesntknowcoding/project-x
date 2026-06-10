@@ -1,12 +1,10 @@
-import { createRequire } from 'node:module';
 import { Mistral } from '@mistralai/mistralai';
 import { config } from '../../config/env.js';
 import { uploadAttachment, uploadDocImage } from '../storage/r2-attachments.js';
 
-// pdfjs-dist ships ESM but also a legacy CJS build; use the legacy path in Node.
-const require = createRequire(import.meta.url);
+// pdfjs-dist ships ESM — use dynamic import so Node handles it correctly.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js') as any;
+const pdfjsLib: any = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
 const SCANNED_THRESHOLD_CHARS_PER_PAGE = 100;
 
