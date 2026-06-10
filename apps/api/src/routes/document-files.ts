@@ -2,6 +2,7 @@ import { eq, and } from 'drizzle-orm';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import multipart from '@fastify/multipart';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import mammoth from 'mammoth';
 import { r2, R2_BUCKET } from '../lib/storage/r2-client.js';
 import { randomUUID } from 'node:crypto';
@@ -338,7 +339,17 @@ export const documentFilesRoutes: FastifyPluginAsync = async (app) => {
     );
     if (!row) return reply.status(404).send({ error: 'not_found' });
 
-    const url = await getSignedAttachmentUrl(row.r2Key);
+    // Override Content-Disposition to inline so the browser displays rather than downloads
+    const url = await getSignedUrl(
+      r2(),
+      new GetObjectCommand({
+        Bucket: R2_BUCKET(),
+        Key: row.r2Key,
+        ResponseContentDisposition: 'inline',
+        ResponseContentType: 'application/pdf',
+      }),
+      { expiresIn: 3600 },
+    );
     return reply.send({ url, format: row.format, originalName: row.originalName });
   });
 
