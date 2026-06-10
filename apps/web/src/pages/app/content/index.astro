@@ -504,6 +504,11 @@ const totalItems = isInsideFolder
         Upload
         <input id="co-upload-inp" type="file" accept=".md,.txt,.markdown" multiple style="display:none" />
       </label>
+      <label class="co-upload-btn" title="Import DOCX or PDF" id="co-docx-label">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Import
+        <input id="co-docx-inp" type="file" accept=".docx,.pdf" style="display:none" />
+      </label>
       <form id="new-doc-form" style="display:flex;align-items:center;gap:6px;">
         <select id="new-doc-type" style="height:28px;padding:0 8px;border-radius:6px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);font:500 12px/1 var(--sans);outline:none;cursor:pointer;">
           <option value="doc">Doc</option>
@@ -881,6 +886,45 @@ const totalItems = isInsideFolder
     document.getElementById('co-upload-inp')?.addEventListener('change', (e) => {
       if (e.target.files?.length) void importFiles(e.target.files);
       e.target.value = ''; // reset so same file can be re-uploaded
+    });
+
+    // ── Import DOCX / PDF ─────────────────────────────────────────────────
+    const docxLabel = document.getElementById('co-docx-label');
+    async function importDocxPdf(file) {
+      const originalText = docxLabel?.querySelector('svg')?.nextSibling;
+      if (docxLabel) docxLabel.setAttribute('data-loading', 'true');
+      const labelSpan = docxLabel?.childNodes[2]; // text node after svg
+      const prevText = docxLabel ? docxLabel.innerHTML : '';
+      if (docxLabel) docxLabel.title = `Processing ${file.name}...`;
+
+      const form = new FormData();
+      form.append('file', file, file.name);
+      if (folderParam) form.append('folderId', folderParam);
+
+      try {
+        const res = await fetch('/api/document-files/upload', {
+          method: 'POST',
+          credentials: 'include',
+          body: form,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(`Import failed: ${err.message ?? res.statusText}`);
+          return;
+        }
+        const { docId } = await res.json();
+        window.location.href = `/app/content/${docId}?back=${backParam}`;
+      } catch (err) {
+        alert(`Import failed: ${String(err)}`);
+      } finally {
+        if (docxLabel) docxLabel.title = 'Import DOCX or PDF';
+      }
+    }
+
+    document.getElementById('co-docx-inp')?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (file) void importDocxPdf(file);
+      e.target.value = '';
     });
 
     // --- Create folder (supports nested via parent_id) ---
