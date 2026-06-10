@@ -43,11 +43,17 @@ export const documentFilesRoutes: FastifyPluginAsync = async (app) => {
 
     let file: Awaited<ReturnType<typeof req.file>> | undefined;
     try {
-      file = await req.file();
+      file = await req.file({ limits: { fileSize: (config.MAX_UPLOAD_SIZE_MB + 10) * 1024 * 1024 } });
     } catch {
       return reply.status(400).send({ error: 'no_file', message: 'No file provided' });
     }
     if (!file) return reply.status(400).send({ error: 'no_file', message: 'No file provided' });
+
+    // Fields come from the multipart form alongside the file — NOT from req.body
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const formFields = (file as any).fields as Record<string, { value?: string }> | undefined;
+    const folderId  = formFields?.folderId?.value  ?? null;
+    const projectId = formFields?.projectId?.value ?? null;
 
     const buffer = await file.toBuffer();
 
@@ -130,10 +136,7 @@ export const documentFilesRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    // Derive query params passed as form fields
-    const fields = req.body as Record<string, { value?: string } | string> | undefined;
-    const folderId  = (typeof fields?.folderId  === 'object' ? fields.folderId.value  : fields?.folderId)  ?? null;
-    const projectId = (typeof fields?.projectId === 'object' ? fields.projectId.value : fields?.projectId) ?? null;
+    // folderId and projectId already extracted from multipart fields above
 
     // Create doc
     const path = `upload-${randomUUID()}`;

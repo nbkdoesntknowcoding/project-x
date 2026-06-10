@@ -74,7 +74,7 @@ export async function extractTextPdf(buffer: Buffer): Promise<ExtractedPage[]> {
         fontSize: Math.round(Math.abs(item.transform[0] ?? 12)),
       }));
 
-    pages.push({ pageNumber: i, markdown: convertItemsToMarkdown(items) });
+    pages.push({ pageNumber: i, markdown: convertItemsToMarkdown(items).replace(/\x00/g, '') });
   }
 
   return pages;
