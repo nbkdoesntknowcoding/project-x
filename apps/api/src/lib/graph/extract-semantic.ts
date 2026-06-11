@@ -291,8 +291,8 @@ export async function buildSimilarityEdges(
   // We pick the most recent embedding per doc via DISTINCT ON.
   const rows = await db.execute<{ from_id: string; to_id: string; similarity: number }>(
     sql`
-      WITH doc_vecs AS (
-        SELECT doc_id, avg(embedding) AS embedding
+      WITH doc_vecs AS MATERIALIZED (
+        SELECT doc_id, avg(embedding)::vector AS embedding
         FROM embeddings
         WHERE workspace_id = ${workspaceId}
         GROUP BY doc_id
