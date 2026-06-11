@@ -45,9 +45,10 @@ export const authPlugin: FastifyPluginAsync = fp(async (app) => {
     if (url.startsWith('/api/hooks/') || url === '/install/claude-hooks.sh') return;
     // Public doc reader — no auth required.
     if (url.startsWith('/api/docs/public/')) return;
-    // OnlyOffice callback — server-to-server call from OnlyOffice container,
-    // no cookie. Auth is handled via OnlyOffice JWT signature verification.
+    // OnlyOffice — server-to-server calls from OnlyOffice container, no cookie.
+    // /callback auth: OnlyOffice JWT signature. /file auth: tenantId query param.
     if (url === '/api/onlyoffice/callback') return;
+    if (url.startsWith('/api/onlyoffice/') && url.endsWith('/file')) return;
 
     const token = req.cookies[JWT_COOKIE_NAME] ?? extractBearer(req.headers.authorization);
     if (!token) {

@@ -6,7 +6,6 @@ import { withTenant } from '../db/with-tenant.js';
 import { config } from '../config/env.js';
 import { ingestDocx } from '../lib/documents/ingest-docx.js';
 import { contentHash, emptyYjsState } from '../lib/yjs.js';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { r2, R2_BUCKET } from '../lib/storage/r2-client.js';
 
@@ -55,24 +54,16 @@ export const onlyofficeRoutes: FastifyPluginAsync = async (app) => {
     if (!row) return reply.status(404).send({ error: 'not_found' });
     if (row.format !== 'docx') return reply.status(400).send({ error: 'not_docx' });
 
-    // Presigned R2 URL — OnlyOffice server fetches the DOCX from here
-    const docUrl = await getSignedUrl(
-      r2(),
-      new GetObjectCommand({
-        Bucket: R2_BUCKET(),
-        Key:    row.r2Key,
-        ResponseContentDisposition: 'inline',
-        ResponseContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      }),
-      { expiresIn: 3600 },
-    );
-
     // document.key must change whenever the file changes so OnlyOffice
     // doesn't serve a stale cached version.
     const docKey = `${row.id}-${new Date(row.updatedAt!).getTime()}`;
 
-    // Internal callback URL: OnlyOffice container → api container (Docker network)
+    // Internal base: OnlyOffice container → api container via Docker network
     const internalBase = config.ONLYOFFICE_INTERNAL_URL ?? 'http://api:8080';
+
+    // Proxy the DOCX through our own API instead of a presigned R2 URL.
+    // This avoids AWS SDK checksum headers that Cloudflare R2 rejects (400).
+    const docUrl      = `${internalBase}/api/onlyoffice/${row.id}/file?tenantId=${req.auth.tenant_id}`;
     const callbackUrl = `${internalBase}/api/onlyoffice/callback?attachmentId=${row.id}&tenantId=${req.auth.tenant_id}`;
 
     const editorConfig = {
@@ -116,6 +107,39 @@ export const onlyofficeRoutes: FastifyPluginAsync = async (app) => {
       config: { ...editorConfig, token },
       apiUrl: config.ONLYOFFICE_API_URL,
     });
+  });
+
+  // ── GET /api/onlyoffice/:attachmentId/file ───────────────────────────────
+  // Proxies the DOCX from R2 to OnlyOffice server over the Docker network.
+  // Public (no cookie) — tenantId query param scopes access to the workspace.
+  app.get('/api/onlyoffice/:attachmentId/file', async (req, reply) => {
+    const { attachmentId } = req.params as { attachmentId: string };
+    const { tenantId } = req.query as { tenantId?: string };
+    if (!tenantId) return reply.status(400).send({ error: 'missing_tenant' });
+
+    const [row] = await withTenant(tenantId, (tx) =>
+      tx
+        .select({ r2Key: attachments.r2Key, originalName: attachments.originalName })
+        .from(attachments)
+        .where(
+          and(
+            eq(attachments.id, attachmentId),
+            eq(attachments.workspaceId, tenantId),
+          ),
+        )
+        .limit(1),
+    );
+    if (!row) return reply.status(404).send({ error: 'not_found' });
+
+    const s3Res = await r2().send(
+      new GetObjectCommand({ Bucket: R2_BUCKET(), Key: row.r2Key }),
+    );
+
+    void reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    void reply.header('Content-Disposition', `inline; filename="${row.originalName ?? 'document.docx'}"`);
+    if (s3Res.ContentLength) void reply.header('Content-Length', String(s3Res.ContentLength));
+
+    return reply.send(s3Res.Body);
   });
 
   // ── POST /api/onlyoffice/callback ─────────────────────────────────────────
