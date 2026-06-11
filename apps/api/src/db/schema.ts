@@ -1093,3 +1093,98 @@ export const attachments = pgTable(
     statusIdx:    index('attachments_status_idx').on(table.status),
   }),
 );
+
+// ─── KNOWLEDGE GRAPH ──────────────────────────────────────────────────────────
+
+export const graphNodes = pgTable(
+  'graph_nodes',
+  {
+    id:          uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    // 'doc'|'flow'|'flow_step'|'task'|'session'|'concept'|'decision'|'project'|'rationale'
+    entityType:  text('entity_type').notNull(),
+    entityId:    uuid('entity_id').notNull(),
+    label:       text('label').notNull(),
+    summary:     text('summary'),
+    degree:                integer('degree').notNull().default(0),
+    betweennessCentrality: doublePrecision('betweenness_centrality').default(0),
+    isGodNode:             boolean('is_god_node').notNull().default(false),
+    communityId:           integer('community_id'),
+    communityLabel:        text('community_label'),
+    // 'structural' | 'semantic'
+    extractionPass: text('extraction_pass').notNull().default('structural'),
+    lastExtractedAt: timestamp('last_extracted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    entityIdx:     unique('graph_nodes_entity_idx').on(table.workspaceId, table.entityType, table.entityId),
+    workspaceIdx:  index('graph_nodes_workspace_idx').on(table.workspaceId),
+    godNodeIdx:    index('graph_nodes_god_node_idx').on(table.isGodNode),
+    communityIdx:  index('graph_nodes_community_idx').on(table.communityId),
+  }),
+);
+
+export const graphEdges = pgTable(
+  'graph_edges',
+  {
+    id:          uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    fromNodeId:  uuid('from_node_id').notNull().references(() => graphNodes.id, { onDelete: 'cascade' }),
+    toNodeId:    uuid('to_node_id').notNull().references(() => graphNodes.id,   { onDelete: 'cascade' }),
+    // references|implements|depends_on|informs|contradicts|supersedes|
+    // rationale_for|semantically_similar_to|part_of|preceded_by|belongs_to|claims|completes
+    edgeType:    text('edge_type').notNull(),
+    // 'EXTRACTED' | 'INFERRED' | 'AMBIGUOUS'
+    provenance:      text('provenance').notNull(),
+    confidenceScore: doublePrecision('confidence_score').notNull().default(1.0),
+    // cross-type edges (doc->flow, task->concept) get weight=1.5
+    weight:          doublePrecision('weight').notNull().default(1.0),
+    // required for INFERRED/AMBIGUOUS
+    rationale:     text('rationale'),
+    // source text span for EXTRACTED
+    extractedFrom: text('extracted_from'),
+    isDirected:    boolean('is_directed').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueEdge:  unique('graph_edges_unique_idx').on(table.fromNodeId, table.toNodeId, table.edgeType),
+    fromIdx:     index('graph_edges_from_idx').on(table.fromNodeId),
+    toIdx:       index('graph_edges_to_idx').on(table.toNodeId),
+    workspaceIdx: index('graph_edges_workspace_idx').on(table.workspaceId),
+  }),
+);
+
+export const graphCommunities = pgTable(
+  'graph_communities',
+  {
+    id:          integer('id').notNull(),
+    workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    label:       text('label').notNull(),
+    description: text('description'),
+    nodeCount:   integer('node_count').notNull().default(0),
+    suggestedQuestions: text('suggested_questions').array(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk:           primaryKey({ columns: [table.id, table.workspaceId] }),
+    workspaceIdx: index('graph_communities_workspace_idx').on(table.workspaceId),
+  }),
+);
+
+export const graphReports = pgTable(
+  'graph_reports',
+  {
+    id:               uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId:      uuid('workspace_id').notNull().unique().references(() => workspaces.id, { onDelete: 'cascade' }),
+    docId:            uuid('doc_id').references(() => docs.id, { onDelete: 'set null' }),
+    totalNodes:       integer('total_nodes').notNull().default(0),
+    totalEdges:       integer('total_edges').notNull().default(0),
+    totalCommunities: integer('total_communities').notNull().default(0),
+    godNodeCount:     integer('god_node_count').notNull().default(0),
+    lastBuiltAt:      timestamp('last_built_at', { withTimezone: true }),
+    // 'pending' | 'building' | 'ready' | 'failed'
+    status:    text('status').notNull().default('pending'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+);
