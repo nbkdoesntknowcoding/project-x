@@ -11,6 +11,7 @@ import { PROBE_HTML } from './apps/probe-html.js';
 import { getWritePreviewHtml } from './apps/write-preview-html.js';
 import { getFlowWalkHtml } from './apps/flow-walk-html.js';
 import { getFlowBuilderHtml } from './apps/flow-builder-html.js';
+import { getGraphExplorerHtml } from './apps/graph-explorer-html.js';
 import { GET_FLOW_STEP_TOOL, getFlowStepStructured } from './tools/get-flow-step.js';
 import { GET_FLOW_TOOL, getFlowStructured } from './tools/get-flow.js';
 import {
@@ -48,6 +49,13 @@ import {
   COMMIT_FLOW_PUBLISH_TOOL_SPEC,
   commitFlowPublish,
 } from './tools/commit-flow-publish.js';
+import {
+  TRAVERSE_GRAPH_TOOL_SPEC, traverseGraph,
+  GET_GOD_NODES_TOOL_SPEC, getGodNodes,
+  GET_GRAPH_REPORT_TOOL_SPEC, getGraphReport,
+  BUILD_KNOWLEDGE_GRAPH_TOOL_SPEC, buildKnowledgeGraph,
+  GET_SURPRISING_CONNECTIONS_TOOL_SPEC, getSurprisingConnections,
+} from './tools/graph.js';
 
 /**
  * Build a fresh McpServer instance per request, capturing the verified
@@ -610,6 +618,69 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
       }],
     }),
   );
+
+  // ── Knowledge Graph panel resource ────────────────────────────────────────
+  const GRAPH_EXPLORER_URI = 'ui://mnema/graph-explorer.html';
+  registerAppResource(
+    mcpServer,
+    'Knowledge Graph Explorer',
+    GRAPH_EXPLORER_URI,
+    { description: 'D3 force-directed knowledge graph — nodes, edges, god-nodes, communities, traversal paths.' },
+    async () => ({
+      contents: [{
+        uri: GRAPH_EXPLORER_URI,
+        mimeType: 'text/html;profile=mcp-app',
+        text: getGraphExplorerHtml(),
+        _meta: { ui: { csp: { connectDomains: [API_ORIGIN] } } },
+      }],
+    }),
+  );
+
+  // ── Knowledge Graph tools (both workspace modes) ───────────────────────────
+
+  const registerGraphTool = (
+    spec: { name: string; description: string; inputSchema: object; annotations?: Record<string, unknown> },
+    handler: (c: McpAuthContext, a: Record<string, unknown>) => Promise<{ content: string; structuredContent: Record<string, unknown> }>,
+    withPanel = false,
+  ) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolConfig: any = {
+      description: spec.description,
+      inputSchema: jsonSchemaToZodShape(spec.inputSchema),
+      annotations: spec.annotations,
+    };
+    if (withPanel) {
+      toolConfig._meta = { ui: { resourceUri: GRAPH_EXPLORER_URI, visibility: ['model'] } };
+    }
+    const register = withPanel ? registerAppTool : mcpServer.registerTool.bind(mcpServer);
+    if (withPanel) {
+      registerAppTool(mcpServer, spec.name, toolConfig, async (args: any) => {
+        try {
+          const result = await handler(ctx, args as Record<string, unknown>);
+          return { content: [{ type: 'text' as const, text: result.content }], structuredContent: result.structuredContent };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return { isError: true, content: [{ type: 'text' as const, text: message }], structuredContent: { error: message } };
+        }
+      });
+    } else {
+      mcpServer.registerTool(spec.name, toolConfig, async (args: any) => {
+        try {
+          const result = await handler(ctx, args as Record<string, unknown>);
+          return { content: [{ type: 'text' as const, text: result.content }], structuredContent: result.structuredContent };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return { isError: true, content: [{ type: 'text' as const, text: message }] };
+        }
+      });
+    }
+  };
+
+  registerGraphTool(TRAVERSE_GRAPH_TOOL_SPEC, traverseGraph, true);           // opens panel
+  registerGraphTool(GET_GOD_NODES_TOOL_SPEC, getGodNodes, true);              // opens panel
+  registerGraphTool(GET_GRAPH_REPORT_TOOL_SPEC, getGraphReport, false);
+  registerGraphTool(BUILD_KNOWLEDGE_GRAPH_TOOL_SPEC, buildKnowledgeGraph, false);
+  registerGraphTool(GET_SURPRISING_CONNECTIONS_TOOL_SPEC, getSurprisingConnections, false);
 
   return mcpServer;
 }
