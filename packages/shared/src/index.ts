@@ -1,6 +1,7 @@
 export type { JwtClaims, SessionData } from './types/auth.js';
 export type {
   DocCreatePayload,
+  DocFolder,
   DocFull,
   DocSavePayload,
   DocSaveResponse,

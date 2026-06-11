@@ -3,7 +3,7 @@ import BaseLayout from './BaseLayout.astro';
 import { Sidebar } from '../components/app/Sidebar';
 import { WorkspaceSwitcher } from '../components/nav/WorkspaceSwitcher';
 
-import type { SourceAttachment } from '@boppl/shared';
+import type { DocFolder, SourceAttachment } from '@boppl/shared';
 
 interface Props {
   title: string;
@@ -13,9 +13,10 @@ interface Props {
   backUrl?: string;
   sourceAttachment?: SourceAttachment | null;
   activeView?: 'edit' | 'original' | 'mnema';
+  folder?: DocFolder | null;
 }
 
-const { title, docType = 'doc', workspaceName: wsProp, email, backUrl = '/app/content', sourceAttachment, activeView = 'edit' } = Astro.props;
+const { title, docType = 'doc', workspaceName: wsProp, email, backUrl = '/app/content', sourceAttachment, activeView = 'edit', folder } = Astro.props;
 
 // View toggle hrefs — preserve ?back= across view switches
 const _back = Astro.url.searchParams.get('back');
@@ -40,13 +41,23 @@ const pathname = Astro.url.pathname;
 const apiUrl =
   (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
 let typeCounts: Record<string, number> = {};
+let workspaceMode: string | undefined = undefined;
 try {
-  const res = await fetch(`${apiUrl}/api/content/type-counts`, {
-    headers: { Cookie: `boppl_jwt=${auth.jwt}` },
-  });
-  if (res.ok) {
-    const body = (await res.json()) as { counts: Record<string, number> };
+  const [countsRes, devRes] = await Promise.allSettled([
+    fetch(`${apiUrl}/api/content/type-counts`, {
+      headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+    }),
+    fetch(`${apiUrl}/api/workspaces/${auth.tenant_id}/dev-config`, {
+      headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+    }),
+  ]);
+  if (countsRes.status === 'fulfilled' && countsRes.value.ok) {
+    const body = (await countsRes.value.json()) as { counts: Record<string, number> };
     typeCounts = body.counts ?? {};
+  }
+  if (devRes.status === 'fulfilled' && devRes.value.ok) {
+    const body = (await devRes.value.json()) as { mode: string };
+    workspaceMode = body.mode;
   }
 } catch { /* offline */ }
 ---
@@ -286,9 +297,11 @@ try {
         />
       </div>
       <div class="dl-crumbs">
-        <a href={backUrl} style="color:var(--ink-muted);text-decoration:none;">
-          {backUrl.includes('?folder=') ? 'Folder' : 'Content'}
-        </a>
+        <a href="/app/content" style="color:var(--ink-muted);text-decoration:none;">Content</a>
+        {folder && (<>
+          <svg class="sep" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--ink-faint)"><path d="m9 6 6 6-6 6"/></svg>
+          <a href={`/app/content?folder=${folder.id}`} style="color:var(--ink-muted);text-decoration:none;">{folder.name}</a>
+        </>)}
         <svg class="sep" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="color:var(--ink-faint)"><path d="m9 6 6 6-6 6"/></svg>
         <span class="here">{title || 'Untitled'}</span>
       </div>
@@ -339,6 +352,7 @@ try {
         workspaceName={workspaceName}
         currentPath={pathname}
         typeCounts={typeCounts}
+        workspaceMode={workspaceMode}
         client:load
       />
     </aside>

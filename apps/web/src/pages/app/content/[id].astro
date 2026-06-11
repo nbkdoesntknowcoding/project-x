@@ -34,6 +34,7 @@ const { doc } = (await response.json()) as { doc: DocFull };
 const rawBack = Astro.url.searchParams.get('back') ?? '';
 const backUrl = rawBack.startsWith('/app/') ? rawBack : '/app/content';
 const sourceAttachment = doc.sourceAttachment ?? null;
+const folder = doc.folder ?? null;
 
 // View routing:
 //   DOCX docs:  'edit' (default) → OnlyOffice | 'mnema' → ProseMirror editor
@@ -55,6 +56,7 @@ if (sourceAttachment?.format === 'docx') {
   backUrl={backUrl}
   sourceAttachment={sourceAttachment}
   activeView={activeView}
+  folder={folder}
 >
   <DocPage
     initialDoc={doc}

@@ -14,11 +14,18 @@ export interface SourceAttachment {
   sizeBytes: number | null;
 }
 
+export interface DocFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+}
+
 export interface DocFull extends DocSummary {
   markdown: string;
   content_hash: string | null;
   is_public?: boolean;
   public_token?: string | null;
+  folder?: DocFolder | null;
   sourceAttachment?: SourceAttachment | null;
 }
 

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { writeMarkdownIntoLiveDoc } from '../collab/writeback.js';
 import { db } from '../db/index.js';
-import { attachments, docs } from '../db/schema.js';
+import { attachments, docs, folders } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { contentHash, emptyYjsState } from '../lib/yjs.js';
 import { enforceFreeDocLimit } from '../plugins/free-limits.js';
@@ -236,9 +236,13 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
           attachmentFormat:   attachments.format,
           attachmentName:     attachments.originalName,
           attachmentSize:     attachments.sizeBytes,
+          folderId:           folders.id,
+          folderName:         folders.name,
+          folderParentId:     folders.parentFolderId,
         })
         .from(docs)
         .leftJoin(attachments, eq(docs.sourceAttachmentId, attachments.id))
+        .leftJoin(folders, eq(docs.folderId, folders.id))
         .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
         .limit(1);
       return rows[0];
@@ -258,6 +262,11 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
         public_token: row.publicToken,
         created_at: row.createdAt,
         updated_at: row.updatedAt,
+        folder: result.folderId ? {
+          id:       result.folderId,
+          name:     result.folderName,
+          parentId: result.folderParentId ?? null,
+        } : null,
         sourceAttachment: result.attachmentId ? {
           id:           result.attachmentId,
           format:       result.attachmentFormat as 'docx' | 'pdf',
