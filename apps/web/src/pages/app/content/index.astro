@@ -152,10 +152,12 @@ const totalItems = isInsideFolder
     to   { opacity: 1; }
   }
 
-  /* Tile entrance — staggered by nth-child */
+  /* Tile entrance — staggered by nth-child.
+     Use 'backwards' (not 'both') so the animation fills backward before start
+     but doesn't lock the transform after finish (lets hover transition take over). */
   .co-icon-grid .co-tile,
   .co-folder-grid .co-tile {
-    animation: co-tile-in 220ms var(--ease-out, cubic-bezier(0.16,1,0.3,1)) both;
+    animation: co-tile-in 240ms var(--ease-out, cubic-bezier(0.16,1,0.3,1)) backwards;
   }
   .co-icon-grid .co-tile:nth-child(1),  .co-folder-grid .co-tile:nth-child(1)  { animation-delay:  0ms; }
   .co-icon-grid .co-tile:nth-child(2),  .co-folder-grid .co-tile:nth-child(2)  { animation-delay: 18ms; }
@@ -179,18 +181,34 @@ const totalItems = isInsideFolder
   .co-list .co-lr:nth-child(6)  { animation-delay: 68ms; }
   .co-list .co-lr:nth-child(n+7) { animation-delay: 80ms; }
 
-  /* Hover lift + glow on tiles */
+  /* Hover lift + glow on tiles — transition only on background + box-shadow
+     so the entrance animation's transform runs cleanly. The translateY on hover
+     uses will-change to avoid layout thrash. */
   .co-tile {
+    will-change: transform;
     transition:
-      background var(--duration-fast, 120ms) ease,
-      transform  150ms var(--ease-out, cubic-bezier(0.16,1,0.3,1)),
-      box-shadow 150ms var(--ease-out, cubic-bezier(0.16,1,0.3,1));
+      background  var(--duration-fast, 120ms) ease,
+      box-shadow  160ms var(--ease-out, cubic-bezier(0.16,1,0.3,1));
   }
   .co-tile:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 18px rgba(0,0,0,0.22), 0 1px 4px rgba(0,0,0,0.12);
+    background: var(--surface-2);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.22), 0 1px 4px rgba(0,0,0,0.1);
+    transition:
+      background  var(--duration-fast, 120ms) ease,
+      transform   160ms var(--ease-out, cubic-bezier(0.16,1,0.3,1)),
+      box-shadow  160ms var(--ease-out, cubic-bezier(0.16,1,0.3,1));
   }
-  .co-tile:active { transform: translateY(0); box-shadow: none; }
+  .co-tile:active { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.15); }
+
+  /* Icon lifts independently on hover — gives depth separate from tile lift */
+  .co-tile .ico-wrap {
+    transition: transform 200ms var(--ease-out, cubic-bezier(0.16,1,0.3,1));
+  }
+  .co-tile:hover .ico-wrap {
+    transform: scale(1.07) translateY(-3px);
+  }
+  .co-tile:active .ico-wrap { transform: scale(1.02) translateY(-1px); }
 
   /* List row smooth hover */
   .co-lr { transition: background var(--duration-fast, 120ms) ease; }
@@ -795,7 +813,16 @@ const totalItems = isInsideFolder
                     </svg>
                   </div>
                   <div class="t-name" data-tooltip={f.name}>{f.name}</div>
-                  <div class="t-meta">{f.doc_count} {f.doc_count === 1 ? 'file' : 'files'}</div>
+                  <div class="t-meta">{
+                    (() => {
+                      const total = (f.doc_count ?? 0) + (f.subfolder_count ?? 0);
+                      if (total === 0) return 'Empty';
+                      const parts = [];
+                      if (f.doc_count > 0) parts.push(`${f.doc_count} ${f.doc_count === 1 ? 'doc' : 'docs'}`);
+                      if (f.subfolder_count > 0) parts.push(`${f.subfolder_count} ${f.subfolder_count === 1 ? 'folder' : 'folders'}`);
+                      return parts.join(' · ');
+                    })()
+                  }</div>
                 </a>
               ))}
 
@@ -872,7 +899,16 @@ const totalItems = isInsideFolder
                     </svg>
                   </div>
                   <div class="t-name" data-tooltip={f.name}>{f.name}</div>
-                  <div class="t-meta">{f.doc_count} {f.doc_count === 1 ? 'file' : 'files'}</div>
+                  <div class="t-meta">{
+                    (() => {
+                      const total = (f.doc_count ?? 0) + (f.subfolder_count ?? 0);
+                      if (total === 0) return 'Empty';
+                      const parts = [];
+                      if (f.doc_count > 0) parts.push(`${f.doc_count} ${f.doc_count === 1 ? 'doc' : 'docs'}`);
+                      if (f.subfolder_count > 0) parts.push(`${f.subfolder_count} ${f.subfolder_count === 1 ? 'folder' : 'folders'}`);
+                      return parts.join(' · ');
+                    })()
+                  }</div>
                 </a>
               ))}
 
