@@ -30,7 +30,7 @@ export const embeddingsQueue = new Queue<EmbeddingJobData>(QUEUE_NAME, {
   connection,
   defaultJobOptions: {
     attempts: 5,
-    backoff: { type: 'exponential', delay: 2000 },
+    backoff: { type: 'exponential', delay: 30_000 }, // start at 30s — respects Voyage RPM limits
     // Keep an hour of completed history + 24h of failures for debugging;
     // BullMQ trims older entries automatically.
     removeOnComplete: { age: 3600, count: 1000 },
