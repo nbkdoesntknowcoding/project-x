@@ -32,10 +32,10 @@ export function startEmbeddingsWorker(): Worker<EmbeddingJobData, ProcessReturn>
     },
     {
       connection,
-      concurrency: config.EMBEDDING_WORKER_CONCURRENCY,
+      concurrency: 1,
       limiter: {
         max: 3,
-        duration: 1000,
+        duration: 60_000, // Voyage free tier = 3 RPM
       },
     },
   );
