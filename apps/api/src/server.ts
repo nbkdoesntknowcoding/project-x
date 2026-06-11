@@ -46,6 +46,7 @@ import { installRoutes } from './routes/public/install.js';
 import { projectsRoutes } from './routes/projects.js';
 import { documentFilesRoutes } from './routes/document-files.js';
 import { onlyofficeRoutes } from './routes/onlyoffice.js';
+import { graphRoutes } from './routes/graph.js';
 
 const app = Fastify({ logger: loggerOptions });
 
@@ -103,6 +104,7 @@ await app.register(installRoutes);
   await app.register(projectsRoutes);
 await app.register(documentFilesRoutes);
 await app.register(onlyofficeRoutes);
+await app.register(graphRoutes);
 await app.register(oauthPlugin);
 await app.register(mcpPlugin);
 
