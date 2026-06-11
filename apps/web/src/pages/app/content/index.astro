@@ -138,10 +138,157 @@ const totalItems = isInsideFolder
 <style>
   .co-main { padding: 14px 24px 80px; }
 
+  /* ── ANIMATIONS ─────────────────────────────────────────────────────── */
+  @keyframes co-tile-in {
+    from { opacity: 0; transform: translateY(10px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0)   scale(1);    }
+  }
+  @keyframes co-row-in {
+    from { opacity: 0; transform: translateX(-6px); }
+    to   { opacity: 1; transform: translateX(0);    }
+  }
+  @keyframes co-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  /* Tile entrance — staggered by nth-child */
+  .co-icon-grid .co-tile,
+  .co-folder-grid .co-tile {
+    animation: co-tile-in 220ms var(--ease-out, cubic-bezier(0.16,1,0.3,1)) both;
+  }
+  .co-icon-grid .co-tile:nth-child(1),  .co-folder-grid .co-tile:nth-child(1)  { animation-delay:  0ms; }
+  .co-icon-grid .co-tile:nth-child(2),  .co-folder-grid .co-tile:nth-child(2)  { animation-delay: 18ms; }
+  .co-icon-grid .co-tile:nth-child(3),  .co-folder-grid .co-tile:nth-child(3)  { animation-delay: 36ms; }
+  .co-icon-grid .co-tile:nth-child(4),  .co-folder-grid .co-tile:nth-child(4)  { animation-delay: 54ms; }
+  .co-icon-grid .co-tile:nth-child(5),  .co-folder-grid .co-tile:nth-child(5)  { animation-delay: 72ms; }
+  .co-icon-grid .co-tile:nth-child(6),  .co-folder-grid .co-tile:nth-child(6)  { animation-delay: 88ms; }
+  .co-icon-grid .co-tile:nth-child(7),  .co-folder-grid .co-tile:nth-child(7)  { animation-delay:102ms; }
+  .co-icon-grid .co-tile:nth-child(8),  .co-folder-grid .co-tile:nth-child(8)  { animation-delay:116ms; }
+  .co-icon-grid .co-tile:nth-child(9),  .co-folder-grid .co-tile:nth-child(9)  { animation-delay:128ms; }
+  .co-icon-grid .co-tile:nth-child(n+10), .co-folder-grid .co-tile:nth-child(n+10) { animation-delay:140ms; }
+
+  /* List row entrance */
+  .co-list .co-lr:not(.head) {
+    animation: co-row-in 180ms var(--ease-out, cubic-bezier(0.16,1,0.3,1)) both;
+  }
+  .co-list .co-lr:nth-child(2)  { animation-delay:  0ms; }
+  .co-list .co-lr:nth-child(3)  { animation-delay: 20ms; }
+  .co-list .co-lr:nth-child(4)  { animation-delay: 38ms; }
+  .co-list .co-lr:nth-child(5)  { animation-delay: 54ms; }
+  .co-list .co-lr:nth-child(6)  { animation-delay: 68ms; }
+  .co-list .co-lr:nth-child(n+7) { animation-delay: 80ms; }
+
+  /* Hover lift + glow on tiles */
+  .co-tile {
+    transition:
+      background var(--duration-fast, 120ms) ease,
+      transform  150ms var(--ease-out, cubic-bezier(0.16,1,0.3,1)),
+      box-shadow 150ms var(--ease-out, cubic-bezier(0.16,1,0.3,1));
+  }
+  .co-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.22), 0 1px 4px rgba(0,0,0,0.12);
+  }
+  .co-tile:active { transform: translateY(0); box-shadow: none; }
+
+  /* List row smooth hover */
+  .co-lr { transition: background var(--duration-fast, 120ms) ease; }
+
+  /* View switch: crossfade instead of instant show/hide */
+  .co-icon-grid, .co-folder-grid, .co-list {
+    transition: opacity 160ms ease;
+  }
+
   /* VIEW TOGGLE */
   .co-wrap.view-icons .co-list { display: none; }
   .co-wrap.view-list .co-icon-grid { display: none; }
   .co-wrap.view-list .co-folder-grid { display: none; }
+
+  /* ── RECENTLY OPENED STRIP ────────────────────────────────────────────── */
+  .co-recent {
+    margin-bottom: 24px;
+  }
+  .co-recent-scroll {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+  .co-recent-item {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    text-decoration: none;
+    color: var(--ink);
+    max-width: 200px;
+    transition: background 120ms ease, transform 140ms var(--ease-out, cubic-bezier(0.16,1,0.3,1)),
+                box-shadow 140ms ease;
+    animation: co-fade-in 200ms ease both;
+  }
+  .co-recent-item:nth-child(1) { animation-delay:  0ms; }
+  .co-recent-item:nth-child(2) { animation-delay: 30ms; }
+  .co-recent-item:nth-child(3) { animation-delay: 55ms; }
+  .co-recent-item:nth-child(4) { animation-delay: 75ms; }
+  .co-recent-item:nth-child(5) { animation-delay: 90ms; }
+  .co-recent-item:hover {
+    background: var(--surface-3, var(--surface-2));
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+  }
+  .co-recent-icon {
+    width: 22px; height: 26px; flex-shrink: 0;
+    background: var(--surface-3, var(--line));
+    border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .co-recent-name {
+    font: 500 12px/1.3 var(--sans);
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+  }
+  .co-recent-time {
+    font: 400 10.5px/1 var(--mono);
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+
+  /* ── SORT / FILTER BAR ────────────────────────────────────────────────── */
+  .co-sortbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 14px;
+    flex-wrap: wrap;
+  }
+  .co-sort-btn {
+    height: 26px; padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink-muted);
+    font: 500 11.5px/1 var(--sans);
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .co-sort-btn:hover { background: var(--surface-2); color: var(--ink); }
+  .co-sort-btn.active {
+    background: var(--surface-2);
+    color: var(--ink);
+    border-color: var(--line-strong, var(--line));
+  }
+  .co-sort-sep {
+    width: 1px; height: 14px; background: var(--line); flex-shrink: 0;
+  }
 
   /* SECTION TITLE */
   .co-section-title {
@@ -583,6 +730,35 @@ const totalItems = isInsideFolder
         </form>
       </div>
     ) : (
+      <>
+      {/* ── RECENTLY OPENED STRIP (hidden until JS populates) ── */}
+      {!isInsideFolder && (
+        <div class="co-recent" id="co-recent-section" style="display:none">
+          <div class="co-section-title">
+            <h3>Recently opened</h3>
+          </div>
+          <div class="co-recent-scroll" id="co-recent-scroll"></div>
+        </div>
+      )}
+
+      {/* ── SORT / FILTER BAR ── */}
+      <div class="co-sortbar" id="co-sortbar">
+        <button class="co-sort-btn active" data-sort="updated" id="sort-updated">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+          Recent
+        </button>
+        <button class="co-sort-btn" data-sort="alpha" id="sort-alpha">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 17l4-10 4 10M5.2 13h3.6M15 7v10M18 14l-3 3 3 3"/></svg>
+          A – Z
+        </button>
+        <div class="co-sort-sep"></div>
+        <button class="co-sort-btn" data-type="" id="filter-all">All types</button>
+        <button class="co-sort-btn" data-type="doc" id="filter-doc">Doc</button>
+        <button class="co-sort-btn" data-type="engineering" id="filter-eng">Engineering</button>
+        <button class="co-sort-btn" data-type="instruction" id="filter-inst">Instruction</button>
+        <button class="co-sort-btn" data-type="snippet" id="filter-snip">Snippet</button>
+      </div>
+
       <div class="co-wrap view-icons" id="co-wrap">
 
         {/* ── FOLDERS SECTION (root view only) ── */}
@@ -831,6 +1007,7 @@ const totalItems = isInsideFolder
         )}
 
       </div>
+      </>
     )}
   </div>
 
@@ -1274,5 +1451,142 @@ const totalItems = isInsideFolder
       if (docxPdf.length) void importDocxPdf(docxPdf[0]);
       if (mdTxt.length)   void importFiles(mdTxt);
     });
+  </script>
+
+  <script>
+    // ── RECENTLY OPENED ───────────────────────────────────────────────────────
+    // Track the last 8 docs opened. Store { id, title, href, ts } in localStorage.
+    const RECENT_KEY = 'mnema_recent_docs';
+    const RECENT_MAX = 8;
+
+    function getRecent() {
+      try { return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]'); } catch { return []; }
+    }
+    function saveRecent(list) {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+    }
+    // Record open when a doc tile is clicked
+    document.querySelectorAll('a[data-doc-id]').forEach(a => {
+      a.addEventListener('click', () => {
+        const id    = a.dataset.docId ?? '';
+        const title = a.querySelector<HTMLElement>('.t-name,.co-name')?.textContent?.trim() ?? 'Untitled';
+        const href  = a.href;
+        if (!id) return;
+        const list  = getRecent().filter(r => r.id !== id);
+        list.unshift({ id, title, href, ts: Date.now() });
+        saveRecent(list.slice(0, RECENT_MAX));
+      });
+    });
+
+    // Render the recently opened strip
+    function relTime(ts: number): string {
+      const s = Math.floor((Date.now() - ts) / 1000);
+      if (s < 60)   return 'just now';
+      if (s < 3600) return Math.floor(s/60) + 'm ago';
+      if (s < 86400)return Math.floor(s/3600) + 'h ago';
+      return Math.floor(s/86400) + 'd ago';
+    }
+
+    const recentSection = document.getElementById('co-recent-section');
+    const recentScroll  = document.getElementById('co-recent-scroll');
+    if (recentScroll) {
+      const list = getRecent();
+      if (list.length > 0) {
+        recentScroll.innerHTML = list.map(r => `
+          <a class="co-recent-item" href="${r.href}" data-doc-id="${r.id}">
+            <div class="co-recent-icon">
+              <svg width="9" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+              </svg>
+            </div>
+            <div>
+              <div class="co-recent-name">${r.title.replace(/</g,'&lt;')}</div>
+              <div class="co-recent-time">${relTime(r.ts)}</div>
+            </div>
+          </a>`).join('');
+        if (recentSection) recentSection.style.display = '';
+        // Wire click tracking on recently opened items too
+        recentScroll.querySelectorAll('a[data-doc-id]').forEach(a => {
+          a.addEventListener('click', () => {
+            const id    = a.dataset.docId ?? '';
+            const title = a.querySelector<HTMLElement>('.co-recent-name')?.textContent?.trim() ?? '';
+            const href  = a.href;
+            if (!id) return;
+            const l = getRecent().filter(r => r.id !== id);
+            l.unshift({ id, title, href, ts: Date.now() });
+            saveRecent(l.slice(0, RECENT_MAX));
+          });
+        });
+      }
+    }
+
+    // ── SORT & FILTER ─────────────────────────────────────────────────────────
+    // All sorting/filtering is client-side — tiles are already in the DOM.
+    const allTiles = Array.from(document.querySelectorAll('.co-icon-grid a[data-doc-id]'));
+    const allRows  = Array.from(document.querySelectorAll('.co-list a[data-doc-id]'));
+    const iconGrid = document.querySelector('.co-icon-grid');
+    const listGrid = document.querySelector('.co-list');
+
+    let currentSort = 'updated'; // 'updated' | 'alpha'
+    let currentType = '';        // '' = all
+
+    function applyFilters() {
+      const items = [...allTiles, ...allRows];
+      items.forEach(el => {
+        const type = el.querySelector<HTMLElement>('.co-type')?.textContent?.trim() ?? '';
+        const show = !currentType || type === currentType;
+        el.style.display = show ? '' : 'none';
+      });
+      // Re-sort visible tiles
+      if (iconGrid) {
+        const visible = allTiles.filter(el => el.style.display !== 'none');
+        if (currentSort === 'alpha') {
+          visible.sort((a, b) => {
+            const ta = a.querySelector('.t-name')?.textContent?.trim() ?? '';
+            const tb = b.querySelector('.t-name')?.textContent?.trim() ?? '';
+            return ta.localeCompare(tb);
+          });
+        } else {
+          // 'updated' — restore original DOM order (already sorted by server)
+          allTiles.forEach(el => { if (el.style.display !== 'none') iconGrid.appendChild(el); });
+          return;
+        }
+        visible.forEach(el => iconGrid.appendChild(el));
+      }
+      if (listGrid && currentSort === 'alpha') {
+        const head = listGrid.querySelector('.co-lr.head');
+        const visible = allRows.filter(el => el.style.display !== 'none');
+        visible.sort((a, b) => {
+          const ta = a.querySelector('.co-name')?.textContent?.trim() ?? '';
+          const tb = b.querySelector('.co-name')?.textContent?.trim() ?? '';
+          return ta.localeCompare(tb);
+        });
+        visible.forEach(el => listGrid.appendChild(el));
+      }
+    }
+
+    // Sort buttons
+    document.querySelectorAll('.co-sort-btn[data-sort]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentSort = btn.dataset.sort ?? 'updated';
+        document.querySelectorAll('.co-sort-btn[data-sort]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        applyFilters();
+      });
+    });
+
+    // Type filter buttons
+    document.querySelectorAll('.co-sort-btn[data-type]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentType = btn.dataset.type ?? '';
+        document.querySelectorAll('.co-sort-btn[data-type]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        applyFilters();
+      });
+    });
+
+    // Set "All types" as active by default
+    document.querySelector('.co-sort-btn[data-type=""]')?.classList.add('active');
   </script>
 </AppLayout>
