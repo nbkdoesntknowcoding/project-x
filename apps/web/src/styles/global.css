@@ -51,6 +51,35 @@
 }
 
 /* =========================================================================
+   APP TOOLTIP — [data-tooltip] elements, JS-positioned (position:fixed so
+   it's never clipped by overflow:auto ancestors like the sidebar)
+   ========================================================================= */
+.app-tooltip {
+  position: fixed;
+  transform: translateY(-50%) translateX(4px);
+  background: color-mix(in srgb, var(--surface-3, #252525) 96%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font: 500 11.5px/1 var(--sans);
+  color: var(--ink);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+  transition: opacity 130ms ease, transform 130ms ease;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-tooltip.visible {
+  opacity: 1;
+  transform: translateY(-50%) translateX(8px);
+}
+
+/* =========================================================================
    SCROLLBARS — hidden everywhere, scroll still works
    ========================================================================= */
 * {

@@ -618,7 +618,7 @@ const totalItems = isInsideFolder
                       <rect x="20" y="115" width="132" height="5" rx="2" fill="rgba(0,0,0,0.18)"/>
                     </svg>
                   </div>
-                  <div class="t-name">{f.name}</div>
+                  <div class="t-name" data-tooltip={f.name}>{f.name}</div>
                   <div class="t-meta">{f.doc_count} {f.doc_count === 1 ? 'file' : 'files'}</div>
                 </a>
               ))}
@@ -695,7 +695,7 @@ const totalItems = isInsideFolder
                       <rect x="20" y="115" width="132" height="5" rx="2" fill="rgba(0,0,0,0.18)"/>
                     </svg>
                   </div>
-                  <div class="t-name">{f.name}</div>
+                  <div class="t-name" data-tooltip={f.name}>{f.name}</div>
                   <div class="t-meta">{f.doc_count} {f.doc_count === 1 ? 'file' : 'files'}</div>
                 </a>
               ))}
@@ -776,7 +776,7 @@ const totalItems = isInsideFolder
                         <div class="ext-tag">{label}</div>
                       </div>
                     </div>
-                    <div class="t-name">{d.title || 'Untitled'}</div>
+                    <div class="t-name" data-tooltip={d.title || 'Untitled'}>{d.title || 'Untitled'}</div>
                     <div class="t-meta">{relativeTime(d.updated_at)}</div>
                   </a>
                 );
@@ -806,7 +806,7 @@ const totalItems = isInsideFolder
                     </div>
                     <span class="co-nm">
                       {unread > 0 && <span class="co-unread" title={`${unread} unread`}></span>}
-                      <span class="co-name">{d.title || 'Untitled'}</span>
+                      <span class="co-name" data-tooltip={d.title || 'Untitled'}>{d.title || 'Untitled'}</span>
                     </span>
                     <span class="co-type">{d.type ?? 'doc'}</span>
                     <span class="co-dt">{relativeTime(d.updated_at)}</span>

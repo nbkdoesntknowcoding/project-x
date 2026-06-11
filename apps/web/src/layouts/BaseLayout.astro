@@ -60,5 +60,56 @@ const { title = 'BOPPL Context Engine' } = Astro.props;
   </head>
   <body class="font-sans">
     <slot />
+    <script is:inline>
+      // Lightweight fixed-position tooltip for [data-tooltip] elements.
+      // Uses position:fixed + getBoundingClientRect so it's never clipped
+      // by overflow:auto containers (sidebar, kanban columns, etc.).
+      (function () {
+        var tip = null;
+        var hideTimer = null;
+
+        function getTip() {
+          if (!tip) {
+            tip = document.createElement('div');
+            tip.className = 'app-tooltip';
+            document.body.appendChild(tip);
+          }
+          return tip;
+        }
+
+        function show(el) {
+          var text = el.getAttribute('data-tooltip');
+          if (!text) return;
+          clearTimeout(hideTimer);
+          var t = getTip();
+          t.textContent = text;
+          var r = el.getBoundingClientRect();
+          t.style.left = (r.right + 4) + 'px';
+          t.style.top  = (r.top + r.height / 2) + 'px';
+          // If tooltip would overflow right edge, flip to left side
+          requestAnimationFrame(function () {
+            var tw = t.offsetWidth;
+            if (r.right + 4 + tw > window.innerWidth - 8) {
+              t.style.left = (r.left - tw - 8) + 'px';
+            }
+            t.classList.add('visible');
+          });
+        }
+
+        function hide() {
+          if (tip) tip.classList.remove('visible');
+        }
+
+        document.addEventListener('mouseover', function (e) {
+          var el = e.target && e.target.closest && e.target.closest('[data-tooltip]');
+          if (el) { show(el); } else { hide(); }
+        });
+        document.addEventListener('mouseout', function (e) {
+          var rel = e.relatedTarget;
+          if (!rel || !(rel.closest && rel.closest('[data-tooltip]'))) hide();
+        });
+        document.addEventListener('scroll', hide, true);
+      })();
+    </script>
   </body>
 </html>
