@@ -281,7 +281,7 @@ try {
     }
   </style>
 
-  <div class="dl-shell">
+  <div class="dl-shell" style={activeView === 'edit' && sourceAttachment?.format === 'docx' ? '--editbar-h:0px' : ''}>
 
     <!-- TOPBAR -->
     <header class="dl-topbar">
@@ -357,8 +357,8 @@ try {
       />
     </aside>
 
-    <!-- EDIT BAR -->
-    <div class="dl-editbar">
+    <!-- EDIT BAR — hidden in Word (OnlyOffice) mode -->
+    <div class="dl-editbar" style={activeView === 'edit' && sourceAttachment?.format === 'docx' ? 'display:none' : ''}>
       {(activeView === 'edit' && (!sourceAttachment || sourceAttachment.format !== 'docx') || activeView === 'mnema') && (<>
         <div class="dl-eb-group">
           <button class="dl-eb-heading" title="Block type">
