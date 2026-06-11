@@ -286,16 +286,21 @@ export async function buildSimilarityEdges(
   workspaceId: string,
   db: Tx,
 ): Promise<number> {
-  // Raw SQL for the vector cosine similarity query
+  // Raw SQL for the vector cosine similarity query.
+  // Embeddings live in the separate `embeddings` table (not on docs directly).
+  // We pick the most recent embedding per doc via DISTINCT ON.
   const rows = await db.execute<{ from_id: string; to_id: string; similarity: number }>(
     sql`
-      SELECT a.id as from_id, b.id as to_id,
+      WITH doc_vecs AS (
+        SELECT doc_id, avg(embedding) AS embedding
+        FROM embeddings
+        WHERE workspace_id = ${workspaceId}
+        GROUP BY doc_id
+      )
+      SELECT a.doc_id as from_id, b.doc_id as to_id,
              1 - (a.embedding <=> b.embedding) as similarity
-      FROM docs a JOIN docs b
-        ON a.workspace_id = b.workspace_id AND a.id < b.id
-      WHERE a.workspace_id = ${workspaceId}
-        AND a.embedding IS NOT NULL AND b.embedding IS NOT NULL
-        AND 1 - (a.embedding <=> b.embedding) > 0.85
+      FROM doc_vecs a JOIN doc_vecs b ON a.doc_id < b.doc_id
+      WHERE 1 - (a.embedding <=> b.embedding) > 0.85
       ORDER BY similarity DESC LIMIT 100
     `,
   );
