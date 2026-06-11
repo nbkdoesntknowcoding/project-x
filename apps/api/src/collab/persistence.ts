@@ -4,6 +4,7 @@ import * as Y from 'yjs';
 import { docVersions, docs } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { enqueueEmbeddingJob } from '../queue/embeddings.js';
+import { enqueueExtractDoc } from '../queue/graph.js';
 import type { ConnectionContext } from './auth.js';
 import { markdownToYjsState, yjsStateToMarkdown } from './markdown-bridge.js';
 
@@ -160,6 +161,16 @@ export async function storeDocumentState(
         }\n`,
       );
     }
+
+    // Knowledge graph: fire-and-forget semantic extraction on content change.
+    // Uses setImmediate so it doesn't block the persistence response.
+    setImmediate(() => {
+      try {
+        enqueueExtractDoc(ctx.tenant_id, ctx.doc_id);
+      } catch {
+        // Non-fatal — graph will catch up on next save or nightly cron.
+      }
+    });
   }
 
   return result;
