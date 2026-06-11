@@ -78,7 +78,8 @@ export type WorkspaceEvent =
   | { type: 'session_started';      data: SessionStartedPayload }
   | { type: 'session_ended';        data: SessionEndedPayload }
   | { type: 'optimization_findings_updated'; data: { newCount: number } }
-  | { type: 'attachment_ready'; data: { attachmentId: string; docId: string | null; format: string } };
+  | { type: 'attachment_ready'; data: { attachmentId: string; docId: string | null; format: string } }
+  | { type: 'graph_updated'; data: { totalNodes: number; totalEdges: number; communityCount: number } };
 
 type WorkspaceEventListener = (event: WorkspaceEvent) => void;
 

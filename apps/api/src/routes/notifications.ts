@@ -161,6 +161,8 @@ export const notificationsRoutes: FastifyPluginAsync = async (app) => {
           send('session_ended', event.data);
         } else if (event.type === 'optimization_findings_updated') {
           send('optimization_findings_updated', event.data);
+        } else if (event.type === 'graph_updated') {
+          send('graph_updated', event.data);
         }
       } catch {
         // Client disconnected mid-write — safe to ignore

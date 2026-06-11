@@ -7,8 +7,9 @@ import { extractStructural } from '../../lib/graph/extract-structural.js';
 import { extractSemantic, buildSimilarityEdges } from '../../lib/graph/extract-semantic.js';
 import { runClustering } from '../../lib/graph/clustering.js';
 import { generateGraphReport } from '../../lib/graph/report.js';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import * as schema from '../../db/schema.js';
+import { emitWorkspaceEvent } from '../../lib/events.js';
 
 const { docs, graphReports } = schema;
 
@@ -101,6 +102,15 @@ export function startGraphWorker(): Worker<GraphJobData> {
             .update(graphReports)
             .set({ status: 'ready', lastBuiltAt: new Date(), updatedAt: new Date() })
             .where(eq(graphReports.workspaceId, workspaceId));
+
+          // Emit SSE event to all connected clients
+          const [nodeCount] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.graphNodes).where(eq(schema.graphNodes.workspaceId, workspaceId));
+          const [edgeCount] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.graphEdges).where(eq(schema.graphEdges.workspaceId, workspaceId));
+          const [commCount] = await db.select({ count: sql<number>`count(*)::int` }).from(schema.graphCommunities).where(eq(schema.graphCommunities.workspaceId, workspaceId));
+          emitWorkspaceEvent(workspaceId, {
+            type: 'graph_updated',
+            data: { totalNodes: nodeCount?.count ?? 0, totalEdges: edgeCount?.count ?? 0, communityCount: commCount?.count ?? 0 },
+          });
 
           await job.updateProgress(100);
           break;

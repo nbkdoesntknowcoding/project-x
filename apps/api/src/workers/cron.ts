@@ -7,12 +7,18 @@
 
 import { Queue, Worker, type Job } from 'bullmq';
 import IORedis from 'ioredis';
-import { eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import pino from 'pino';
 import { withSystemPrivilege } from '../db/with-system-privilege.js';
+import { db } from '../db/index.js';
+import * as schema from '../db/schema.js';
 import { workspaces } from '../db/schema.js';
 import { redisConnection } from '../lib/redis.js';
 import { runOptimizationForWorkspace } from '../lib/dev/optimization/runner.js';
+import { extractSemantic, buildSimilarityEdges } from '../lib/graph/extract-semantic.js';
+import { runClustering } from '../lib/graph/clustering.js';
+import { generateGraphReport } from '../lib/graph/report.js';
+import { emitWorkspaceEvent as emitEvent } from '../lib/events.js';
 
 const log = pino({ name: 'cron' });
 
@@ -28,6 +34,7 @@ interface PgResult {
 const statsQueue        = new Queue('stats-refresh-cron',  { connection: redisConnection });
 const optimizationQueue = new Queue('optimization-cron',   { connection: redisConnection });
 const retentionQueue    = new Queue('retention-cron',      { connection: redisConnection });
+const graphCronQueue    = new Queue('graph-cron',          { connection: redisConnection });
 
 async function registerCronJobs(): Promise<void> {
   await statsQueue.add('hourly-stats-refresh', {}, {
@@ -45,7 +52,80 @@ async function registerCronJobs(): Promise<void> {
     jobId: 'retention-nightly',
   });
 
-  log.info('Cron jobs registered: stats@every-hour, optimization@02:00 UTC, retention@03:00 UTC');
+  await graphCronQueue.add('nightly-graph', {}, {
+    repeat: { pattern: '0 4 * * *' }, // 04:00 UTC daily
+    jobId: 'graph-nightly',
+  });
+  await graphCronQueue.add('weekly-deep', {}, {
+    repeat: { pattern: '0 4 * * 0' }, // 04:00 UTC Sundays
+    jobId: 'graph-weekly-deep',
+  });
+
+  log.info('Cron jobs registered: stats@every-hour, optimization@02:00 UTC, retention@03:00 UTC, graph@04:00 UTC');
+}
+
+// ── Graph nightly cron processor ─────────────────────────────────────────────
+
+async function processGraphCron(job: Job): Promise<void> {
+  const isDeep = job.name === 'weekly-deep';
+  log.info({ job: job.name }, 'Graph cron: starting');
+
+  // Get all active workspaces
+  const workspaceRows = await withSystemPrivilege(async (tx) => {
+    return tx.select({ id: schema.workspaces.id }).from(schema.workspaces);
+  });
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24h ago
+
+  for (const { id: workspaceId } of workspaceRows) {
+    try {
+      if (isDeep) {
+        // Weekly deep: re-extract top-20 god-node docs with Sonnet
+        const godNodeDocs = await withSystemPrivilege(async (tx) => {
+          return tx
+            .select({ entityId: schema.graphNodes.entityId })
+            .from(schema.graphNodes)
+            .where(and(eq(schema.graphNodes.workspaceId, workspaceId), eq(schema.graphNodes.isGodNode, true), eq(schema.graphNodes.entityType, 'doc')))
+            .orderBy(desc(schema.graphNodes.betweennessCentrality))
+            .limit(20);
+        });
+        for (const { entityId } of godNodeDocs) {
+          try { await extractSemantic(workspaceId, entityId, db as any, 'deep'); } catch { /* continue */ }
+        }
+      } else {
+        // Daily: extract docs not extracted in 24h
+        const staleDocs = await withSystemPrivilege(async (tx) => {
+          return tx
+            .select({ id: schema.docs.id })
+            .from(schema.docs)
+            .where(and(
+              eq(schema.docs.workspaceId, workspaceId),
+              isNull(schema.docs.deletedAt),
+            ))
+            .limit(50);
+        });
+        // Filter to those with stale graph nodes
+        for (const { id } of staleDocs) {
+          try { await extractSemantic(workspaceId, id, db as any, 'normal'); } catch { /* continue */ }
+          await sleep(500);
+        }
+      }
+
+      // Rebuild similarity edges + cluster + report
+      await buildSimilarityEdges(workspaceId, db as any);
+      const clusterResult = await runClustering(workspaceId, 1.0, db as any);
+      await generateGraphReport(workspaceId, db as any);
+
+      emitEvent(workspaceId, {
+        type: 'graph_updated',
+        data: { totalNodes: 0, totalEdges: 0, communityCount: clusterResult.communityCount },
+      });
+
+      log.info({ workspaceId }, 'Graph cron: workspace done');
+    } catch (err) {
+      log.error({ workspaceId, err }, 'Graph cron: workspace failed');
+    }
+  }
 }
 
 // ── Stats refresh cron processor ──────────────────────────────────────────────
@@ -191,9 +271,16 @@ export function startCronWorkers(): { close(): Promise<void> } {
     concurrency: 1,
   });
 
+  const conn4 = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null });
+  const graphCronWorker = new Worker('graph-cron', processGraphCron, {
+    connection: conn4,
+    concurrency: 1,
+  });
+
   statsWorker.on('failed', (job, err) => log.error({ jobId: job?.id, err }, 'Stats refresh cron failed'));
   optWorker.on('failed',   (job, err) => log.error({ jobId: job?.id, err }, 'Optimization cron job failed'));
   retWorker.on('failed',   (job, err) => log.error({ jobId: job?.id, err }, 'Retention cron job failed'));
+  graphCronWorker.on('failed', (job, err) => log.error({ jobId: job?.id, err }, 'Graph cron failed'));
 
   void registerCronJobs();
 
@@ -202,6 +289,7 @@ export function startCronWorkers(): { close(): Promise<void> } {
       await statsWorker.close();
       await optWorker.close();
       await retWorker.close();
+      await graphCronWorker.close();
     },
   };
 }

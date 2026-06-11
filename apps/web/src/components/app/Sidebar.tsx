@@ -35,6 +35,7 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
   const isOnCost      = currentPath.startsWith('/app/cost');
   const isOnOptimize  = currentPath.startsWith('/app/optimize');
   const isOnTeam      = currentPath.startsWith('/app/team');
+  const isOnGraph     = currentPath.startsWith('/app/graph');
 
   const isDevProject = workspaceMode === 'dev_project';
 
@@ -216,6 +217,22 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
           </a>
         </div>
       )}
+
+      {/* ── GRAPH (both modes) ───────────────────── */}
+      <div className="sb-section">
+        <div className="sb-section-head"><span>Knowledge</span></div>
+        <a href="/app/graph" className={`sb-row${isOnGraph ? ' active' : ''}`}>
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="5" cy="12" r="2"/><circle cx="19" cy="5" r="2"/><circle cx="19" cy="19" r="2"/>
+                <line x1="7" y1="11.5" x2="17" y2="6"/><line x1="7" y1="12.5" x2="17" y2="18"/>
+              </svg>
+            </span>
+            <span className="sb-label">Graph</span>
+          </span>
+        </a>
+      </div>
 
       {/* ── CONNECTIONS ──────────────────────────── */}
       <div className="sb-section">
