@@ -37,9 +37,16 @@ const cronWorkers = startCronWorkers();
 // eslint-disable-next-line no-console
 console.log('[workers] cron workers started');
 
-const pdfWorker = await startPdfGenerationWorker();
-// eslint-disable-next-line no-console
-console.log('[workers] pdf-generation worker started');
+// PDF worker requires Playwright/Chromium — gracefully skip if not installed
+let pdfWorker: Awaited<ReturnType<typeof startPdfGenerationWorker>> | null = null;
+try {
+  pdfWorker = await startPdfGenerationWorker();
+  // eslint-disable-next-line no-console
+  console.log('[workers] pdf-generation worker started');
+} catch (err) {
+  // eslint-disable-next-line no-console
+  console.warn('[workers] pdf-generation worker disabled (Playwright not installed):', err instanceof Error ? err.message : err);
+}
 
 const graphWorker = startGraphWorker();
 // eslint-disable-next-line no-console
@@ -53,7 +60,7 @@ const shutdown = async (signal: string): Promise<void> => {
   await hookEventsWorker.close();
   await retryWorker.close();
   await cronWorkers.close();
-  await pdfWorker.close();
+  if (pdfWorker) await pdfWorker.close();
   await graphWorker.close();
   process.exit(0);
 };

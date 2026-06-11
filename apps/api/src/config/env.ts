@@ -153,6 +153,9 @@ const envSchema = z.object({
   PDF_RENDER_TIMEOUT_MS: z.coerce.number().int().positive().default(30000),
   MAX_UPLOAD_SIZE_MB:    z.coerce.number().int().positive().default(50),
 
+  // OpenAI (used for knowledge graph semantic extraction)
+  OPENAI_API_KEY: z.string().min(1).optional(),
+
   // OnlyOffice Document Server
   ONLYOFFICE_API_URL:      z.string().url().optional(), // public URL browser loads SDK from
   ONLYOFFICE_INTERNAL_URL: z.string().url().optional(), // internal Docker URL for callback base

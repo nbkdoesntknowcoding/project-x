@@ -4,7 +4,7 @@
  * Also builds pgvector semantically_similar_to edges across all docs.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../db/schema.js';
@@ -140,8 +140,8 @@ export async function extractSemantic(
   db: Tx,
   mode: ExtractionMode = 'normal',
 ): Promise<{ conceptCount: number; edgeCount: number }> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY not set — cannot run semantic extraction');
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY not set — cannot run semantic extraction');
   }
 
   // Fetch the doc
@@ -187,9 +187,9 @@ export async function extractSemantic(
   }
 
   // Call LLM
-  const model = mode === 'deep' ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001';
-  const anthropic = new Anthropic();
-  const response = await anthropic.messages.create({
+  const model = mode === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const response = await openai.chat.completions.create({
     model,
     max_tokens: 4096,
     messages: [
@@ -200,10 +200,7 @@ export async function extractSemantic(
     ],
   });
 
-  const rawText = response.content
-    .filter(b => b.type === 'text')
-    .map(b => (b as { type: 'text'; text: string }).text)
-    .join('');
+  const rawText = response.choices[0]?.message?.content ?? '';
 
   let result: LLMExtractionResult;
   try {

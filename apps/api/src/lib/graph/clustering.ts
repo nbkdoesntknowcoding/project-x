@@ -2,7 +2,7 @@
  * Louvain clustering + betweenness centrality + god-nodes + community labelling.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import Graph from 'graphology';
 import louvain from 'graphology-communities-louvain';
 import betweennessCentrality from 'graphology-metrics/centrality/betweenness.js';
@@ -19,13 +19,13 @@ type Tx = NodePgDatabase<typeof schema>;
 async function labelCommunity(
   nodeLabels: string[],
 ): Promise<{ label: string; description: string; suggested_questions: string[] }> {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.OPENAI_API_KEY) {
     return { label: 'Unnamed cluster', description: '', suggested_questions: [] };
   }
 
-  const anthropic = new Anthropic();
-  const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
     max_tokens: 512,
     messages: [
       {
@@ -44,10 +44,7 @@ Return ONLY valid JSON:
     ],
   });
 
-  const text = response.content
-    .filter(b => b.type === 'text')
-    .map(b => (b as { type: 'text'; text: string }).text)
-    .join('');
+  const text = response.choices[0]?.message?.content ?? '';
 
   try {
     const m = text.match(/\{[\s\S]*\}/);
