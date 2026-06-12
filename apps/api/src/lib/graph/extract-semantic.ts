@@ -306,7 +306,7 @@ export async function buildSimilarityEdges(
   );
 
   let edgeCount = 0;
-  for (const row of rows.rows) {
+  for (const row of rows as unknown as { from_id: string; to_id: string; similarity: number }[]) {
     // Resolve doc nodes
     const [fromNode] = await db
       .select({ id: graphNodes.id })
