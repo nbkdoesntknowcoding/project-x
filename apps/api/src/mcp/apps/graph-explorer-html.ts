@@ -19,7 +19,7 @@ export function getGraphExplorerHtml(): string {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
 <style>
 :root {
-  --bg:#0A0B0D; --surface:#121317; --surface2:#181A1F; --surface3:#22252B;
+  --bg:#050508; --surface:#121317; --surface2:#181A1F; --surface3:#22252B;
   --line:rgba(255,255,255,0.07); --ink:#F0EEE9; --ink-muted:rgba(240,238,233,0.45);
   --accent:#F0997B; --sans:'Inter',system-ui,sans-serif; --mono:'Fira Mono',monospace;
 }
@@ -71,6 +71,22 @@ svg#graph{position:fixed;top:48px;left:0;width:100%;height:calc(100% - 48px)}
     <marker id="arrowhead" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto">
       <polygon points="0 0, 6 2, 0 4" fill="rgba(255,255,255,0.2)"/>
     </marker>
+    <!-- CSS glow simulation for regular nodes -->
+    <filter id="node-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- Stronger glow for god-nodes -->
+    <filter id="god-node-glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="8" result="blur1"/>
+      <feGaussianBlur stdDeviation="3" result="blur2"/>
+      <feMerge><feMergeNode in="blur1"/><feMergeNode in="blur2"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- Subtle edge glow -->
+    <filter id="edge-glow">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
   <g id="zoom-container">
     <g id="blobs-layer"></g>
@@ -146,9 +162,10 @@ svg#graph{position:fixed;top:48px;left:0;width:100%;height:calc(100% - 48px)}
   var edgeSel = edgesLayer.selectAll('line').data(
     edges.map(function(e){ return {source: e.fromNodeId || e.from_node_id, target: e.toNodeId || e.to_node_id, data: e}; })
   ).enter().append('line')
+    .attr('filter', 'url(#edge-glow)')
     .attr('stroke', function(d){
       var isPath = highlighted.has(d.source) && highlighted.has(d.target);
-      return isPath ? '#fbbf24' : 'rgba(255,255,255,0.14)';
+      return isPath ? '#fbbf24' : 'rgba(255,255,255,0.25)';
     })
     .attr('stroke-width', function(d){
       var isPath = highlighted.has(d.source) && highlighted.has(d.target);
@@ -195,6 +212,7 @@ svg#graph{position:fixed;top:48px;left:0;width:100%;height:calc(100% - 48px)}
     .attr('stroke', function(d){ return d.isGodNode ? '#fbbf24' : 'rgba(255,255,255,0.15)'; })
     .attr('stroke-width', function(d){ return d.isGodNode ? 2 : 1; })
     .attr('opacity', function(d){ return highlighted.size > 0 ? (highlighted.has(d.id) ? 1 : 0.4) : 0.9; })
+    .attr('filter', function(d){ return d.isGodNode ? 'url(#god-node-glow)' : 'url(#node-glow)'; })
     .style('cursor', 'pointer')
     .on('click', function(event, d){ event.stopPropagation(); openDrawer(d); });
 
