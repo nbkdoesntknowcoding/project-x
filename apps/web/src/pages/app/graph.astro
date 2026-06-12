@@ -287,8 +287,21 @@ try {
         .then(function(d){ if(d){ currentData=d; render(d); } });
     });
 
-    // Initial render
-    if(currentData) render(currentData);
-    else document.getElementById('graph-loading').textContent='No graph data yet. Click "Build Knowledge Graph" to start.';
+    // Initial render — server-side prefetch may be null if PUBLIC_API_URL isn't set;
+    // fall back to a client-side fetch which uses the relative /api proxy.
+    if(currentData) {
+      render(currentData);
+    } else {
+      document.getElementById('graph-loading').textContent='Loading graph…';
+      fetch('/api/graph/full',{credentials:'include'})
+        .then(function(r){ return r.ok?r.json():null; })
+        .then(function(d){
+          if(d){ currentData=d; render(d); }
+          else document.getElementById('graph-loading').textContent='No graph data yet. Click "Build Knowledge Graph" to start.';
+        })
+        .catch(function(){
+          document.getElementById('graph-loading').textContent='No graph data yet. Click "Build Knowledge Graph" to start.';
+        });
+    }
   </script>
 </AppLayout>
