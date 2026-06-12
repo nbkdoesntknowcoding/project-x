@@ -168,6 +168,16 @@ try {
     #detail-community { font: 400 11px/1 var(--sans); color: var(--ink-muted); margin: 8px 0 4px; }
     #detail-stats { font: 400 11px/1.8 var(--mono); color: var(--ink-muted); margin-bottom: 8px; }
     #detail-summary { font: 400 12px/1.6 var(--sans); color: var(--ink-soft); }
+
+    /* ── Legend bottom-right ── */
+    #legend {
+      position: absolute; bottom: 12px; right: 12px; z-index: 30;
+      display: flex; flex-direction: column; gap: 5px;
+      padding: 8px 12px;
+    }
+    .leg { display: flex; align-items: center; gap: 7px; font: 400 10.5px/1 var(--mono); color: var(--ink-muted); }
+    .leg-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .leg-ring { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid #fbbf24; flex-shrink: 0; }
   </style>
 
   <div id="graph-shell">
@@ -221,6 +231,17 @@ try {
       <div class="f-chip active" data-type="project"><div class="f-chip-dot" style="background:#e879f9"></div>projects</div>
       <div class="f-divider"></div>
       <div class="f-chip" id="chip-god">★ god-nodes</div>
+    </div>
+
+    <!-- Legend bottom-right -->
+    <div id="legend" class="glass">
+      <div class="leg"><div class="leg-dot" style="background:#60a5fa"></div>doc</div>
+      <div class="leg"><div class="leg-dot" style="background:#a78bfa"></div>concept</div>
+      <div class="leg"><div class="leg-dot" style="background:#f0997b"></div>decision</div>
+      <div class="leg"><div class="leg-dot" style="background:#fbbf24"></div>flow</div>
+      <div class="leg"><div class="leg-dot" style="background:#4ade80"></div>task</div>
+      <div class="leg"><div class="leg-dot" style="background:#e879f9"></div>project</div>
+      <div class="leg"><div class="leg-ring"></div>god-node</div>
     </div>
 
     <!-- Node detail panel -->
