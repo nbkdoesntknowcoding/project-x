@@ -123,6 +123,8 @@ export function startGraphWorker(): Worker<GraphJobData> {
     {
       connection,
       concurrency: 2,
+      lockDuration: 5 * 60 * 1000,    // 5 min — full-build over many docs can take a while
+      stalledInterval: 60 * 1000,      // check for stalls every 60s
     },
   );
 
