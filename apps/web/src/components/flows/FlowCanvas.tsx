@@ -138,7 +138,7 @@ function defaultData(kind: NodeKind): Record<string, unknown> {
     case 'doc':         return { doc_id: null, instruction: '' };
     case 'docs':        return { doc_ids: [], instruction: '' };
     case 'instruction': return { text: '', pause_for_user_input: false };
-    case 'decision':    return { question: '', branches: { yes: null, no: null } };
+    case 'decision':    return { question: '', branches: { yes: null, no: null }, default_branch: 'yes' };
   }
 }
 
@@ -172,6 +172,7 @@ function InnerCanvas({ flow }: InnerProps) {
   const [historyOpen,    setHistoryOpen]          = useState(false);
   const [publishOpen,    setPublishOpen]          = useState(false);
   const [saveState,      setSaveState]            = useState<SaveState>('idle');
+  const [saveError,      setSaveError]            = useState<string | null>(null);
   const [isDirty,        setIsDirty]              = useState(false);
   const [lastSavedAt,    setLastSavedAt]          = useState<Date | null>(null);
   const [isPublished,    setIsPublished]          = useState(!!flow.is_published);
@@ -210,13 +211,18 @@ function InnerCanvas({ flow }: InnerProps) {
           body: JSON.stringify({ nodes: n.map(rfNodeToMnema), edges: e.map(rfEdgeToMnema) }),
         });
       }
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string; errors?: { message: string }[] };
+        const msg = body.errors?.[0]?.message ?? body.error ?? 'Save failed';
+        throw new Error(msg);
+      }
       setSaveState('saved');
       setLastSavedAt(new Date());
       setIsDirty(false);
       setHasUnpublished(true);
-    } catch {
+    } catch (err) {
       setSaveState('error');
+      setSaveError(err instanceof Error ? err.message : 'Save failed');
     }
   }, [flow.id]);
 
@@ -418,6 +424,7 @@ function InnerCanvas({ flow }: InnerProps) {
           flow={{ ...flow, is_published: isPublished, has_unpublished_changes: hasUnpublished }}
           onWalkClick={() => setWalkMode(true)}
           saveState={saveState}
+          saveError={saveError}
           isDirty={isDirty}
           onSaveNow={() => save()}
           lastSavedAt={lastSavedAt}

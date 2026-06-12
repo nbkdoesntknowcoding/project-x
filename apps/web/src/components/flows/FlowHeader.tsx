@@ -10,8 +10,8 @@ export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 interface Props {
   flow: Flow;
   onWalkClick: () => void;
-  // Editor props
   saveState: SaveState;
+  saveError?: string | null;
   isDirty: boolean;
   onSaveNow: () => void;
   lastSavedAt: Date | null;
@@ -25,6 +25,7 @@ export function FlowHeader({
   flow,
   onWalkClick,
   saveState,
+  saveError,
   isDirty,
   onSaveNow,
   lastSavedAt,
@@ -74,9 +75,13 @@ export function FlowHeader({
               </span>
             )}
             {saveState === 'error' && (
-              <span className="flex items-center gap-1 text-[var(--status-error)]">
+              <span
+                className="flex items-center gap-1 text-[var(--status-error)] cursor-pointer hover:opacity-80"
+                onClick={onSaveNow}
+                title={saveError ?? 'Save failed — click to retry'}
+              >
                 <AlertCircle size={11} strokeWidth={1.75} />
-                Save failed
+                {saveError ? saveError.slice(0, 40) + (saveError.length > 40 ? '…' : '') : 'Save failed'} — Retry
               </span>
             )}
           </div>

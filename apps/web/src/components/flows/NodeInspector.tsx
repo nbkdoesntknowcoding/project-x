@@ -212,6 +212,7 @@ function DecisionInspectorBody({ data, onChange }: { data: Record<string, unknow
   const branches = (data.branches && typeof data.branches === 'object' && !Array.isArray(data.branches))
     ? (data.branches as Record<string, unknown>) : { yes: null, no: null };
   const branchKeys = Object.keys(branches);
+  const defaultBranch = typeof data.default_branch === 'string' ? data.default_branch : branchKeys[0] ?? 'yes';
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editVal,    setEditVal]    = useState('');
@@ -223,21 +224,23 @@ function DecisionInspectorBody({ data, onChange }: { data: Record<string, unknow
     if (!newKey || newKey === oldKey) { setEditingKey(null); return; }
     const nb: Record<string, unknown> = {};
     for (const k of Object.keys(branches)) nb[k === oldKey ? newKey : k] = null;
-    onChange({ branches: nb, question });
+    const newDefault = defaultBranch === oldKey ? newKey : defaultBranch;
+    onChange({ branches: nb, question, default_branch: newDefault });
     setEditingKey(null);
   };
 
   const addBranch = () => {
     if (branchKeys.length >= 4) return;
     const nb = { ...branches, [`branch-${branchKeys.length + 1}`]: null };
-    onChange({ branches: nb });
+    onChange({ branches: nb, default_branch: defaultBranch });
   };
 
   const removeBranch = (key: string) => {
     if (branchKeys.length <= 2) return;
     const nb = { ...branches };
     delete nb[key];
-    onChange({ branches: nb });
+    const newDefault = key === defaultBranch ? Object.keys(nb)[0] ?? '' : defaultBranch;
+    onChange({ branches: nb, default_branch: newDefault });
   };
 
   return (
