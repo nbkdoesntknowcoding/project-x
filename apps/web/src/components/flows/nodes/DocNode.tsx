@@ -1,5 +1,6 @@
-import type { NodeProps } from '@xyflow/react';
-import { NodeShell } from './NodeShell';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { NodeShell, TypeBadge } from './NodeShell';
+import { FLOW_TOKENS as T, handleStyle } from '../tokens';
 
 interface DocNodeData extends Record<string, unknown> {
   title: string;
@@ -7,69 +8,39 @@ interface DocNodeData extends Record<string, unknown> {
   doc_id?: string;
   doc_title?: string;
   instruction?: string;
+  isEntry?: boolean;
+  hasOutgoingEdge?: boolean;
 }
 
 export function DocNode({ data, selected, isConnectable }: NodeProps) {
   const d = data as DocNodeData;
-  const docLabel = d.doc_title ?? (d.doc_id ? d.doc_id.slice(0, 8) + '…' : null);
+  const hasDoc = !!d.doc_title || !!d.doc_id;
 
   return (
-    <NodeShell
-      indicatorColor="var(--ink-soft)"
-      kindLabel="Doc"
-      title={d.title}
-      selected={selected}
-      isConnectable={isConnectable}
-    >
-      {docLabel && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 7,
-            padding: '6px 9px',
-            background: 'var(--surface-2)',
-            border: '1px solid var(--line)',
-            borderRadius: 6,
-            fontFamily: 'var(--sans)',
-            fontSize: 11.5,
-            fontWeight: 500,
-            color: 'var(--ink)',
-            marginBottom: d.instruction ? 8 : 0,
-          }}
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" style={{ color: 'var(--ink-muted)', flexShrink: 0 }}>
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <path d="M14 2v6h6"/>
-          </svg>
-          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {docLabel}
-          </span>
-        </div>
-      )}
-      {!docLabel && (
-        <div style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--ink-muted)', fontStyle: 'italic' }}>
-          No doc linked
-        </div>
-      )}
+    <NodeShell kind="doc" selected={!!selected} isEntry={d.isEntry} isExit={!d.hasOutgoingEdge}>
+      <TypeBadge label="Reference" icon="📄" colour={T.doc.accent} />
+
+      {hasDoc
+        ? <p style={{ fontSize: 13, color: '#fafafa', lineHeight: 1.5, margin: 0 }}>
+            {d.doc_title ?? (d.doc_id ? d.doc_id.slice(0, 8) + '…' : '')}
+          </p>
+        : <div style={{
+            fontSize: 12, color: '#fbbf24',
+            background: 'rgba(251,191,36,0.08)',
+            border: '0.5px solid rgba(251,191,36,0.2)',
+            borderRadius: 6, padding: '6px 10px',
+          }}>⚠ No doc linked — click to select</div>
+      }
+
       {d.instruction && (
-        <div
-          style={{
-            marginTop: 8,
-            fontFamily: 'var(--sans)',
-            fontSize: 12,
-            lineHeight: 1.5,
-            color: 'var(--ink-muted)',
-            fontStyle: 'italic',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-          }}
-        >
+        <p style={{ fontSize: 11, color: '#52525b', marginTop: 6, marginBottom: 0, fontStyle: 'italic',
+          overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
           "{d.instruction}"
-        </div>
+        </p>
       )}
+
+      <Handle type="target" position={Position.Top}    isConnectable={isConnectable} style={handleStyle()} />
+      <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} style={handleStyle()} />
     </NodeShell>
   );
 }

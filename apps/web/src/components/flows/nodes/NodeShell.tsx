@@ -1,125 +1,85 @@
-import { Handle, Position } from '@xyflow/react';
 import type { ReactNode } from 'react';
+import { FLOW_TOKENS as T, type NodeKind } from '../tokens';
 
-interface Props {
-  indicatorColor: string;
-  kindLabel: string;
-  title: string;
-  children?: ReactNode;
-  showInputHandle?: boolean;
-  showOutputHandle?: boolean;
-  selected?: boolean;
-  isConnectable?: boolean;
+interface NodeShellProps {
+  kind: NodeKind;
+  selected: boolean;
+  isEntry?: boolean;
+  isExit?: boolean;
+  children: ReactNode;
 }
 
-export function NodeShell({
-  indicatorColor,
-  kindLabel,
-  title,
-  children,
-  showInputHandle = true,
-  showOutputHandle = true,
-  selected = false,
-  isConnectable = true,
-}: Props) {
-  const handleStyle: React.CSSProperties = selected
-    ? {
-        width: 9,
-        height: 9,
-        background: 'var(--accent-soft)',
-        border: '1.5px solid var(--accent)',
-        borderRadius: '50%',
-      }
-    : {
-        width: 9,
-        height: 9,
-        background: 'var(--surface-2)',
-        border: '1.5px solid var(--line-bright)',
-        borderRadius: '50%',
-      };
+export function NodeShell({ kind, selected, isEntry, isExit, children }: NodeShellProps) {
+  const palette = T[kind];
 
   return (
-    <div
-      style={{
-        width: 280,
-        background: 'var(--surface)',
-        border: `1px solid ${selected ? 'var(--accent)' : 'var(--line)'}`,
-        borderRadius: 10,
-        cursor: 'pointer',
-        transition: 'border-color 140ms ease, box-shadow 140ms ease',
-        boxShadow: selected
-          ? '0 0 0 3px var(--accent-soft), 0 12px 32px -12px rgba(var(--accent-rgb), 0.35)'
-          : 'none',
-      }}
-    >
-      {showInputHandle && (
-        <Handle
-          type="target"
-          position={Position.Top}
-          id="default"
-          isConnectable={isConnectable}
-          style={handleStyle}
-        />
+    <div style={{
+      width:        T.nodeWidth,
+      minHeight:    T.nodeMinHeight,
+      borderRadius: T.nodeBorderRadius,
+      background:   palette.bg,
+      border:       `0.5px solid ${selected ? T.nodeSelectedBorder : palette.border}`,
+      boxShadow:    selected ? T.nodeSelectedShadow : 'none',
+      fontFamily:   T.fontUI,
+      position:     'relative',
+      overflow:     'hidden',
+      transition:   'border-color 120ms ease, box-shadow 120ms ease',
+    }}>
+      {/* Top accent strip */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0,
+        height: 3, background: palette.accent,
+        borderRadius: `${T.nodeBorderRadius}px ${T.nodeBorderRadius}px 0 0`,
+      }} />
+
+      {/* Entry badge */}
+      {isEntry && (
+        <div style={{
+          position: 'absolute', top: 8, right: 10,
+          fontFamily: T.fontMono, fontSize: 9,
+          textTransform: 'uppercase', letterSpacing: '0.06em',
+          color: T.entryColor,
+          background: 'rgba(74,222,128,0.10)',
+          border: '0.5px solid rgba(74,222,128,0.22)',
+          borderRadius: 4, padding: '2px 6px',
+          pointerEvents: 'none',
+        }}>START</div>
       )}
 
-      {/* Kind header row */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 7,
-          padding: '10px 14px 7px',
-          fontFamily: 'var(--mono)',
-          fontSize: 10,
-          fontWeight: 500,
-          letterSpacing: '0.06em',
-          textTransform: 'uppercase',
-          color: 'var(--ink-muted)',
-        }}
-      >
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            flexShrink: 0,
-            background: indicatorColor,
-            display: 'inline-block',
-          }}
-        />
-        {kindLabel}
+      {/* Exit badge */}
+      {isExit && !isEntry && (
+        <div style={{
+          position: 'absolute', top: 8, right: 10,
+          fontFamily: T.fontMono, fontSize: 9,
+          textTransform: 'uppercase', letterSpacing: '0.06em',
+          color: T.exitColor,
+          background: 'rgba(82,82,91,0.15)',
+          border: '0.5px solid rgba(82,82,91,0.30)',
+          borderRadius: 4, padding: '2px 6px',
+          pointerEvents: 'none',
+        }}>END</div>
+      )}
+
+      {/* Content */}
+      <div style={{ padding: T.nodePadding, paddingTop: 18 }}>
+        {children}
       </div>
+    </div>
+  );
+}
 
-      {/* Title */}
-      <div
-        style={{
-          padding: '0 14px 7px',
-          fontFamily: 'var(--sans)',
-          fontSize: 13,
-          fontWeight: 500,
-          lineHeight: 1.35,
-          color: 'var(--ink)',
-        }}
-      >
-        {title}
-      </div>
-
-      {/* Body content */}
-      {children && (
-        <div style={{ padding: '0 14px 14px', fontFamily: 'var(--sans)' }}>
-          {children}
-        </div>
-      )}
-
-      {showOutputHandle && (
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          id="default"
-          isConnectable={isConnectable}
-          style={handleStyle}
-        />
-      )}
+export function TypeBadge({ label, icon, colour }: { label: string; icon: string; colour: string }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 5,
+      marginBottom: 8,
+      fontFamily: T.fontMono,
+      fontSize: 10, fontWeight: 500,
+      textTransform: 'uppercase', letterSpacing: '0.04em',
+      color: colour,
+    }}>
+      <span>{icon}</span>
+      <span>{label}</span>
     </div>
   );
 }

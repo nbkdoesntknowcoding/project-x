@@ -1,60 +1,76 @@
-import type { NodeProps } from '@xyflow/react';
-import { NodeShell } from './NodeShell';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { NodeShell, TypeBadge } from './NodeShell';
+import { FLOW_TOKENS as T, handleStyle } from '../tokens';
 
 interface DecisionNodeData extends Record<string, unknown> {
   title: string;
   kind: 'decision';
   condition?: string;
-  branches?: Record<string, string>;
+  question?: string;
+  branches?: Record<string, unknown>;
+  isEntry?: boolean;
+  // Decision nodes never get isExit
 }
 
 export function DecisionNode({ data, selected, isConnectable }: NodeProps) {
   const d = data as DecisionNodeData;
+  const branches = Object.keys(d.branches ?? { yes: null, no: null });
+  const branchCount = branches.length;
+  // Evenly space handles: 2 branches → 33%/67%, 3 → 25%/50%/75%
+  const branchPositions = branches.map((_, i) => ((i + 1) / (branchCount + 1)) * 100);
+  const question = d.question ?? d.condition;
+
   return (
-    <NodeShell
-      indicatorColor="var(--status-edit)"
-      kindLabel="Decision"
-      title={d.title}
-      selected={selected}
-      isConnectable={isConnectable}
-    >
-      {d.condition ? (
-        <div
-          style={{
-            fontFamily: 'var(--mono)',
-            fontSize: 12,
-            lineHeight: 1.5,
-            color: 'var(--ink)',
-            background: 'var(--surface-2)',
-            border: '1px solid var(--line)',
-            borderRadius: 6,
-            padding: '8px 10px',
-            marginBottom: 8,
-          }}
-        >
-          <span style={{ color: 'var(--accent)' }}>if</span>{' '}
-          {d.condition}
-        </div>
-      ) : null}
-      <div
-        style={{
-          fontFamily: 'var(--mono)',
-          fontSize: 10.5,
-          lineHeight: 1.4,
-          color: 'var(--ink-muted)',
-          letterSpacing: '0.02em',
-          background: 'rgba(255,179,112,0.08)',
-          border: '1px solid rgba(255,179,112,0.22)',
-          borderRadius: 5,
-          padding: '5px 8px',
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 5,
-        }}
-      >
-        <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--status-edit)', display: 'inline-block', flexShrink: 0 }} />
-        BRANCHING SHIPS IN 6.4
+    <NodeShell kind="decision" selected={!!selected} isEntry={d.isEntry}>
+      <TypeBadge label="Decision" icon="⑂" colour={T.decision.accent} />
+
+      {question
+        ? <p style={{
+            fontSize: 14, fontFamily: T.fontDisplay,
+            color: '#fafafa', lineHeight: 1.4,
+            margin: '0 0 10px 0', fontWeight: 400,
+          }}>{question}</p>
+        : <p style={{ fontSize: 13, color: '#52525b', fontStyle: 'italic', margin: '0 0 10px 0' }}>
+            No question written
+          </p>
+      }
+
+      {/* Branch chips */}
+      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 4 }}>
+        {branches.map(branch => (
+          <span key={branch} style={{
+            fontFamily: T.fontMono, fontSize: 10,
+            background: T.branchPillBg,
+            border: `0.5px solid ${T.branchPillBorder}`,
+            color: T.branchPillText,
+            borderRadius: 5, padding: '3px 8px',
+          }}>{branch}</span>
+        ))}
       </div>
+
+      {/* Single target handle — top centre */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        isConnectable={isConnectable}
+        style={handleStyle()}
+      />
+
+      {/* One source handle per branch, evenly spaced at bottom */}
+      {branches.map((branch, i) => (
+        <Handle
+          key={branch}
+          id={branch}
+          type="source"
+          position={Position.Bottom}
+          isConnectable={isConnectable}
+          style={handleStyle({
+            left:      `${branchPositions[i]}%`,
+            transform: 'translateX(-50%)',
+            bottom:    -6,
+          })}
+        />
+      ))}
     </NodeShell>
   );
 }
