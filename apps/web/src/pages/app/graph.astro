@@ -6,7 +6,6 @@ if (!auth) return Astro.redirect('/auth/login');
 
 const apiUrl = (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
 
-// Prefetch initial graph data server-side
 let initialData: { nodes: unknown[]; edges: unknown[]; communities: unknown[]; report: unknown } | null = null;
 try {
   const res = await fetch(`${apiUrl}/api/graph/full`, {
@@ -18,93 +17,186 @@ try {
 
 <AppLayout title="Knowledge Graph — Mnema">
   <style>
+    /* ── Shell: full canvas, no sidebar ── */
     #graph-shell {
-      display: grid;
-      grid-template-columns: 260px 1fr;
+      position: relative;
+      width: 100%;
       height: calc(100vh - var(--topbar-h, 40px));
       overflow: hidden;
+      background: var(--canvas);
     }
-    #graph-sidebar {
-      background: var(--surface);
-      border-right: 1px solid var(--line);
-      overflow-y: auto;
-      padding: 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    #graph-sidebar h2 { font: 600 11px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 8px; }
-    .filter-group { display: flex; flex-direction: column; gap: 4px; }
-    .filter-label { display: flex; align-items: center; gap: 7px; font: 400 12.5px/1 var(--sans); cursor: pointer; padding: 3px 0; }
-    .filter-label input { accent-color: var(--accent); }
-    .comm-item { padding: 7px 10px; border-radius: 6px; background: var(--surface-2); margin-bottom: 4px; cursor: pointer; }
-    .comm-item:hover { background: var(--surface-3, var(--surface-2)); }
-    .comm-name { font: 500 12.5px/1 var(--sans); margin-bottom: 3px; }
-    .comm-qs { font: 400 11px/1.5 var(--sans); color: var(--ink-muted); }
-    #build-btn {
-      height: 32px; border-radius: 7px; background: var(--accent); border: 0;
-      color: #fff; font: 600 12px/1 var(--sans); cursor: pointer; width: 100%;
-    }
-    #build-btn:hover { opacity: 0.88; }
-    #build-status { font: 400 11px/1 var(--mono); color: var(--ink-muted); text-align: center; min-height: 16px; }
-    .graph-search { width: 100%; height: 30px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 0 10px; color: var(--ink); font: 400 12.5px/1 var(--sans); outline: none; }
-    .graph-search::placeholder { color: var(--ink-muted); }
-    #graph-canvas { position: relative; width: 100%; height: 100%; background: var(--canvas); }
+
+    /* ── Canvas ── */
+    #graph-canvas { position: absolute; inset: 0; }
     #graph-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-    #graph-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--ink-muted); font: 400 13px/1 var(--sans); }
+    #graph-loading {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 10px;
+      color: var(--ink-muted); font: 400 13px/1 var(--sans); pointer-events: none;
+    }
+
+    /* ── Floating top-right controls ── */
+    #graph-controls {
+      position: absolute; top: 14px; right: 14px; z-index: 20;
+      display: flex; gap: 8px; align-items: center;
+    }
+    #build-btn {
+      height: 30px; padding: 0 14px; border-radius: 999px;
+      background: var(--accent); border: 0; color: #000;
+      font: 600 11.5px/1 var(--sans); cursor: pointer; white-space: nowrap;
+    }
+    #build-btn:hover { opacity: 0.85; }
+    #build-status {
+      font: 400 11px/1 var(--mono); color: var(--ink-muted);
+      background: rgba(10,11,13,0.72); backdrop-filter: blur(8px);
+      border: 1px solid var(--line); border-radius: 6px;
+      padding: 4px 10px; display: none;
+    }
+    #build-status.visible { display: block; }
+
+    /* ── God-nodes legend pill ── */
+    #legend {
+      position: absolute; top: 14px; left: 14px; z-index: 20;
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      background: rgba(10,11,13,0.72); backdrop-filter: blur(8px);
+      border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px;
+    }
+    .leg { display: flex; align-items: center; gap: 5px; font: 400 11px/1 var(--mono); color: var(--ink-muted); }
+    .leg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Node detail panel (right slide-in) ── */
     #graph-detail {
-      position: absolute; top: 0; right: 0; width: 240px; height: 100%;
+      position: absolute; top: 0; right: 0; width: 260px; height: 100%;
       background: var(--surface); border-left: 1px solid var(--line);
-      padding: 14px; overflow-y: auto; transform: translateX(100%);
-      transition: transform 200ms ease; z-index: 10;
+      padding: 18px 16px; overflow-y: auto;
+      transform: translateX(100%); transition: transform 220ms cubic-bezier(0.4,0,0.2,1);
+      z-index: 30;
     }
     #graph-detail.open { transform: translateX(0); }
-    #detail-label { font: 600 14px/1.3 var(--sans); margin-bottom: 6px; }
-    .detail-badge { font: 500 10px/1 var(--mono); padding: 2px 6px; border-radius: 3px; background: var(--surface-2); margin-right: 4px; letter-spacing: 0.04em; text-transform: uppercase; }
+    #detail-close {
+      position: absolute; top: 12px; right: 12px; width: 22px; height: 22px;
+      border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2);
+      color: var(--ink-muted); font-size: 13px; cursor: pointer; display: flex;
+      align-items: center; justify-content: center; line-height: 1;
+    }
+    #detail-label { font: 600 13.5px/1.35 var(--sans); margin-bottom: 8px; padding-right: 28px; }
+    .detail-badge {
+      font: 500 9.5px/1 var(--mono); padding: 2px 6px; border-radius: 3px;
+      background: var(--surface-2); margin-right: 4px; letter-spacing: 0.04em; text-transform: uppercase;
+    }
     .god-badge { background: rgba(251,191,36,0.15); color: #fbbf24; }
-    #detail-stats { font: 400 11.5px/1.6 var(--mono); color: var(--ink-muted); margin: 8px 0; }
-    #detail-summary { font: 400 12px/1.55 var(--sans); color: var(--ink-muted); }
+    #detail-stats { font: 400 11px/1.7 var(--mono); color: var(--ink-muted); margin: 10px 0 6px; }
+    #detail-community { font: 400 11.5px/1 var(--sans); color: var(--ink-soft); margin-bottom: 8px; }
+    #detail-summary { font: 400 12px/1.6 var(--sans); color: var(--ink-muted); }
+
+    /* ── Bottom dock ── */
+    #dock {
+      position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+      z-index: 40; display: flex; flex-direction: column; align-items: center;
+    }
+
+    /* Pill handle */
+    #dock-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(19,20,24,0.85); backdrop-filter: blur(16px) saturate(160%);
+      border: 1px solid var(--line); border-bottom: none;
+      border-radius: 12px 12px 0 0; padding: 7px 18px 6px;
+      cursor: pointer; user-select: none; transition: background 150ms;
+    }
+    #dock-pill:hover { background: rgba(26,28,32,0.92); }
+    #dock-pill-icon {
+      width: 28px; height: 4px; border-radius: 2px;
+      background: var(--line-strong); transition: background 150ms;
+    }
+    #dock-pill:hover #dock-pill-icon { background: var(--ink-muted); }
+    #dock-pill-label {
+      font: 500 11px/1 var(--mono); letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--ink-muted);
+    }
+    #dock-pill-count {
+      font: 500 10px/1 var(--mono); color: var(--accent);
+      background: rgba(255,179,112,0.12); border-radius: 3px; padding: 1px 5px;
+    }
+
+    /* Dock body */
+    #dock-body {
+      width: min(680px, 90vw);
+      background: rgba(19,20,24,0.92); backdrop-filter: blur(20px) saturate(160%);
+      border: 1px solid var(--line); border-bottom: none; border-radius: 14px 14px 0 0;
+      overflow: hidden;
+      max-height: 0; transition: max-height 300ms cubic-bezier(0.4,0,0.2,1);
+    }
+    #dock.open #dock-body { max-height: 340px; }
+    #dock.open #dock-pill { border-radius: 0; border-top: none; }
+
+    /* Dock tabs */
+    #dock-tabs {
+      display: flex; border-bottom: 1px solid var(--line); padding: 0 16px;
+    }
+    .dock-tab {
+      font: 500 11px/1 var(--mono); letter-spacing: 0.05em; text-transform: uppercase;
+      color: var(--ink-muted); padding: 10px 12px; cursor: pointer;
+      border-bottom: 2px solid transparent; transition: color 150ms, border-color 150ms;
+    }
+    .dock-tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+    .dock-tab:hover:not(.active) { color: var(--ink-soft); }
+
+    /* Dock panels */
+    .dock-panel { display: none; padding: 12px 16px 16px; height: 280px; overflow-y: auto; }
+    .dock-panel.active { display: block; }
+
+    /* Search panel */
+    #dock-search-input {
+      width: 100%; height: 34px; background: var(--surface-2);
+      border: 1px solid var(--line); border-radius: 8px;
+      padding: 0 12px; color: var(--ink); font: 400 13px/1 var(--sans);
+      outline: none; margin-bottom: 10px;
+    }
+    #dock-search-input:focus { border-color: var(--accent-line); }
+    #dock-search-input::placeholder { color: var(--ink-muted); }
+    #search-results { display: flex; flex-direction: column; gap: 2px; }
+    .search-hit {
+      display: flex; align-items: center; gap: 10px; padding: 7px 10px;
+      border-radius: 6px; cursor: pointer; transition: background 100ms;
+    }
+    .search-hit:hover { background: var(--surface-2); }
+    .hit-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .hit-label { font: 400 12.5px/1.3 var(--sans); color: var(--ink); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hit-type { font: 400 10px/1 var(--mono); color: var(--ink-muted); flex-shrink: 0; }
+    .hit-comm { font: 400 10px/1 var(--sans); color: var(--ink-muted); flex-shrink: 0; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #search-empty { font: 400 12px/1 var(--mono); color: var(--ink-muted); text-align: center; padding: 24px 0; }
+
+    /* Filters panel */
+    #dock-filters { display: flex; gap: 24px; }
+    .filter-col h3 { font: 600 10px/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 10px; }
+    .filter-label { display: flex; align-items: center; gap: 7px; font: 400 12px/1 var(--sans); cursor: pointer; padding: 3px 0; color: var(--ink-soft); }
+    .filter-label input { accent-color: var(--accent); }
+    .filter-label:hover { color: var(--ink); }
+
+    /* Communities panel */
+    #dock-comms { display: flex; flex-direction: column; gap: 6px; }
+    .comm-chip {
+      display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+      border-radius: 8px; background: var(--surface-2); cursor: pointer;
+      transition: background 120ms;
+    }
+    .comm-chip:hover { background: var(--surface-3, var(--surface-2)); }
+    .comm-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--accent); opacity: 0.7; }
+    .comm-name { font: 500 12.5px/1 var(--sans); color: var(--ink); flex: 1; }
+    .comm-count { font: 400 10.5px/1 var(--mono); color: var(--ink-muted); }
   </style>
 
   <div id="graph-shell">
-    <!-- Sidebar -->
-    <aside id="graph-sidebar">
-      <div>
-        <h2>Build Graph</h2>
-        <button id="build-btn">Build Knowledge Graph</button>
-        <div id="build-status"></div>
-      </div>
-
-      <div>
-        <h2>Search</h2>
-        <input type="search" class="graph-search" id="node-search" placeholder="Search nodes…" />
-      </div>
-
-      <div class="filter-group">
-        <h2>Entity types</h2>
-        {['doc','flow','flow_step','task','concept','decision','project','rationale'].map(t => (
-          <label class="filter-label">
-            <input type="checkbox" data-type={t} checked /> {t}
-          </label>
-        ))}
-        <label class="filter-label" style="margin-top:4px">
-          <input type="checkbox" id="god-nodes-only" /> God-nodes only
-        </label>
-      </div>
-
-      <div id="community-list">
-        <h2>Communities</h2>
-        <div id="communities-inner"><span style="font:400 11px/1 var(--mono);color:var(--ink-muted)">Build graph to see communities.</span></div>
-      </div>
-    </aside>
 
     <!-- Canvas -->
     <div id="graph-canvas">
-      <div id="graph-loading">Loading graph…</div>
+      <div id="graph-loading">
+        <span>Loading graph…</span>
+      </div>
       <svg id="graph-svg">
         <defs>
           <marker id="arr" markerWidth="6" markerHeight="4" refX="6" refY="2" orient="auto">
-            <polygon points="0 0,6 2,0 4" fill="rgba(255,255,255,0.15)"/>
+            <polygon points="0 0,6 2,0 4" fill="rgba(255,255,255,0.12)"/>
           </marker>
         </defs>
         <g id="zc">
@@ -112,87 +204,250 @@ try {
           <g id="nl"></g>
         </g>
       </svg>
-      <div id="graph-detail">
-        <div id="detail-label"></div>
-        <div id="detail-badges"></div>
-        <div id="detail-stats"></div>
-        <div id="detail-summary"></div>
+    </div>
+
+    <!-- Top-left legend -->
+    <div id="legend">
+      <div class="leg"><div class="leg-dot" style="background:#60a5fa"></div>doc</div>
+      <div class="leg"><div class="leg-dot" style="background:#a78bfa"></div>concept</div>
+      <div class="leg"><div class="leg-dot" style="background:#fbbf24"></div>flow</div>
+      <div class="leg"><div class="leg-dot" style="background:#4ade80"></div>task</div>
+      <div class="leg"><div class="leg-dot" style="background:#f0997b"></div>decision</div>
+      <div class="leg"><div class="leg-dot" style="background:#e879f9"></div>project</div>
+      <div class="leg"><div class="leg-dot" style="border:1.5px solid #fbbf24;background:transparent"></div>god-node</div>
+    </div>
+
+    <!-- Top-right controls -->
+    <div id="graph-controls">
+      <div id="build-status"></div>
+      <button id="build-btn">Build graph</button>
+    </div>
+
+    <!-- Node detail panel -->
+    <div id="graph-detail">
+      <button id="detail-close">✕</button>
+      <div id="detail-label"></div>
+      <div id="detail-badges"></div>
+      <div id="detail-community"></div>
+      <div id="detail-stats"></div>
+      <div id="detail-summary"></div>
+    </div>
+
+    <!-- Bottom dock -->
+    <div id="dock">
+      <div id="dock-pill">
+        <div id="dock-pill-icon"></div>
+        <span id="dock-pill-label">Explore</span>
+        <span id="dock-pill-count">—</span>
+      </div>
+      <div id="dock-body">
+        <div id="dock-tabs">
+          <div class="dock-tab active" data-panel="search">Search</div>
+          <div class="dock-tab" data-panel="filters">Filters</div>
+          <div class="dock-tab" data-panel="communities">Communities</div>
+        </div>
+
+        <!-- Search panel -->
+        <div class="dock-panel active" id="panel-search">
+          <input type="search" id="dock-search-input" placeholder="Search docs, concepts, decisions…" autocomplete="off" />
+          <div id="search-results"><div id="search-empty">Type to search across all graph nodes</div></div>
+        </div>
+
+        <!-- Filters panel -->
+        <div class="dock-panel" id="panel-filters">
+          <div id="dock-filters">
+            <div class="filter-col">
+              <h3>Entity types</h3>
+              {['doc','flow','flow_step','task','concept','decision','project','rationale'].map(t => (
+                <label class="filter-label">
+                  <input type="checkbox" data-type={t} checked /> {t}
+                </label>
+              ))}
+            </div>
+            <div class="filter-col">
+              <h3>View</h3>
+              <label class="filter-label">
+                <input type="checkbox" id="god-nodes-only" /> God-nodes only
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Communities panel -->
+        <div class="dock-panel" id="panel-communities">
+          <div id="dock-comms"><span style="font:400 11px/1 var(--mono);color:var(--ink-muted)">Build graph to see communities.</span></div>
+        </div>
       </div>
     </div>
+
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js" is:inline></script>
   <script define:vars={{ initialData }}>
     var NODE_COLORS = {
-      doc:'#60a5fa',flow:'#fbbf24',flow_step:'#fbbf24',task:'#4ade80',
-      session:'#52525b',concept:'#a78bfa',decision:'#f0997b',project:'#e879f9',rationale:'#f0997b'
+      doc:'#60a5fa', flow:'#fbbf24', flow_step:'#fbbf24', task:'#4ade80',
+      session:'#52525b', concept:'#a78bfa', decision:'#f0997b',
+      project:'#e879f9', rationale:'#f0997b'
     };
 
     var currentData = initialData;
     var hiddenTypes = new Set();
     var godOnly = false;
-    var simRef = null;
+    var allNodes = [];
+    var nodeSel, godRings, simRef, zoomRef, svgSel;
 
     function radius(d){ return 6 + Math.min((d.degree||0)*0.5,12); }
 
+    /* ── Dock toggle ── */
+    var dockOpen = false;
+    document.getElementById('dock-pill').addEventListener('click', function(){
+      dockOpen = !dockOpen;
+      document.getElementById('dock').classList.toggle('open', dockOpen);
+      if (dockOpen) document.getElementById('dock-search-input').focus();
+    });
+
+    /* ── Dock tabs ── */
+    document.querySelectorAll('.dock-tab').forEach(function(tab){
+      tab.addEventListener('click', function(){
+        document.querySelectorAll('.dock-tab').forEach(function(t){ t.classList.remove('active'); });
+        document.querySelectorAll('.dock-panel').forEach(function(p){ p.classList.remove('active'); });
+        tab.classList.add('active');
+        document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+        if (tab.dataset.panel === 'search') document.getElementById('dock-search-input').focus();
+      });
+    });
+
+    /* ── Search ── */
+    document.getElementById('dock-search-input').addEventListener('input', function(){
+      var q = this.value.toLowerCase().trim();
+      var results = document.getElementById('search-results');
+
+      if (!q) {
+        // Restore all nodes
+        if (nodeSel) nodeSel.attr('opacity', 0.9);
+        results.innerHTML = '<div id="search-empty">Type to search across all graph nodes</div>';
+        return;
+      }
+
+      var hits = allNodes.filter(function(n){ return (n.label||'').toLowerCase().includes(q); }).slice(0, 30);
+
+      if (!hits.length) {
+        if (nodeSel) nodeSel.attr('opacity', function(d){ return (d.label||'').toLowerCase().includes(q) ? 1 : 0.08; });
+        results.innerHTML = '<div id="search-empty">No matches for "' + q + '"</div>';
+        return;
+      }
+
+      // Dim non-matching nodes
+      if (nodeSel) nodeSel.attr('opacity', function(d){ return (d.label||'').toLowerCase().includes(q) ? 1 : 0.08; });
+
+      results.innerHTML = hits.map(function(n){
+        var color = NODE_COLORS[n.entityType] || '#6b7280';
+        var comm = n.communityLabel ? '<span class="hit-comm">' + n.communityLabel + '</span>' : '';
+        return '<div class="search-hit" data-id="' + n.id + '">'
+          + '<div class="hit-dot" style="background:' + color + (n.isGodNode ? ';box-shadow:0 0 0 2px #fbbf24' : '') + '"></div>'
+          + '<span class="hit-label">' + (n.label||'') + '</span>'
+          + '<span class="hit-type">' + (n.entityType||'') + '</span>'
+          + comm
+          + '</div>';
+      }).join('');
+
+      // Click to fly to node
+      results.querySelectorAll('.search-hit').forEach(function(el){
+        el.addEventListener('click', function(){
+          var node = allNodes.find(function(n){ return n.id === el.dataset.id; });
+          if (node && node.x && svgSel && zoomRef) {
+            var svg = svgSel.node();
+            var W = svg.clientWidth, H = svg.clientHeight, s = 2;
+            svgSel.transition().duration(400).call(zoomRef.transform, d3.zoomIdentity.translate(W/2 - s*node.x, H/2 - s*node.y).scale(s));
+            openDetail(node);
+          }
+        });
+      });
+    });
+
+    /* ── Filters ── */
+    function applyFilters(){
+      if (!nodeSel) return;
+      nodeSel.attr('display', function(d){
+        if (hiddenTypes.has(d.entityType)) return 'none';
+        if (godOnly && !d.isGodNode) return 'none';
+        return null;
+      });
+    }
+    document.querySelectorAll('[data-type]').forEach(function(cb){
+      cb.addEventListener('change', function(){
+        var t = cb.dataset.type;
+        if (cb.checked) hiddenTypes.delete(t); else hiddenTypes.add(t);
+        applyFilters();
+      });
+    });
+    document.getElementById('god-nodes-only').addEventListener('change', function(){
+      godOnly = this.checked; applyFilters();
+    });
+
+    /* ── Render ── */
     function render(data){
       if (!data || !window.d3) return;
-      var nodes = (data.nodes||[]).map(function(n){ return Object.assign({},n); });
+      allNodes = (data.nodes||[]).map(function(n){ return Object.assign({},n); });
       var edges = data.edges||[];
-      document.getElementById('graph-loading').style.display='none';
 
-      var svg = d3.select('#graph-svg');
-      var W = svg.node().clientWidth, H = svg.node().clientHeight;
+      document.getElementById('graph-loading').style.display = 'none';
+      document.getElementById('dock-pill-count').textContent = allNodes.length + ' nodes';
+
+      svgSel = d3.select('#graph-svg');
+      var W = svgSel.node().clientWidth, H = svgSel.node().clientHeight;
       var zc = d3.select('#zc'), el = d3.select('#el'), nl = d3.select('#nl');
       el.selectAll('*').remove(); nl.selectAll('*').remove();
 
-      var zoom = d3.zoom().scaleExtent([0.05,10]).on('zoom',function(e){ zc.attr('transform',e.transform); });
-      svg.call(zoom);
-      svg.on('click',function(e){ if(e.target===svg.node()||e.target.tagName==='svg') closeDetail(); });
+      zoomRef = d3.zoom().scaleExtent([0.04,12]).on('zoom', function(e){ zc.attr('transform', e.transform); });
+      svgSel.call(zoomRef);
+      svgSel.on('click', function(e){ if (e.target === svgSel.node() || e.target.tagName === 'svg') closeDetail(); });
 
-      var linkData = edges.map(function(e){ return {source:e.fromNodeId||e.from_node_id,target:e.toNodeId||e.to_node_id,d:e}; });
-      var sim = d3.forceSimulation(nodes)
-        .force('link',d3.forceLink(linkData).id(function(d){ return d.id; }).distance(function(l){ return l.d.edgeType==='part_of'?60:120; }))
-        .force('charge',d3.forceManyBody().strength(function(d){ return -80-(d.degree||0)*3; }))
-        .force('center',d3.forceCenter(W/2,H/2))
-        .force('collide',d3.forceCollide().radius(function(d){ return radius(d)+4; }));
+      var linkData = edges.map(function(e){ return {source: e.fromNodeId||e.from_node_id, target: e.toNodeId||e.to_node_id, d: e}; });
+      var sim = d3.forceSimulation(allNodes)
+        .force('link', d3.forceLink(linkData).id(function(d){ return d.id; }).distance(function(l){ return l.d.edgeType==='part_of'?60:120; }))
+        .force('charge', d3.forceManyBody().strength(function(d){ return -80-(d.degree||0)*3; }))
+        .force('center', d3.forceCenter(W/2, H/2))
+        .force('collide', d3.forceCollide().radius(function(d){ return radius(d)+4; }));
       simRef = sim;
 
       var edgeSel = el.selectAll('line').data(linkData).enter().append('line')
-        .attr('stroke',function(d){ return d.d.provenance==='INFERRED'?'rgba(255,255,255,0.1)':'rgba(255,255,255,0.18)'; })
-        .attr('stroke-width',1).attr('opacity',0.7)
-        .attr('stroke-dasharray',function(d){ return d.d.provenance==='INFERRED'?'5,3':null; })
-        .attr('marker-end','url(#arr)');
+        .attr('stroke', function(d){ return d.d.provenance==='INFERRED' ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.16)'; })
+        .attr('stroke-width', 1).attr('opacity', 0.7)
+        .attr('stroke-dasharray', function(d){ return d.d.provenance==='INFERRED' ? '4,3' : null; })
+        .attr('marker-end', 'url(#arr)');
 
-      var godRings = nl.selectAll('circle.gr').data(nodes.filter(function(n){ return n.isGodNode; }))
-        .enter().append('circle').attr('class','gr').attr('r',function(d){ return radius(d)+6; })
+      godRings = nl.selectAll('circle.gr').data(allNodes.filter(function(n){ return n.isGodNode; }))
+        .enter().append('circle').attr('class','gr').attr('r', function(d){ return radius(d)+6; })
         .attr('fill','none').attr('stroke','#fbbf24').attr('stroke-width',1.5).attr('opacity',0.5);
 
       function pulseRings(){
-        godRings.transition().duration(1200).attr('opacity',0.1).attr('r',function(d){ return radius(d)+14; })
-          .transition().duration(1200).attr('opacity',0.6).attr('r',function(d){ return radius(d)+6; })
-          .on('end',pulseRings);
+        godRings.transition().duration(1400).attr('opacity',0.08).attr('r', function(d){ return radius(d)+14; })
+          .transition().duration(1400).attr('opacity',0.55).attr('r', function(d){ return radius(d)+6; })
+          .on('end', pulseRings);
       }
-      if(godRings.size()>0) pulseRings();
+      if (godRings.size() > 0) pulseRings();
 
-      var nodeSel = nl.selectAll('circle.nd').data(nodes).enter().append('circle').attr('class','nd')
-        .attr('r',radius).attr('fill',function(d){ return NODE_COLORS[d.entityType]||'#6b7280'; })
-        .attr('stroke',function(d){ return d.isGodNode?'#fbbf24':'rgba(255,255,255,0.12)'; })
-        .attr('stroke-width',function(d){ return d.isGodNode?2:1; }).attr('opacity',0.9)
-        .style('cursor','pointer').on('click',function(e,d){ e.stopPropagation(); openDetail(d); });
+      nodeSel = nl.selectAll('circle.nd').data(allNodes).enter().append('circle').attr('class','nd')
+        .attr('r', radius)
+        .attr('fill', function(d){ return NODE_COLORS[d.entityType]||'#6b7280'; })
+        .attr('stroke', function(d){ return d.isGodNode ? '#fbbf24' : 'rgba(255,255,255,0.1)'; })
+        .attr('stroke-width', function(d){ return d.isGodNode ? 2 : 1; })
+        .attr('opacity', 0.9).style('cursor','pointer')
+        .on('click', function(e,d){ e.stopPropagation(); openDetail(d); });
 
       nodeSel.call(d3.drag()
-        .on('start',function(e,d){ if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
-        .on('drag',function(e,d){ d.fx=e.x; d.fy=e.y; })
-        .on('end',function(e,d){ if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }));
+        .on('start', function(e,d){ if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+        .on('drag',  function(e,d){ d.fx=e.x; d.fy=e.y; })
+        .on('end',   function(e,d){ if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }));
 
-      var labelSel = nl.selectAll('text.nl').data(nodes.filter(function(n){ return (n.degree||0)>=3||n.isGodNode; }))
+      var labelSel = nl.selectAll('text.nl').data(allNodes.filter(function(n){ return (n.degree||0)>=3||n.isGodNode; }))
         .enter().append('text').attr('class','nl')
-        .text(function(d){ return d.label&&d.label.length>16?d.label.slice(0,14)+'…':d.label||''; })
-        .attr('font-size','9px').attr('fill','rgba(240,238,233,0.55)').attr('text-anchor','middle')
-        .attr('dy',function(d){ return -(radius(d)+4); }).style('pointer-events','none');
+        .text(function(d){ return d.label&&d.label.length>18 ? d.label.slice(0,16)+'…' : d.label||''; })
+        .attr('font-size','9px').attr('fill','rgba(240,238,233,0.5)').attr('text-anchor','middle')
+        .attr('dy', function(d){ return -(radius(d)+4); }).style('pointer-events','none');
 
-      sim.on('tick',function(){
+      sim.on('tick', function(){
         edgeSel.attr('x1',function(d){ return d.source.x; }).attr('y1',function(d){ return d.source.y; })
                .attr('x2',function(d){ return d.target.x; }).attr('y2',function(d){ return d.target.y; });
         nodeSel.attr('cx',function(d){ return d.x; }).attr('cy',function(d){ return d.y; });
@@ -200,107 +455,84 @@ try {
         labelSel.attr('x',function(d){ return d.x; }).attr('y',function(d){ return d.y; });
       });
 
+      // Auto-fit after simulation settles
       setTimeout(function(){
         var b = nl.node().getBBox();
-        if(b&&b.width>0){
-          var pad=40,s=Math.min((W-pad*2)/b.width,(H-pad*2)/b.height,2);
+        if (b && b.width > 0) {
+          var pad=60, s=Math.min((W-pad*2)/b.width, (H-pad*2)/b.height, 1.8);
           var tx=W/2-s*(b.x+b.width/2), ty=H/2-s*(b.y+b.height/2);
-          svg.transition().duration(600).call(zoom.transform,d3.zoomIdentity.translate(tx,ty).scale(s));
+          svgSel.transition().duration(700).call(zoomRef.transform, d3.zoomIdentity.translate(tx,ty).scale(s));
         }
-      },2500);
+      }, 2800);
 
-      // Communities sidebar
+      // Populate communities tab
       var comms = data.communities||[];
-      var ci = document.getElementById('communities-inner');
-      if(comms.length){
-        ci.innerHTML = comms.map(function(c){
-          var qs=(c.suggestedQuestions||[]).slice(0,2).map(function(q){ return '<div>• '+q+'</div>'; }).join('');
-          return '<div class="comm-item" data-comm="'+c.id+'">'+'<div class="comm-name">'+c.label+'</div>'+(qs?'<div class="comm-qs">'+qs+'</div>':'')+'</div>';
+      var dc = document.getElementById('dock-comms');
+      if (comms.length) {
+        dc.innerHTML = comms.map(function(c){
+          return '<div class="comm-chip" data-comm="' + c.id + '">'
+            + '<div class="comm-dot"></div>'
+            + '<span class="comm-name">' + c.label + '</span>'
+            + '</div>';
         }).join('');
+        // Click community → highlight its nodes
+        dc.querySelectorAll('.comm-chip').forEach(function(chip){
+          chip.addEventListener('click', function(){
+            var cid = parseInt(chip.dataset.comm);
+            nodeSel.attr('opacity', function(d){ return d.communityId === cid ? 1 : 0.06; });
+          });
+        });
       }
 
-      // Apply filters
-      function applyFilters(){
-        nodeSel.attr('display',function(d){
-          if(hiddenTypes.has(d.entityType)) return 'none';
-          if(godOnly&&!d.isGodNode) return 'none';
-          return null;
-        });
-        godRings.attr('display',function(d){ return (hiddenTypes.has(d.entityType)||godOnly)?null:null; });
-      }
       applyFilters();
-
-      // Type filter checkboxes
-      document.querySelectorAll('[data-type]').forEach(function(cb){
-        cb.addEventListener('change',function(){
-          var t=cb.dataset.type;
-          if(cb.checked) hiddenTypes.delete(t); else hiddenTypes.add(t);
-          applyFilters();
-        });
-      });
-
-      document.getElementById('god-nodes-only').addEventListener('change',function(){
-        godOnly=this.checked; applyFilters();
-      });
-
-      // Node search
-      document.getElementById('node-search').addEventListener('input',function(){
-        var q=this.value.toLowerCase().trim();
-        if(!q){ nodeSel.attr('opacity',0.9); return; }
-        nodeSel.attr('opacity',function(d){ return (d.label||'').toLowerCase().includes(q)?1:0.1; });
-        // Centre on first match
-        var match=nodes.find(function(n){ return (n.label||'').toLowerCase().includes(q)&&n.x; });
-        if(match){
-          var s=1.5;
-          svg.transition().duration(400).call(zoom.transform,d3.zoomIdentity.translate(W/2-s*match.x,H/2-s*match.y).scale(s));
-        }
-      });
     }
 
+    /* ── Detail panel ── */
     function openDetail(d){
-      document.getElementById('detail-label').textContent=d.label;
-      var b=document.getElementById('detail-badges');
-      b.innerHTML='<span class="detail-badge">'+d.entityType+'</span>';
-      if(d.isGodNode) b.innerHTML+='<span class="detail-badge god-badge">★ god node</span>';
-      document.getElementById('detail-stats').textContent=
-        'Degree: '+(d.degree||0)+'  Betweenness: '+(((d.betweennessCentrality||0)*100).toFixed(1))+'%'+(d.communityLabel?'  Community: '+d.communityLabel:'');
-      document.getElementById('detail-summary').textContent=d.summary||'';
+      document.getElementById('detail-label').textContent = d.label||'';
+      var b = document.getElementById('detail-badges');
+      b.innerHTML = '<span class="detail-badge">' + (d.entityType||'') + '</span>';
+      if (d.isGodNode) b.innerHTML += '<span class="detail-badge god-badge">★ god-node</span>';
+      document.getElementById('detail-community').textContent = d.communityLabel ? '◆ ' + d.communityLabel : '';
+      document.getElementById('detail-stats').textContent =
+        'Degree: ' + (d.degree||0) + '\nBetweenness: ' + (((d.betweennessCentrality||0)*100).toFixed(2)) + '%';
+      document.getElementById('detail-summary').textContent = d.summary||'';
       document.getElementById('graph-detail').classList.add('open');
     }
     function closeDetail(){ document.getElementById('graph-detail').classList.remove('open'); }
-    document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeDetail(); });
+    document.getElementById('detail-close').addEventListener('click', closeDetail);
+    document.addEventListener('keydown', function(e){ if (e.key==='Escape') { closeDetail(); } });
 
-    // Build button
-    document.getElementById('build-btn').addEventListener('click',function(){
-      var status=document.getElementById('build-status');
-      status.textContent='Queuing build…';
-      fetch('/api/graph/build',{method:'POST',credentials:'include'})
+    /* ── Build button ── */
+    document.getElementById('build-btn').addEventListener('click', function(){
+      var status = document.getElementById('build-status');
+      status.textContent = 'Queuing…'; status.classList.add('visible');
+      fetch('/api/graph/build', {method:'POST', credentials:'include'})
         .then(function(r){ return r.json(); })
-        .then(function(){ status.textContent='Build queued. Check back in ~2 minutes.'; })
-        .catch(function(){ status.textContent='Failed to queue build.'; });
+        .then(function(){ status.textContent = 'Build queued (~2 min)'; setTimeout(function(){ status.classList.remove('visible'); }, 4000); })
+        .catch(function(){ status.textContent = 'Failed'; setTimeout(function(){ status.classList.remove('visible'); }, 3000); });
     });
 
-    // SSE: re-fetch on graph_updated
-    var evtSource = new EventSource('/api/notifications/stream',{withCredentials:true});
-    evtSource.addEventListener('graph_updated',function(){
-      fetch('/api/graph/full',{credentials:'include'}).then(function(r){ return r.ok?r.json():null; })
+    /* ── SSE live update ── */
+    var evtSource = new EventSource('/api/notifications/stream', {withCredentials:true});
+    evtSource.addEventListener('graph_updated', function(){
+      fetch('/api/graph/full', {credentials:'include'}).then(function(r){ return r.ok?r.json():null; })
         .then(function(d){ if(d){ currentData=d; render(d); } });
     });
 
-    // Initial render — server-side prefetch may be null if PUBLIC_API_URL isn't set;
-    // fall back to a client-side fetch which uses the relative /api proxy.
-    if(currentData) {
+    /* ── Initial load ── */
+    if (currentData) {
       render(currentData);
     } else {
-      document.getElementById('graph-loading').textContent='Loading graph…';
-      fetch('/api/graph/full',{credentials:'include'})
+      document.getElementById('graph-loading').querySelector('span').textContent = 'Loading graph…';
+      fetch('/api/graph/full', {credentials:'include'})
         .then(function(r){ return r.ok?r.json():null; })
         .then(function(d){
-          if(d){ currentData=d; render(d); }
-          else document.getElementById('graph-loading').textContent='No graph data yet. Click "Build Knowledge Graph" to start.';
+          if (d) { currentData=d; render(d); }
+          else document.getElementById('graph-loading').querySelector('span').textContent = 'No graph yet — click "Build graph" to start.';
         })
         .catch(function(){
-          document.getElementById('graph-loading').textContent='No graph data yet. Click "Build Knowledge Graph" to start.';
+          document.getElementById('graph-loading').querySelector('span').textContent = 'No graph yet — click "Build graph" to start.';
         });
     }
   </script>
