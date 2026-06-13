@@ -5,7 +5,7 @@ const ForceGraph3D = ForceGraph3DLib as any;
 import * as THREE from 'three';
 import { createNodeObject, animateNodeObject, clearNodeCache } from './node-objects';
 import { setHighlight, clearHighlight } from './highlight';
-import { setupBlackEnvironment, createStarField, addBloomAtmosphere } from './environment';
+import { setupBlackEnvironment, createStarField, addBloomAtmosphere, createBrainBoundaryShell } from './environment';
 import { triggerNodeMaterialize, processAnimations } from './animations';
 import { NodeCard3D } from './NodeCard3D';
 import type { GraphNode, GraphEdge } from '../../lib/graph-types';
@@ -23,6 +23,8 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
   const isUserInteracting = useRef(false);
   const interactionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const envInitRef = useRef(false);
+  const simulationDone = useRef(false);
+  const brainShellRef = useRef<THREE.Points | null>(null);
 
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [cameraRef, setCameraRef] = useState<THREE.Camera | null>(null);
@@ -60,13 +62,11 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
   // ── FORCE TUNING ──────────────────────────────────────────────────
   useEffect(() => {
     if (!fgRef.current) return;
-    fgRef.current.d3Force('charge')?.strength(-200);
-    fgRef.current.d3Force('link')?.distance((link: GraphEdge) =>
-      60 + (1 / (link.weight ?? 1)) * 80,
-    );
+    fgRef.current.d3Force('charge')?.strength(-30);
+    fgRef.current.d3Force('link')?.distance(() => 25);
     fgRef.current.d3Force('z', (alpha: number) => {
       nodes.forEach((node: GraphNode & { vz?: number; z?: number }) => {
-        const targetZ = ((node.communityId ?? 0) % 7) * 80 - 280;
+        const targetZ = ((node.communityId ?? 0) % 6) * 35 - 90;
         node.vz = (node.vz ?? 0) + (targetZ - (node.z ?? 0)) * 0.008 * alpha;
       });
     });
@@ -76,7 +76,7 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
   useEffect(() => {
     let animFrame: number;
     const animate = () => {
-      if (!isUserInteracting.current && fgRef.current) {
+      if (!isUserInteracting.current && simulationDone.current && fgRef.current) {
         const cam = fgRef.current.camera() as THREE.PerspectiveCamera;
         const r = Math.sqrt(cam.position.x ** 2 + cam.position.z ** 2);
         const theta = Math.atan2(cam.position.z, cam.position.x) + 0.0008;
@@ -220,7 +220,42 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
         d3VelocityDecay={0.3}
         warmupTicks={80}
         cooldownTicks={300}
-        onEngineStop={() => fgRef.current?.zoomToFit?.(1200, 100)}
+        onEngineStop={() => {
+          const graphData = fgRef.current?.graphData();
+
+          // 1. Calculate actual graph radius from settled node positions
+          let maxR = 0;
+          if (graphData?.nodes) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            graphData.nodes.forEach((node: any) => {
+              const r = Math.sqrt((node.x ?? 0) ** 2 + (node.y ?? 0) ** 2 + (node.z ?? 0) ** 2);
+              if (r > maxR) maxR = r;
+            });
+          }
+
+          // 2. Create dynamic brain shell sized to actual graph extent
+          const scene = fgRef.current?.scene();
+          if (scene && maxR > 0) {
+            if (brainShellRef.current) scene.remove(brainShellRef.current);
+            const shell = createBrainBoundaryShell(maxR * 1.4);
+            scene.add(shell);
+            brainShellRef.current = shell;
+          }
+
+          // 3. Pin all nodes so simulation doesn't drift
+          if (graphData?.nodes) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            graphData.nodes.forEach((node: any) => {
+              node.fx = node.x;
+              node.fy = node.y;
+              node.fz = node.z;
+            });
+          }
+
+          // 4. Fit view then enable rotation
+          fgRef.current?.zoomToFit?.(800, 60);
+          setTimeout(() => { simulationDone.current = true; }, 900);
+        }}
 
         onNodeClick={handleNodeClick}
         onBackgroundClick={handleBackgroundClick}

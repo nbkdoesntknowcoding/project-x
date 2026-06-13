@@ -10,7 +10,7 @@ export function createNodeObject(node: GraphNode): THREE.Group {
 
   const group = new THREE.Group();
   const isGodNode = node.isGodNode ?? false;
-  const radius = getNodeRadius(node.degree ?? 0, isGodNode);
+  const radius = getNodeRadius(node.degree ?? 0, isGodNode, node.entityType);
   const colorHex = ENTITY_COLORS_HEX[node.entityType] ?? 0x888888;
 
   const geometry = createNodeGeometry(node.entityType, radius);
@@ -29,6 +29,24 @@ export function createNodeObject(node: GraphNode): THREE.Group {
 
   const glowSprite = createGlowSprite(colorHex, radius, isGodNode);
   group.add(glowSprite);
+
+  // Always-visible point — THREE.Points renders as a circle, never a box.
+  // sizeAttenuation:false keeps it visible at any zoom distance.
+  const dotGeometry = new THREE.BufferGeometry();
+  dotGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0]), 3));
+  const dotMaterial = new THREE.PointsMaterial({
+    color: colorHex,
+    size: isGodNode ? 6 : 4,
+    sizeAttenuation: false,
+    transparent: true,
+    opacity: 0.9,
+    alphaTest: 0.1,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const dot = new THREE.Points(dotGeometry, dotMaterial);
+  dot.userData.isAlwaysVisibleDot = true;
+  group.add(dot);
 
   if (isGodNode) {
     const outerHalo = createGodNodeOuterHalo(colorHex, radius);

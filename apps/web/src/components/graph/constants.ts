@@ -49,24 +49,28 @@ export const SHAPE_ICONS: Record<string, string> = {
 };
 
 export function createNodeGeometry(entityType: string, radius: number): THREE.BufferGeometry {
-  switch (entityType) {
-    case 'doc':        return new THREE.SphereGeometry(radius, 16, 16);
-    case 'flow':       return new THREE.OctahedronGeometry(radius);
-    case 'flow_step':  return new THREE.TetrahedronGeometry(radius);
-    case 'task':       return new THREE.BoxGeometry(radius * 1.6, radius * 1.6, radius * 1.6);
-    case 'concept':    return new THREE.IcosahedronGeometry(radius);
-    case 'decision':   return new THREE.ConeGeometry(radius * 0.8, radius * 1.8, 6);
-    case 'project':    return new THREE.TorusGeometry(radius * 1.2, radius * 0.3, 8, 16);
-    case 'rationale':  return new THREE.DodecahedronGeometry(radius);
-    case 'session':    return new THREE.CylinderGeometry(radius * 0.5, radius * 0.5, radius * 1.5, 10);
-    default:           return new THREE.SphereGeometry(radius, 12, 12);
-  }
+  // Every node is a sphere. Neurons are spheres.
+  // Differentiation comes from color, size, and glow — not geometry.
+  const segments = radius > 14 ? 20 : 14;
+  return new THREE.SphereGeometry(radius, segments, segments);
 }
 
-export function getNodeRadius(degree: number, isGodNode: boolean): number {
-  const base = 3;
-  const degreeBonus = Math.min(degree * 0.3, 8);
-  const godBonus = isGodNode ? 6 : 0;
+export function getNodeRadius(degree: number, isGodNode: boolean, entityType: string): number {
+  // Base size varies by entity type — this IS the shape differentiation
+  const baseByType: Record<string, number> = {
+    doc:       7,
+    concept:   5,
+    decision:  9,
+    flow:      8,
+    flow_step: 4,
+    task:      6,
+    project:   11,
+    rationale: 4,
+    session:   3,
+  };
+  const base = baseByType[entityType] ?? 6;
+  const degreeBonus = Math.min(degree * 0.35, 8);
+  const godBonus = isGodNode ? 10 : 0;
   return base + degreeBonus + godBonus;
 }
 

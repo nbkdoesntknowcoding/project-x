@@ -47,6 +47,41 @@ export function createStarField(): THREE.Points {
   return stars;
 }
 
+export function createBrainBoundaryShell(graphRadius: number): THREE.Points {
+  const r = graphRadius;
+  const count = 1500;
+  const positions = new Float32Array(count * 3);
+
+  const goldenAngle = Math.PI * (1 + Math.sqrt(5));
+
+  for (let i = 0; i < count; i++) {
+    const t = i / count;
+    const inclination = Math.acos(1 - 2 * t);
+    const azimuth = goldenAngle * i;
+
+    positions[i * 3]     = r * 1.2  * Math.sin(inclination) * Math.cos(azimuth);
+    positions[i * 3 + 1] = r * 0.78 * Math.cos(inclination);
+    positions[i * 3 + 2] = r * 1.05 * Math.sin(inclination) * Math.sin(azimuth);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+  const material = new THREE.PointsMaterial({
+    color: 0x4a5568,
+    size: 1.5,
+    transparent: true,
+    opacity: 0.28,
+    sizeAttenuation: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+
+  const shell = new THREE.Points(geometry, material);
+  shell.userData.isBrainShell = true;
+  return shell;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function addBloomAtmosphere(composer: any): Promise<void> {
   try {
