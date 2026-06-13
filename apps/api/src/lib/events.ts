@@ -79,7 +79,17 @@ export type WorkspaceEvent =
   | { type: 'session_ended';        data: SessionEndedPayload }
   | { type: 'optimization_findings_updated'; data: { newCount: number } }
   | { type: 'attachment_ready'; data: { attachmentId: string; docId: string | null; format: string } }
-  | { type: 'graph_updated'; data: { totalNodes: number; totalEdges: number; communityCount: number } };
+  | { type: 'graph_updated'; data: { totalNodes: number; totalEdges: number; communityCount: number } }
+  | {
+      type: 'graph_node_added';
+      data: {
+        nodeId: string;
+        label: string;
+        entityType: string;
+        connectedNodeIds: string[];
+        communityId?: number;
+      };
+    };
 
 type WorkspaceEventListener = (event: WorkspaceEvent) => void;
 

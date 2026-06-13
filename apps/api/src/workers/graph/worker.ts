@@ -7,7 +7,7 @@ import { extractStructural } from '../../lib/graph/extract-structural.js';
 import { extractSemantic, buildSimilarityEdges } from '../../lib/graph/extract-semantic.js';
 import { runClustering } from '../../lib/graph/clustering.js';
 import { generateGraphReport } from '../../lib/graph/report.js';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, or, sql } from 'drizzle-orm';
 import * as schema from '../../db/schema.js';
 import { emitWorkspaceEvent } from '../../lib/events.js';
 
@@ -31,6 +31,46 @@ export function startGraphWorker(): Worker<GraphJobData> {
 
           await extractSemantic(workspaceId, docId, db as any, mode);
           await job.updateProgress(80);
+
+          // Emit graph_node_added so the 3D scene can materialise the new node immediately
+          try {
+            const [newNode] = await db
+              .select()
+              .from(schema.graphNodes)
+              .where(and(
+                eq(schema.graphNodes.workspaceId, workspaceId),
+                eq(schema.graphNodes.entityType, 'doc'),
+                eq(schema.graphNodes.entityId, docId),
+              ))
+              .limit(1);
+
+            if (newNode) {
+              const connectedEdges = await db
+                .select()
+                .from(schema.graphEdges)
+                .where(and(
+                  eq(schema.graphEdges.workspaceId, workspaceId),
+                  or(
+                    eq(schema.graphEdges.fromNodeId, newNode.id),
+                    eq(schema.graphEdges.toNodeId, newNode.id),
+                  ),
+                ));
+
+              const connectedNodeIds = connectedEdges.map(e =>
+                e.fromNodeId === newNode.id ? e.toNodeId : e.fromNodeId,
+              );
+
+              emitWorkspaceEvent(workspaceId, {
+                type: 'graph_node_added',
+                data: {
+                  nodeId: newNode.id,
+                  label: newNode.label,
+                  entityType: newNode.entityType,
+                  connectedNodeIds,
+                },
+              });
+            }
+          } catch { /* non-fatal */ }
 
           // Debounced cluster: 30 minutes after last doc save
           enqueueCluster(workspaceId, false, 30 * 60 * 1000);
