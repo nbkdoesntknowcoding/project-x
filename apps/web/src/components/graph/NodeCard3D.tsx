@@ -1,204 +1,62 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { ENTITY_LABELS, ENTITY_COLORS_CSS, EDGE_LABELS } from './constants';
 import type { GraphNode, GraphEdge } from '../../lib/graph-types';
 
-interface NodeCard3DProps {
-  node: GraphNode | null;
-  edges: GraphEdge[];
-  allNodes: GraphNode[];
-  camera: THREE.Camera;
-  domElement: HTMLCanvasElement;
-  onClose: () => void;
-  onOpenNode: (nodeId: string) => void;
+interface Props {
+  node: GraphNode; edges: GraphEdge[]; allNodes: GraphNode[];
+  camera: THREE.Camera; domElement: HTMLCanvasElement;
+  onClose: () => void; onOpenNode: (id: string) => void;
 }
 
-export function NodeCard3D({
-  node, edges, allNodes, camera, domElement, onClose, onOpenNode,
-}: NodeCard3DProps) {
-  const [screenPos, setScreenPos] = useState<{ x: number; y: number } | null>(null);
-  const animFrameRef = useRef<number | undefined>(undefined);
+export function NodeCard3D({ node, edges, allNodes, camera, domElement, onClose, onOpenNode }: Props) {
+  const [pos, setPos] = useState<{x:number;y:number}|null>(null);
 
   useEffect(() => {
-    if (!node) { setScreenPos(null); return; }
+    if (!node) { setPos(null); return; }
+    const v = new THREE.Vector3(node.x??0, node.y??0, node.z??0);
+    v.project(camera);
+    const rect = domElement.getBoundingClientRect();
+    const sx = (v.x*0.5+0.5)*rect.width+rect.left;
+    const sy = (-v.y*0.5+0.5)*rect.height+rect.top;
+    setPos({ x:Math.min(sx+40,window.innerWidth-350), y:Math.max(Math.min(sy-80,window.innerHeight-520),20) });
+  }, [node]);
 
-    const updatePosition = () => {
-      const nodePos = new THREE.Vector3(node.x ?? 0, node.y ?? 0, node.z ?? 0);
-      nodePos.project(camera);
-
-      const rect = domElement.getBoundingClientRect();
-      const x = (nodePos.x * 0.5 + 0.5) * rect.width + rect.left;
-      const y = (-nodePos.y * 0.5 + 0.5) * rect.height + rect.top;
-
-      setScreenPos({ x: x + 40, y: y - 80 });
-      animFrameRef.current = requestAnimationFrame(updatePosition);
-    };
-
-    animFrameRef.current = requestAnimationFrame(updatePosition);
-    return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
-  }, [node, camera, domElement]);
-
-  if (!node || !screenPos) return null;
-
-  const connectedEdges = edges.filter(e =>
-    e.fromNodeId === node.id || e.toNodeId === node.id
-  ).slice(0, 5);
-
-  const color = ENTITY_COLORS_CSS[node.entityType] ?? '#888888';
-  const typeLabel = ENTITY_LABELS[node.entityType] ?? node.entityType;
+  if (!pos) return null;
+  const color = ENTITY_COLORS_CSS[node.entityType]??'#888';
+  const label = ENTITY_LABELS[node.entityType]??node.entityType;
+  const conns = edges.filter(e=>e.fromNodeId===node.id||e.toNodeId===node.id).slice(0,5);
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        left: Math.min(screenPos.x, window.innerWidth - 340),
-        top: Math.max(screenPos.y, 20),
-        width: 320,
-        zIndex: 1000,
-        pointerEvents: 'all',
-        background: 'rgba(10,10,10,0.92)',
-        backdropFilter: 'blur(20px)',
-        border: `0.5px solid ${color}40`,
-        borderRadius: 16,
-        padding: '20px',
-        fontFamily: "'Geist', -apple-system, sans-serif",
-        animation: 'cardIn 200ms ease',
-      }}
-    >
-      <style>{`
-        @keyframes cardIn {
-          from { opacity: 0; transform: translateY(8px) scale(0.97); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
-        }
-      `}</style>
-
-      <button
-        onClick={onClose}
-        style={{
-          position: 'absolute', top: 12, right: 12,
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: '#52525b', fontSize: 16, lineHeight: 1,
-        }}
-      >×</button>
-
-      <div style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        background: `${color}18`,
-        border: `0.5px solid ${color}40`,
-        borderRadius: 6, padding: '4px 10px',
-        fontSize: 11, fontFamily: "'Geist Mono', monospace",
-        color, marginBottom: 10,
-        textTransform: 'uppercase', letterSpacing: '0.04em',
-      }}>
-        {typeLabel}
-      </div>
-
-      <h3 style={{
-        fontSize: 16, fontWeight: 500, color: '#fafafa',
-        margin: '0 0 6px 0', lineHeight: 1.3,
-      }}>
-        {node.label}
-      </h3>
-
-      {node.summary && (
-        <p style={{
-          fontSize: 13, color: '#a1a1aa', lineHeight: 1.55,
-          margin: '0 0 14px 0',
-        }}>
-          {node.summary}
-        </p>
-      )}
-
-      {node.isGodNode && (
-        <div style={{
-          fontSize: 11, color: '#fbbf24',
-          background: 'rgba(251,191,36,0.08)',
-          border: '0.5px solid rgba(251,191,36,0.2)',
-          borderRadius: 6, padding: '5px 10px',
-          marginBottom: 14,
-        }}>
-          ⚡ One of the most connected nodes in your knowledge base
+    <div style={{ position:'fixed', left:pos.x, top:pos.y, width:320, zIndex:1000,
+      background:'rgba(8,8,8,0.94)', backdropFilter:'blur(20px)',
+      border:`0.5px solid ${color}44`, borderRadius:14, padding:20,
+      fontFamily:"'Geist', -apple-system, sans-serif" }}>
+      <button onClick={onClose} style={{ position:'absolute',top:10,right:12,background:'none',border:'none',cursor:'pointer',color:'#52525b',fontSize:18 }}>×</button>
+      <div style={{ display:'inline-flex',alignItems:'center',background:`${color}18`,border:`0.5px solid ${color}40`,borderRadius:6,padding:'3px 10px',marginBottom:10,fontSize:10,fontFamily:"'Geist Mono',monospace",color,textTransform:'uppercase' as const,letterSpacing:'0.04em' }}>{label}</div>
+      <h3 style={{ fontSize:15,fontWeight:500,color:'#fafafa',margin:'0 0 6px',lineHeight:1.35 }}>{node.label}</h3>
+      {node.summary && <p style={{ fontSize:12,color:'#a1a1aa',lineHeight:1.55,margin:'0 0 12px' }}>{node.summary}</p>}
+      {node.isGodNode && <div style={{ fontSize:11,color:'#fbbf24',background:'rgba(251,191,36,0.08)',border:'0.5px solid rgba(251,191,36,0.2)',borderRadius:6,padding:'5px 10px',marginBottom:12 }}>⚡ Highly connected — central to this knowledge base</div>}
+      <div style={{ height:'0.5px',background:'rgba(255,255,255,0.06)',margin:'0 0 10px' }} />
+      {conns.length>0 && (<>
+        <p style={{ fontSize:10,color:'#52525b',fontFamily:"'Geist Mono',monospace",textTransform:'uppercase' as const,letterSpacing:'0.04em',margin:'0 0 8px' }}>Connections</p>
+        <div style={{ display:'flex',flexDirection:'column',gap:5,marginBottom:14 }}>
+          {conns.map(edge=>{
+            const out=edge.fromNodeId===node.id; const othId=out?edge.toNodeId:edge.fromNodeId;
+            const oth=allNodes.find(n=>n.id===othId); if(!oth) return null;
+            const oc=ENTITY_COLORS_CSS[oth.entityType]??'#888';
+            return (<div key={edge.id} onClick={()=>onOpenNode(othId)} style={{ background:'rgba(255,255,255,0.03)',border:'0.5px solid rgba(255,255,255,0.07)',borderRadius:7,padding:'7px 10px',cursor:'pointer' }}>
+              <div style={{ fontSize:10,color:'#52525b',fontFamily:"'Geist Mono',monospace",marginBottom:3 }}>{out?'→':'←'} {EDGE_LABELS[edge.edgeType ?? '']??edge.edgeType}</div>
+              <div style={{ fontSize:12,color:'#fafafa' }}><span style={{ display:'inline-block',width:6,height:6,borderRadius:'50%',background:oc,marginRight:6,verticalAlign:'middle' }}/>{oth.label}</div>
+              {edge.rationale && <div style={{ fontSize:11,color:'#a1a1aa',fontStyle:'italic',lineHeight:1.4,marginTop:3 }}>"{edge.rationale}"</div>}
+            </div>);
+          })}
         </div>
-      )}
-
-      <div style={{ height: '0.5px', background: 'rgba(255,255,255,0.06)', marginBottom: 12 }} />
-
-      {connectedEdges.length > 0 && (
-        <>
-          <p style={{
-            fontSize: 11, fontFamily: "'Geist Mono', monospace",
-            color: '#52525b', textTransform: 'uppercase',
-            letterSpacing: '0.04em', margin: '0 0 8px 0',
-          }}>
-            Connected to
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-            {connectedEdges.map(edge => {
-              const isOutgoing = edge.fromNodeId === node.id;
-              const otherNodeId = isOutgoing ? edge.toNodeId : edge.fromNodeId;
-              const otherNode = allNodes.find(n => n.id === otherNodeId);
-              if (!otherNode) return null;
-
-              const otherColor = ENTITY_COLORS_CSS[otherNode.entityType] ?? '#888888';
-              const relationLabel = EDGE_LABELS[edge.edgeType ?? ''] ?? (edge.edgeType ?? 'connects');
-
-              return (
-                <div
-                  key={edge.id ?? `${edge.fromNodeId}-${edge.toNodeId}`}
-                  style={{
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '0.5px solid rgba(255,255,255,0.06)',
-                    borderRadius: 8, padding: '8px 10px',
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => onOpenNode(otherNodeId)}
-                >
-                  <div style={{
-                    fontSize: 10, color: '#52525b',
-                    fontFamily: "'Geist Mono', monospace",
-                    textTransform: 'lowercase', marginBottom: 3,
-                  }}>
-                    {isOutgoing ? '→' : '←'} {relationLabel}
-                  </div>
-                  <div style={{
-                    fontSize: 13, color: '#fafafa', fontWeight: 400,
-                    marginBottom: edge.rationale ? 4 : 0,
-                  }}>
-                    <span style={{
-                      display: 'inline-block', width: 7, height: 7,
-                      borderRadius: '50%', background: otherColor,
-                      marginRight: 6, verticalAlign: 'middle',
-                    }} />
-                    {otherNode.label}
-                  </div>
-                  {edge.rationale && (
-                    <div style={{
-                      fontSize: 12, color: '#a1a1aa',
-                      fontStyle: 'italic', lineHeight: 1.4,
-                    }}>
-                      "{edge.rationale}"
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {(node.entityType === 'doc' || node.entityType === 'flow' || node.entityType === 'task') && node.entityId && (
-        <a
-          href={`/app/${node.entityType === 'doc' ? 'docs' : node.entityType === 'flow' ? 'flows' : 'kanban'}/${node.entityId}`}
-          style={{
-            display: 'block', width: '100%',
-            background: 'rgba(255,255,255,0.06)',
-            border: '0.5px solid rgba(255,255,255,0.12)',
-            borderRadius: 8, padding: '10px',
-            textAlign: 'center', textDecoration: 'none',
-            color: '#fafafa', fontSize: 13, boxSizing: 'border-box',
-          }}
-        >
-          Open {typeLabel.split(' ').pop()} →
+      </>)}
+      {['doc','flow','task'].includes(node.entityType) && (
+        <a href={`/app/${node.entityType==='doc'?'docs':node.entityType==='flow'?'flows':'kanban'}/${node.entityId}`}
+          style={{ display:'block',textAlign:'center' as const,background:'rgba(255,255,255,0.05)',border:'0.5px solid rgba(255,255,255,0.10)',borderRadius:8,padding:9,textDecoration:'none',color:'#fafafa',fontSize:12 }}>
+          Open {label.split(' ').pop()} →
         </a>
       )}
     </div>

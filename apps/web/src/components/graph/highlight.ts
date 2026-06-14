@@ -1,62 +1,31 @@
 import * as THREE from 'three';
 
-interface HighlightState {
-  selectedNodeId: string | null;
-  connectedNodeIds: Set<string>;
+let selId = ''; let connSet = new Set<string>();
+
+export function setHighlight(id: string, connected: string[], groups: Map<string, THREE.Group>): void {
+  selId = id; connSet = new Set(connected); apply(groups);
 }
 
-let state: HighlightState = { selectedNodeId: null, connectedNodeIds: new Set() };
-
-export function setHighlight(
-  nodeId: string | null,
-  connectedIds: string[],
-  allGroups: Map<string, THREE.Group>,
-) {
-  state = {
-    selectedNodeId: nodeId,
-    connectedNodeIds: new Set(connectedIds),
-  };
-  applyHighlight(allGroups);
+export function clearHighlight(groups: Map<string, THREE.Group>): void {
+  selId = ''; connSet = new Set(); apply(groups);
 }
 
-export function clearHighlight(allGroups: Map<string, THREE.Group>) {
-  state = { selectedNodeId: null, connectedNodeIds: new Set() };
-  applyHighlight(allGroups);
-}
-
-function applyHighlight(allGroups: Map<string, THREE.Group>) {
-  allGroups.forEach((group, nodeId) => {
-    const { baseMaterial, baseEmissiveIntensity, glowSprite } = group.userData as {
-      baseMaterial: THREE.MeshStandardMaterial | undefined;
-      baseEmissiveIntensity: number;
-      glowSprite: THREE.Sprite | undefined;
-    };
-    if (!baseMaterial) return;
-
-    if (state.selectedNodeId === null) {
-      baseMaterial.opacity = 1.0;
-      baseMaterial.emissiveIntensity = baseEmissiveIntensity;
-      if (glowSprite) glowSprite.material.opacity = 1.0;
-      return;
-    }
-
-    if (nodeId === state.selectedNodeId) {
-      baseMaterial.opacity = 1.0;
-      baseMaterial.emissiveIntensity = baseEmissiveIntensity * 3.0;
-      if (glowSprite) glowSprite.material.opacity = 1.5;
-      group.scale.setScalar(1.3);
-
-    } else if (state.connectedNodeIds.has(nodeId)) {
-      baseMaterial.opacity = 1.0;
-      baseMaterial.emissiveIntensity = baseEmissiveIntensity * 1.8;
-      if (glowSprite) glowSprite.material.opacity = 1.0;
-      group.scale.setScalar(1.0);
-
+function apply(groups: Map<string, THREE.Group>): void {
+  groups.forEach((g, id) => {
+    const { mat, baseEmissive, glow } = g.userData;
+    if (!mat) return;
+    if (!selId) {
+      mat.opacity = 1.0; mat.emissiveIntensity = baseEmissive;
+      if (glow) glow.material.opacity = 1.0; g.scale.setScalar(1.0);
+    } else if (id === selId) {
+      mat.opacity = 1.0; mat.emissiveIntensity = baseEmissive * 2.5;
+      if (glow) glow.material.opacity = 1.3; g.scale.setScalar(1.2);
+    } else if (connSet.has(id)) {
+      mat.opacity = 1.0; mat.emissiveIntensity = baseEmissive * 1.5;
+      if (glow) glow.material.opacity = 1.0; g.scale.setScalar(1.0);
     } else {
-      baseMaterial.opacity = 0.08;
-      baseMaterial.emissiveIntensity = 0;
-      if (glowSprite) glowSprite.material.opacity = 0.04;
-      group.scale.setScalar(1.0);
+      mat.opacity = 0.06; mat.emissiveIntensity = 0;
+      if (glow) glow.material.opacity = 0.03; g.scale.setScalar(1.0);
     }
   });
 }

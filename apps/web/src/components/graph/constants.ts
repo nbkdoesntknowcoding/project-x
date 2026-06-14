@@ -3,13 +3,13 @@ import * as THREE from 'three';
 export const ENTITY_LABELS: Record<string, string> = {
   doc:       '📄 Document',
   flow:      '⑂ Workflow',
-  flow_step: '→ Workflow Step',
+  flow_step: '→ Step',
   task:      '✓ Task',
   concept:   '◇ Concept',
   decision:  '⚖ Decision',
   project:   '◎ Project',
   rationale: '💡 Why Note',
-  session:   '⚡ Agent Session',
+  session:   '⚡ Session',
 };
 
 export const ENTITY_COLORS_HEX: Record<string, number> = {
@@ -36,44 +36,6 @@ export const ENTITY_COLORS_CSS: Record<string, string> = {
   session:   '#94a3b8',
 };
 
-export const SHAPE_ICONS: Record<string, string> = {
-  doc:       '●',
-  flow:      '◆',
-  flow_step: '▲',
-  task:      '■',
-  concept:   '✦',
-  decision:  '▼',
-  project:   '○',
-  rationale: '⬟',
-  session:   '⬤',
-};
-
-export function createNodeGeometry(entityType: string, radius: number): THREE.BufferGeometry {
-  // Every node is a sphere. Neurons are spheres.
-  // Differentiation comes from color, size, and glow — not geometry.
-  const segments = radius > 14 ? 20 : 14;
-  return new THREE.SphereGeometry(radius, segments, segments);
-}
-
-export function getNodeRadius(degree: number, isGodNode: boolean, entityType: string): number {
-  // Base size varies by entity type — this IS the shape differentiation
-  const baseByType: Record<string, number> = {
-    doc:       7,
-    concept:   5,
-    decision:  9,
-    flow:      8,
-    flow_step: 4,
-    task:      6,
-    project:   11,
-    rationale: 4,
-    session:   3,
-  };
-  const base = baseByType[entityType] ?? 6;
-  const degreeBonus = Math.min(degree * 0.35, 8);
-  const godBonus = isGodNode ? 10 : 0;
-  return base + degreeBonus + godBonus;
-}
-
 export const EDGE_LABELS: Record<string, string> = {
   references:              'references',
   implements:              'implements',
@@ -89,3 +51,11 @@ export const EDGE_LABELS: Record<string, string> = {
   completes:               'completed',
   rationale_for:           'explains why',
 };
+
+export function getNodeRadius(degree: number, isGodNode: boolean, entityType: string): number {
+  const base: Record<string, number> = {
+    doc: 4, concept: 3, decision: 5, flow: 4,
+    flow_step: 2, task: 3, project: 6, rationale: 2, session: 2,
+  };
+  return (base[entityType] ?? 3) + Math.min(degree * 0.25, 5) + (isGodNode ? 6 : 0);
+}

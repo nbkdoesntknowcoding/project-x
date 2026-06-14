@@ -1,95 +1,44 @@
 import * as THREE from 'three';
-import { createNodeGeometry, getNodeRadius, ENTITY_COLORS_HEX } from './constants';
-import { createGlowSprite, createGodNodeOuterHalo } from './glow-sprites';
+import { getNodeRadius, ENTITY_COLORS_HEX } from './constants';
+import { createGlowSprite } from './glow-sprites';
 import type { GraphNode } from '../../lib/graph-types';
 
-const nodeGroupCache = new Map<string, THREE.Group>();
+const cache = new Map<string, THREE.Group>();
 
 export function createNodeObject(node: GraphNode): THREE.Group {
-  if (nodeGroupCache.has(node.id)) return nodeGroupCache.get(node.id)!;
-
-  const group = new THREE.Group();
-  const isGodNode = node.isGodNode ?? false;
-  const radius = getNodeRadius(node.degree ?? 0, isGodNode, node.entityType);
-  const colorHex = ENTITY_COLORS_HEX[node.entityType] ?? 0x888888;
-
-  const geometry = createNodeGeometry(node.entityType, radius);
-  const material = new THREE.MeshStandardMaterial({
-    color: colorHex,
-    emissive: colorHex,
-    emissiveIntensity: isGodNode ? 1.2 : 0.5,
-    roughness: 0.3,
-    metalness: 0.2,
-    transparent: true,
-    opacity: 1.0,
+  const hit = cache.get(node.id);
+  if (hit) return hit;
+  const group  = new THREE.Group();
+  const isGod  = node.isGodNode ?? false;
+  const radius = getNodeRadius(node.degree ?? 0, isGod, node.entityType);
+  const hex    = ENTITY_COLORS_HEX[node.entityType] ?? 0x888888;
+  const geo    = new THREE.SphereGeometry(radius, 14, 14);
+  const mat    = new THREE.MeshStandardMaterial({
+    color: hex, emissive: hex,
+    emissiveIntensity: isGod ? 1.0 : 0.45,
+    roughness: 0.4, metalness: 0.1, transparent: true, opacity: 1.0,
   });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.userData.isMesh = true;
+  const mesh = new THREE.Mesh(geo, mat);
   group.add(mesh);
-
-  const glowSprite = createGlowSprite(colorHex, radius, isGodNode);
-  group.add(glowSprite);
-
-  // Always-visible point — THREE.Points renders as a circle, never a box.
-  // sizeAttenuation:false keeps it visible at any zoom distance.
-  const dotGeometry = new THREE.BufferGeometry();
-  dotGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([0, 0, 0]), 3));
-  const dotMaterial = new THREE.PointsMaterial({
-    color: colorHex,
-    size: isGodNode ? 6 : 4,
-    sizeAttenuation: false,
-    transparent: true,
-    opacity: 0.9,
-    alphaTest: 0.1,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-  const dot = new THREE.Points(dotGeometry, dotMaterial);
-  dot.userData.isAlwaysVisibleDot = true;
-  group.add(dot);
-
-  if (isGodNode) {
-    const outerHalo = createGodNodeOuterHalo(colorHex, radius);
-    group.add(outerHalo);
-    mesh.userData.rotates = true;
-  }
-
-  group.userData = {
-    nodeId: node.id,
-    entityType: node.entityType,
-    isGodNode,
-    baseMaterial: material,
-    baseEmissiveIntensity: isGodNode ? 1.2 : 0.5,
-    baseOpacity: 1.0,
-    mesh,
-    glowSprite,
-  };
-
-  nodeGroupCache.set(node.id, group);
+  const glow = createGlowSprite(hex, radius, isGod);
+  group.add(glow);
+  group.userData = { nodeId: node.id, isGod, mat, baseEmissive: isGod ? 1.0 : 0.45, glow, mesh };
+  cache.set(node.id, group);
   return group;
 }
 
-export function clearNodeCache(): void {
-  nodeGroupCache.clear();
-}
-
-export function animateNodeObject(group: THREE.Group, deltaTime: number, time: number) {
-  const { isGodNode, mesh, glowSprite } = group.userData as {
-    isGodNode: boolean;
-    mesh: THREE.Mesh | undefined;
-    glowSprite: THREE.Sprite | undefined;
-  };
+export function animateNode(group: THREE.Group, dt: number, t: number): void {
+  const { isGod, mesh, glow } = group.userData;
   if (!mesh) return;
-
-  if (isGodNode && mesh.userData.rotates) {
-    mesh.rotation.y += deltaTime * 0.3;
-    mesh.rotation.x += deltaTime * 0.15;
-  }
-
-  if (isGodNode && glowSprite) {
-    const pulse = 1 + Math.sin(time * 0.8) * 0.15;
-    const baseScale = (group.userData.baseGlowScale as number | undefined) ?? glowSprite.scale.x;
-    group.userData.baseGlowScale = baseScale;
-    glowSprite.scale.setScalar(baseScale * pulse);
+  if (isGod) {
+    mesh.rotation.y += dt * 0.25;
+    mesh.rotation.x += dt * 0.12;
+    if (glow) {
+      const base = group.userData.glowBase ?? glow.scale.x;
+      group.userData.glowBase = base;
+      glow.scale.setScalar(base * (1 + Math.sin(t * 0.7) * 0.10));
+    }
   }
 }
+
+export function clearNodeCache(): void { cache.clear(); }

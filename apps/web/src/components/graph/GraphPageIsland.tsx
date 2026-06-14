@@ -1,6 +1,20 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import { ENTITY_COLORS_CSS, SHAPE_ICONS } from './constants';
+import { ENTITY_COLORS_CSS } from './constants';
 import type { GraphNode, GraphEdge, GraphData } from '../../lib/graph-types';
+
+// Legend shape glyphs. Kept local to the legend since the graph rewrite renders
+// every node as a sphere (differentiation is by colour + size, not geometry).
+const SHAPE_ICONS: Record<string, string> = {
+  doc:       '●',
+  flow:      '◆',
+  flow_step: '▲',
+  task:      '■',
+  concept:   '✦',
+  decision:  '▼',
+  project:   '○',
+  rationale: '⬟',
+  session:   '⬤',
+};
 
 const Graph3D = lazy(() => import('./Graph3D').then(m => ({ default: m.Graph3D })));
 
