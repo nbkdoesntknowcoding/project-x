@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState, memo } from 'react';
+import { useRef, useCallback, useEffect, useState, memo, useMemo } from 'react';
 import ForceGraph3DLib from 'react-force-graph-3d';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ForceGraph3D = ForceGraph3DLib as any;
@@ -30,8 +30,10 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
   const controlsRef = useRef<any>(null);          // OrbitControls — used for autoRotate
 
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
-  const [cameraRef, setCameraRef] = useState<THREE.Camera | null>(null);
-  const [domRef, setDomRef] = useState<HTMLCanvasElement | null>(null);
+  // Refs (not state) so setting them doesn't trigger a re-render that would change
+  // the graphData reference and restart the force simulation via resetCountdown().
+  const cameraRef = useRef<THREE.Camera | null>(null);
+  const domRef = useRef<HTMLCanvasElement | null>(null);
 
   // Reset guards when the graph data changes (new build)
   useEffect(() => {
@@ -80,8 +82,8 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
       });
     }
 
-    setCameraRef(fgRef.current.camera());
-    setDomRef(renderer.domElement as HTMLCanvasElement);
+    cameraRef.current = fgRef.current.camera();
+    domRef.current = renderer.domElement as HTMLCanvasElement;
   }, []);
 
   // ── FORCE TUNING ──────────────────────────────────────────────────
@@ -194,10 +196,13 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
     groupMapRef.current.forEach(group => group.scale.setScalar(1));
   }, []);
 
-  const graphData = {
+  // useMemo: graphData must only change reference when nodes/edges props change.
+  // A new object every render causes the library's hasAnyPropChanged() to call
+  // resetCountdown() → simulation restarts → warmupTicks runs synchronously → freeze.
+  const graphData = useMemo(() => ({
     nodes: nodes.map(n => ({ ...n, val: n.degree ?? 1 })),
     links: edges.map(e => ({ ...e, source: e.fromNodeId, target: e.toNodeId })),
-  };
+  }), [nodes, edges]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -308,13 +313,13 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
         onNodeDragStart={pauseRotation}
       />
 
-      {selectedNode && cameraRef && domRef && (
+      {selectedNode && cameraRef.current && domRef.current && (
         <NodeCard3D
           node={selectedNode}
           edges={edges}
           allNodes={nodes}
-          camera={cameraRef}
-          domElement={domRef}
+          camera={cameraRef.current}
+          domElement={domRef.current}
           onClose={handleBackgroundClick}
           onOpenNode={(nodeId) => {
             const n = nodes.find(n => n.id === nodeId);
