@@ -10,6 +10,27 @@ import { triggerNodeMaterialize, processAnimations } from './animations';
 import { NodeCard3D } from './NodeCard3D';
 import type { GraphNode, GraphEdge } from '../../lib/graph-types';
 
+// Pulls nodes outside 85% of brain ellipsoid back toward center each tick.
+// Uses same LR/SI/AP proportions as createBrainBoundaryShell.
+function createBrainConfinementForce(targetRadius: number, getNodes: () => { x?: number; y?: number; z?: number; vx?: number; vy?: number; vz?: number }[]) {
+  const LR = 0.83, SI = 0.69, AP = 1.0;
+  const strength = 0.08;
+  return (alpha: number) => {
+    getNodes().forEach((node) => {
+      const nx = (node.x ?? 0) / (LR * targetRadius);
+      const ny = (node.y ?? 0) / (SI * targetRadius);
+      const nz = (node.z ?? 0) / (AP * targetRadius);
+      const dist = Math.sqrt(nx * nx + ny * ny + nz * nz);
+      if (dist > 0.85) {
+        const factor = strength * alpha * (dist - 0.85);
+        node.vx = (node.vx ?? 0) - (node.x ?? 0) * factor;
+        node.vy = (node.vy ?? 0) - (node.y ?? 0) * factor;
+        node.vz = (node.vz ?? 0) - (node.z ?? 0) * factor;
+      }
+    });
+  };
+}
+
 interface Graph3DProps {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -19,7 +40,7 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const fgRef = useRef<any>(null);
   const groupMapRef = useRef<Map<string, THREE.Group>>(new Map());
-  const clockRef = useRef(new THREE.Clock());
+  const lastFrameTimeRef = useRef<number>(0);
   const isUserInteracting = useRef(false);
   const interactionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const envInitRef = useRef(false);
@@ -97,6 +118,10 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
         node.vz = (node.vz ?? 0) + (targetZ - (node.z ?? 0)) * 0.006 * alpha;
       });
     });
+    fgRef.current.d3Force('confinement', createBrainConfinementForce(
+      200,
+      () => (fgRef.current?.graphData()?.nodes ?? []) as { x?: number; y?: number; z?: number; vx?: number; vy?: number; vz?: number }[],
+    ));
   }, [nodes]);
 
 
@@ -106,8 +131,11 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
   useEffect(() => {
     let animFrame: number;
     const animate = () => {
-      const delta = clockRef.current.getDelta();
       const now = performance.now();
+      // Cap delta at 50ms — prevents a large accumulated jump after warmupTicks
+      // silent period or tab switch from dumping into the first rendered frame.
+      const delta = Math.min((now - (lastFrameTimeRef.current || now)) / 1000, 0.05);
+      lastFrameTimeRef.current = now;
       groupMapRef.current.forEach(group => animateNodeObject(group, delta, now / 1000));
       processAnimations(now, groupMapRef.current);
       animFrame = requestAnimationFrame(animate);
@@ -246,8 +274,7 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
 
         d3AlphaDecay={0.02}
         d3VelocityDecay={0.4}
-        warmupTicks={30}
-        cooldownTicks={100}
+        warmupTicks={50}
         onEngineStop={() => {
           // Guard: only run once per graph load. onEngineStop can fire multiple times.
           if (engineStopped.current) return;

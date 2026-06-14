@@ -48,9 +48,13 @@ export function createStarField(): THREE.Points {
 }
 
 export function createBrainBoundaryShell(graphRadius: number): THREE.Points {
-  const r = graphRadius;
-  const count = 2000;
+  const count = 2500;
   const positions = new Float32Array(count * 3);
+
+  // Real brain MRI proportions (175mm AP × 145mm LR × 120mm SI), normalised to AP=1
+  const LR = 0.83;   // left-right axis
+  const SI = 0.69;   // superior-inferior (vertical)
+  const AP = 1.0;    // anterior-posterior (depth) — longest axis
 
   const goldenAngle = Math.PI * (1 + Math.sqrt(5));
 
@@ -59,20 +63,55 @@ export function createBrainBoundaryShell(graphRadius: number): THREE.Points {
     const inclination = Math.acos(1 - 2 * t);
     const azimuth = goldenAngle * i;
 
-    // Brain proportions: wider (x) than tall (y), slightly deeper (z)
-    positions[i * 3]     = r * 1.25 * Math.sin(inclination) * Math.cos(azimuth);
-    positions[i * 3 + 1] = r * 0.75 * Math.cos(inclination);
-    positions[i * 3 + 2] = r * 1.05 * Math.sin(inclination) * Math.sin(azimuth);
+    // Base ellipsoid at MRI proportions: x=LR, y=SI, z=AP
+    let x = LR * Math.sin(inclination) * Math.cos(azimuth);
+    let y = SI * Math.cos(inclination);
+    let z = AP * Math.sin(inclination) * Math.sin(azimuth);
+
+    // Interhemispheric fissure — longitudinal groove at x≈0, top of brain only
+    if (y > 0) {
+      const fissureDepth = 0.10 * Math.exp(-Math.pow(x / 0.07, 2)) * (y / SI);
+      y -= fissureDepth;
+    }
+
+    // Frontal pole (z < -0.65): narrows toward the forehead
+    if (z < -0.65) {
+      const f = (-z - 0.65) / 0.35;
+      x *= (1 - 0.25 * f);
+      y *= (1 - 0.15 * f);
+    }
+
+    // Occipital pole (z > 0.65): more pointed at the back
+    if (z > 0.65) {
+      const f = (z - 0.65) / 0.35;
+      x *= (1 - 0.35 * f);
+      y *= (1 - 0.20 * f);
+    }
+
+    // Parietal expansion — brain is widest at mid-depth
+    if (z > -0.2 && z < 0.4 && Math.abs(x) > 0.5) {
+      x *= 1.06;
+    }
+
+    // Temporal lobe bulge — lateral+downward at mid-height, mid-depth
+    if (y < 0 && y > -0.45 && Math.abs(x) > 0.55 && z > -0.4 && z < 0.3) {
+      x *= 1.12;
+      y -= 0.08;
+    }
+
+    positions[i * 3]     = x * graphRadius;
+    positions[i * 3 + 1] = y * graphRadius;
+    positions[i * 3 + 2] = z * graphRadius;
   }
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
   const material = new THREE.PointsMaterial({
-    color: 0x6b7fa3,
-    size: 1.8,
+    color: 0x7b9ec4,
+    size: 1.6,
     transparent: true,
-    opacity: 0.35,
+    opacity: 0.30,
     sizeAttenuation: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
