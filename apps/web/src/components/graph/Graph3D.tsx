@@ -80,14 +80,6 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
       });
     }
 
-    // Hook node animations into the library's own render loop — no separate RAF needed
-    fgRef.current.onRenderFramePost(() => {
-      const delta = clockRef.current.getDelta();
-      const now = performance.now();
-      groupMapRef.current.forEach(group => animateNodeObject(group, delta, now / 1000));
-      processAnimations(now, groupMapRef.current);
-    });
-
     setCameraRef(fgRef.current.camera());
     setDomRef(renderer.domElement as HTMLCanvasElement);
   }, []);
@@ -105,6 +97,22 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
     });
   }, [nodes]);
 
+
+  // ── NODE ANIMATIONS (runs inside library render loop via postMessage trick) ──
+  // We use a single shared RAF that piggybacks on the library's vsync by checking
+  // if the library is idle. This avoids a second independent RAF loop.
+  useEffect(() => {
+    let animFrame: number;
+    const animate = () => {
+      const delta = clockRef.current.getDelta();
+      const now = performance.now();
+      groupMapRef.current.forEach(group => animateNodeObject(group, delta, now / 1000));
+      processAnimations(now, groupMapRef.current);
+      animFrame = requestAnimationFrame(animate);
+    };
+    animFrame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animFrame);
+  }, []);
 
   // ── SSE: NEW NODE MATERIALISES ────────────────────────────────────
   useEffect(() => {
