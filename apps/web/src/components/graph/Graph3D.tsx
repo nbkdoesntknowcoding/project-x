@@ -24,16 +24,22 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
   const interactionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const envInitRef = useRef(false);
   const simulationDone = useRef(false);
+  const engineStopped = useRef(false);           // one-shot guard — prevents repeated onEngineStop work
   const brainShellRef = useRef<THREE.Points | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const controlsRef = useRef<any>(null);          // OrbitControls — used for autoRotate
 
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [cameraRef, setCameraRef] = useState<THREE.Camera | null>(null);
   const [domRef, setDomRef] = useState<HTMLCanvasElement | null>(null);
 
-  // Clear node cache when node list changes
+  // Reset guards when the graph data changes (new build)
   useEffect(() => {
     clearNodeCache();
     groupMapRef.current.clear();
+    engineStopped.current = false;
+    simulationDone.current = false;
+    if (controlsRef.current) controlsRef.current.autoRotate = false;
   }, [nodes.length]);
 
   // ── ENVIRONMENT SETUP ─────────────────────────────────────────────
@@ -55,6 +61,25 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
       console.warn('Bloom atmosphere unavailable:', e);
     }
 
+    // Hook into OrbitControls for interaction detection.
+    // This is the only correct way to detect pan — onZoom doesn't fire on right-drag.
+    const controls = fgRef.current.controls();
+    controlsRef.current = controls;
+    if (controls) {
+      controls.addEventListener('start', () => {
+        isUserInteracting.current = true;
+        controls.autoRotate = false;
+        clearTimeout(interactionTimer.current);
+      });
+      controls.addEventListener('end', () => {
+        clearTimeout(interactionTimer.current);
+        interactionTimer.current = setTimeout(() => {
+          isUserInteracting.current = false;
+          if (simulationDone.current) controls.autoRotate = true;
+        }, 3000);
+      });
+    }
+
     setCameraRef(fgRef.current.camera());
     setDomRef(renderer.domElement as HTMLCanvasElement);
   }, []);
@@ -72,24 +97,11 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
     });
   }, [nodes]);
 
-  // ── AMBIENT ROTATION ──────────────────────────────────────────────
+  // ── NODE ANIMATION LOOP (no manual camera — OrbitControls handles rotation) ──
   useEffect(() => {
     let animFrame: number;
     const animate = () => {
       try {
-        if (simulationDone.current && !isUserInteracting.current && fgRef.current) {
-          const cam = fgRef.current.camera();
-          if (cam) {
-            const r = Math.sqrt(cam.position.x ** 2 + cam.position.z ** 2);
-            if (r >= 1) {
-              const theta = Math.atan2(cam.position.z, cam.position.x) + 0.0006;
-              cam.position.x = r * Math.cos(theta);
-              cam.position.z = r * Math.sin(theta);
-              cam.lookAt(0, 0, 0);
-            }
-          }
-        }
-
         const delta = clockRef.current.getDelta();
         const now = performance.now();
         groupMapRef.current.forEach(group => animateNodeObject(group, delta, now / 1000));
@@ -97,7 +109,6 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
       } catch (err) {
         console.warn('Graph animation error:', err);
       }
-
       animFrame = requestAnimationFrame(animate);
     };
     animFrame = requestAnimationFrame(animate);
@@ -139,11 +150,16 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes, edges]);
 
+  // pauseRotation: also kills autoRotate so the camera stays put while user interacts
   const pauseRotation = useCallback(() => {
     isUserInteracting.current = true;
+    if (controlsRef.current) controlsRef.current.autoRotate = false;
     clearTimeout(interactionTimer.current);
     interactionTimer.current = setTimeout(() => {
       isUserInteracting.current = false;
+      if (simulationDone.current && controlsRef.current) {
+        controlsRef.current.autoRotate = true;
+      }
     }, 3000);
   }, []);
 
@@ -229,51 +245,63 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
         warmupTicks={100}
         cooldownTicks={400}
         onEngineStop={() => {
-          const graphData = fgRef.current?.graphData();
+          // Guard: only run once per graph load. onEngineStop can fire multiple times.
+          if (engineStopped.current) return;
+          engineStopped.current = true;
 
-          // 1. Calculate actual graph radius from settled node positions
+          const data = fgRef.current?.graphData();
+          const scene = fgRef.current?.scene();
+
+          // A. Calculate actual graph radius from settled node positions
           let maxR = 0;
-          if (graphData?.nodes) {
+          if (data?.nodes) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            graphData.nodes.forEach((node: any) => {
+            data.nodes.forEach((node: any) => {
               const r = Math.sqrt((node.x ?? 0) ** 2 + (node.y ?? 0) ** 2 + (node.z ?? 0) ** 2);
               if (r > maxR) maxR = r;
             });
           }
 
-          // 2. Create brain shell at 1.5x the graph's furthest node
-          const scene = fgRef.current?.scene();
+          // B. Create brain shell sized to actual graph extent
           if (scene && maxR > 0) {
             if (brainShellRef.current) {
               scene.remove(brainShellRef.current);
-              brainShellRef.current.geometry.dispose();
+              // Defer dispose so it doesn't stall the GPU mid-render
+              const old = brainShellRef.current;
+              setTimeout(() => old.geometry.dispose(), 0);
             }
             const shell = createBrainBoundaryShell(maxR * 1.5);
             scene.add(shell);
             brainShellRef.current = shell;
-            console.log(`Brain shell created at radius ${(maxR * 1.5).toFixed(0)} units (graph radius: ${maxR.toFixed(0)})`);
+            console.log(`Brain shell: r=${(maxR * 1.5).toFixed(0)} (graph r=${maxR.toFixed(0)})`);
           }
 
-          // 3. Pin all nodes so simulation stops drifting
-          if (graphData?.nodes) {
+          // C. Pin all nodes so simulation doesn't drift
+          if (data?.nodes) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            graphData.nodes.forEach((node: any) => {
+            data.nodes.forEach((node: any) => {
               node.fx = node.x;
               node.fy = node.y;
               node.fz = node.z;
             });
           }
 
-          // 4. Fit view — pad 80px so nodes aren't at viewport edge
+          // D. Fit the view
           fgRef.current?.zoomToFit?.(1000, 80);
-          // 5. Enable rotation 1.5s after fit animation completes
-          setTimeout(() => { simulationDone.current = true; }, 1500);
+
+          // E. Start autoRotate via OrbitControls 1.5s after fit animation
+          setTimeout(() => {
+            simulationDone.current = true;
+            if (controlsRef.current && !isUserInteracting.current) {
+              controlsRef.current.autoRotate = true;
+              controlsRef.current.autoRotateSpeed = 0.3; // ~2°/s — slow, calm rotation
+            }
+          }, 1500);
         }}
 
         onNodeClick={handleNodeClick}
         onBackgroundClick={handleBackgroundClick}
         onNodeDragStart={pauseRotation}
-        onZoom={pauseRotation}
       />
 
       {selectedNode && cameraRef && domRef && (
