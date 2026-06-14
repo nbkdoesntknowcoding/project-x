@@ -17,7 +17,7 @@ export function createNodeObject(node: GraphNode): THREE.Group {
   const material = new THREE.MeshStandardMaterial({
     color: colorHex,
     emissive: colorHex,
-    emissiveIntensity: isGodNode ? 2.5 : 1.0,
+    emissiveIntensity: isGodNode ? 1.2 : 0.5,
     roughness: 0.3,
     metalness: 0.2,
     transparent: true,
@@ -59,7 +59,7 @@ export function createNodeObject(node: GraphNode): THREE.Group {
     entityType: node.entityType,
     isGodNode,
     baseMaterial: material,
-    baseEmissiveIntensity: isGodNode ? 2.5 : 1.0,
+    baseEmissiveIntensity: isGodNode ? 1.2 : 0.5,
     baseOpacity: 1.0,
     mesh,
     glowSprite,

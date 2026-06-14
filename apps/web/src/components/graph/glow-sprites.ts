@@ -15,10 +15,10 @@ export function getGlowTexture(colorHex: number): THREE.CanvasTexture {
   const b = colorHex & 255;
 
   const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-  gradient.addColorStop(0,   `rgba(${r},${g},${b},0.9)`);
-  gradient.addColorStop(0.2, `rgba(${r},${g},${b},0.5)`);
-  gradient.addColorStop(0.5, `rgba(${r},${g},${b},0.15)`);
-  gradient.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+  gradient.addColorStop(0,    `rgba(${r},${g},${b},1.0)`);
+  gradient.addColorStop(0.15, `rgba(${r},${g},${b},0.6)`);
+  gradient.addColorStop(0.4,  `rgba(${r},${g},${b},0.08)`);
+  gradient.addColorStop(1,    `rgba(${r},${g},${b},0)`);
 
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 256, 256);
@@ -42,7 +42,7 @@ export function createGlowSprite(
   });
 
   const sprite = new THREE.Sprite(material);
-  const scale = radius * (isGodNode ? 12 : 7);
+  const scale = radius * (isGodNode ? 3.0 : 2.0);
   sprite.scale.setScalar(scale);
   return sprite;
 }
@@ -57,6 +57,6 @@ export function createGodNodeOuterHalo(colorHex: number, radius: number): THREE.
     blending: THREE.AdditiveBlending,
   });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.setScalar(radius * 22);
+  sprite.scale.setScalar(radius * 5.0);
   return sprite;
 }

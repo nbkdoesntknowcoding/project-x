@@ -7,7 +7,7 @@ export function setupBlackEnvironment(
   renderer.setClearColor(0x000000, 1);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   scene.background = null;
-  scene.fog = new THREE.FogExp2(0x000000, 0.0006);
+  scene.fog = null;
 
   // Hard rule: No AmbientLight, no DirectionalLight, no HemisphereLight.
   // Nodes are emissive — they light themselves. Library adds its own lights;
@@ -49,7 +49,7 @@ export function createStarField(): THREE.Points {
 
 export function createBrainBoundaryShell(graphRadius: number): THREE.Points {
   const r = graphRadius;
-  const count = 1500;
+  const count = 2000;
   const positions = new Float32Array(count * 3);
 
   const goldenAngle = Math.PI * (1 + Math.sqrt(5));
@@ -59,8 +59,9 @@ export function createBrainBoundaryShell(graphRadius: number): THREE.Points {
     const inclination = Math.acos(1 - 2 * t);
     const azimuth = goldenAngle * i;
 
-    positions[i * 3]     = r * 1.2  * Math.sin(inclination) * Math.cos(azimuth);
-    positions[i * 3 + 1] = r * 0.78 * Math.cos(inclination);
+    // Brain proportions: wider (x) than tall (y), slightly deeper (z)
+    positions[i * 3]     = r * 1.25 * Math.sin(inclination) * Math.cos(azimuth);
+    positions[i * 3 + 1] = r * 0.75 * Math.cos(inclination);
     positions[i * 3 + 2] = r * 1.05 * Math.sin(inclination) * Math.sin(azimuth);
   }
 
@@ -68,10 +69,10 @@ export function createBrainBoundaryShell(graphRadius: number): THREE.Points {
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
   const material = new THREE.PointsMaterial({
-    color: 0x4a5568,
-    size: 1.5,
+    color: 0x6b7fa3,
+    size: 1.8,
     transparent: true,
-    opacity: 0.28,
+    opacity: 0.35,
     sizeAttenuation: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
@@ -88,9 +89,9 @@ export async function addBloomAtmosphere(composer: any): Promise<void> {
     const { UnrealBloomPass } = await import('three/examples/jsm/postprocessing/UnrealBloomPass.js');
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.4,   // strength: low — sprites provide primary glow, bloom is ambiance only
-      0.6,   // radius
-      0.85,  // threshold: only the very brightest emissive pixels bloom
+      0.15,  // strength — very subtle atmosphere only
+      0.5,   // radius
+      0.92,  // threshold — only the very brightest core pixels bloom
     );
     composer.addPass(bloomPass);
   } catch {

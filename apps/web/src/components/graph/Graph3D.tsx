@@ -66,8 +66,8 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
     fgRef.current.d3Force('link')?.distance(() => 25);
     fgRef.current.d3Force('z', (alpha: number) => {
       nodes.forEach((node: GraphNode & { vz?: number; z?: number }) => {
-        const targetZ = ((node.communityId ?? 0) % 6) * 35 - 90;
-        node.vz = (node.vz ?? 0) + (targetZ - (node.z ?? 0)) * 0.008 * alpha;
+        const targetZ = ((node.communityId ?? 0) % 5) * 30 - 60;
+        node.vz = (node.vz ?? 0) + (targetZ - (node.z ?? 0)) * 0.006 * alpha;
       });
     });
   }, [nodes]);
@@ -76,19 +76,27 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
   useEffect(() => {
     let animFrame: number;
     const animate = () => {
-      if (!isUserInteracting.current && simulationDone.current && fgRef.current) {
-        const cam = fgRef.current.camera() as THREE.PerspectiveCamera;
-        const r = Math.sqrt(cam.position.x ** 2 + cam.position.z ** 2);
-        const theta = Math.atan2(cam.position.z, cam.position.x) + 0.0008;
-        cam.position.x = r * Math.cos(theta);
-        cam.position.z = r * Math.sin(theta);
-        cam.lookAt(0, 0, 0);
-      }
+      try {
+        if (simulationDone.current && !isUserInteracting.current && fgRef.current) {
+          const cam = fgRef.current.camera();
+          if (cam) {
+            const r = Math.sqrt(cam.position.x ** 2 + cam.position.z ** 2);
+            if (r >= 1) {
+              const theta = Math.atan2(cam.position.z, cam.position.x) + 0.0006;
+              cam.position.x = r * Math.cos(theta);
+              cam.position.z = r * Math.sin(theta);
+              cam.lookAt(0, 0, 0);
+            }
+          }
+        }
 
-      const delta = clockRef.current.getDelta();
-      const now = performance.now();
-      groupMapRef.current.forEach(group => animateNodeObject(group, delta, now / 1000));
-      processAnimations(now, groupMapRef.current);
+        const delta = clockRef.current.getDelta();
+        const now = performance.now();
+        groupMapRef.current.forEach(group => animateNodeObject(group, delta, now / 1000));
+        processAnimations(now, groupMapRef.current);
+      } catch (err) {
+        console.warn('Graph animation error:', err);
+      }
 
       animFrame = requestAnimationFrame(animate);
     };
@@ -216,10 +224,10 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
         linkDirectionalParticleWidth={1.5}
         linkDirectionalParticleColor={() => 'rgba(255,255,255,0.6)'}
 
-        d3AlphaDecay={0.01}
-        d3VelocityDecay={0.3}
-        warmupTicks={80}
-        cooldownTicks={300}
+        d3AlphaDecay={0.02}
+        d3VelocityDecay={0.4}
+        warmupTicks={100}
+        cooldownTicks={400}
         onEngineStop={() => {
           const graphData = fgRef.current?.graphData();
 
@@ -233,16 +241,20 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
             });
           }
 
-          // 2. Create dynamic brain shell sized to actual graph extent
+          // 2. Create brain shell at 1.5x the graph's furthest node
           const scene = fgRef.current?.scene();
           if (scene && maxR > 0) {
-            if (brainShellRef.current) scene.remove(brainShellRef.current);
-            const shell = createBrainBoundaryShell(maxR * 1.4);
+            if (brainShellRef.current) {
+              scene.remove(brainShellRef.current);
+              brainShellRef.current.geometry.dispose();
+            }
+            const shell = createBrainBoundaryShell(maxR * 1.5);
             scene.add(shell);
             brainShellRef.current = shell;
+            console.log(`Brain shell created at radius ${(maxR * 1.5).toFixed(0)} units (graph radius: ${maxR.toFixed(0)})`);
           }
 
-          // 3. Pin all nodes so simulation doesn't drift
+          // 3. Pin all nodes so simulation stops drifting
           if (graphData?.nodes) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             graphData.nodes.forEach((node: any) => {
@@ -252,9 +264,10 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
             });
           }
 
-          // 4. Fit view then enable rotation
-          fgRef.current?.zoomToFit?.(800, 60);
-          setTimeout(() => { simulationDone.current = true; }, 900);
+          // 4. Fit view — pad 80px so nodes aren't at viewport edge
+          fgRef.current?.zoomToFit?.(1000, 80);
+          // 5. Enable rotation 1.5s after fit animation completes
+          setTimeout(() => { simulationDone.current = true; }, 1500);
         }}
 
         onNodeClick={handleNodeClick}
