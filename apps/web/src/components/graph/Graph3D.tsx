@@ -80,6 +80,14 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
       });
     }
 
+    // Hook node animations into the library's own render loop — no separate RAF needed
+    fgRef.current.onRenderFramePost(() => {
+      const delta = clockRef.current.getDelta();
+      const now = performance.now();
+      groupMapRef.current.forEach(group => animateNodeObject(group, delta, now / 1000));
+      processAnimations(now, groupMapRef.current);
+    });
+
     setCameraRef(fgRef.current.camera());
     setDomRef(renderer.domElement as HTMLCanvasElement);
   }, []);
@@ -97,23 +105,6 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
     });
   }, [nodes]);
 
-  // ── NODE ANIMATION LOOP (no manual camera — OrbitControls handles rotation) ──
-  useEffect(() => {
-    let animFrame: number;
-    const animate = () => {
-      try {
-        const delta = clockRef.current.getDelta();
-        const now = performance.now();
-        groupMapRef.current.forEach(group => animateNodeObject(group, delta, now / 1000));
-        processAnimations(now, groupMapRef.current);
-      } catch (err) {
-        console.warn('Graph animation error:', err);
-      }
-      animFrame = requestAnimationFrame(animate);
-    };
-    animFrame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(animFrame);
-  }, []);
 
   // ── SSE: NEW NODE MATERIALISES ────────────────────────────────────
   useEffect(() => {
@@ -242,8 +233,8 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
 
         d3AlphaDecay={0.02}
         d3VelocityDecay={0.4}
-        warmupTicks={100}
-        cooldownTicks={400}
+        warmupTicks={30}
+        cooldownTicks={100}
         onEngineStop={() => {
           // Guard: only run once per graph load. onEngineStop can fire multiple times.
           if (engineStopped.current) return;
@@ -297,6 +288,11 @@ export const Graph3D = memo(function Graph3D({ nodes, edges }: Graph3DProps) {
               controlsRef.current.autoRotateSpeed = 0.3; // ~2°/s — slow, calm rotation
             }
           }, 1500);
+
+          // F. Keep the library's render loop alive permanently — without this,
+          //    the library enters idle mode after cooldown ticks and stops calling RAF,
+          //    which means controls.update() stops being called and the scene freezes.
+          fgRef.current?.resumeAnimation?.();
         }}
 
         onNodeClick={handleNodeClick}
