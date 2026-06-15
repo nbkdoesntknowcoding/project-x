@@ -2,20 +2,6 @@ import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { ENTITY_COLORS_CSS } from './constants';
 import type { GraphNode, GraphEdge, GraphData } from '../../lib/graph-types';
 
-// Legend shape glyphs. Kept local to the legend since the graph rewrite renders
-// every node as a sphere (differentiation is by colour + size, not geometry).
-const SHAPE_ICONS: Record<string, string> = {
-  doc:       '●',
-  flow:      '◆',
-  flow_step: '▲',
-  task:      '■',
-  concept:   '✦',
-  decision:  '▼',
-  project:   '○',
-  rationale: '⬟',
-  session:   '⬤',
-};
-
 const Graph3D = lazy(() => import('./Graph3D').then(m => ({ default: m.Graph3D })));
 
 interface Props {
@@ -82,59 +68,13 @@ function GraphEmptyState({ onBuild }: { onBuild: () => void }) {
   );
 }
 
-// ── Legend (bottom-left, collapsible) ────────────────────────────────────────
-
+// Entity types + human-readable labels for the combined legend/filter panel.
 const LEGEND_TYPES = ['doc','flow','flow_step','task','concept','decision','project','rationale','session'];
 const LEGEND_LABELS: Record<string, string> = {
   doc: 'Document', flow: 'Workflow', flow_step: 'Workflow Step',
   task: 'Task', concept: 'Concept', decision: 'Decision',
   project: 'Project', rationale: 'Why Note', session: 'Agent Session',
 };
-
-function GraphLegend() {
-  const [open, setOpen] = useState(true);
-  return (
-    <div style={{
-      position: 'absolute', bottom: 14, left: 14, zIndex: 20,
-      background: 'rgba(10,10,10,0.82)', backdropFilter: 'blur(14px)',
-      border: '0.5px solid rgba(255,255,255,0.07)',
-      borderRadius: 12, padding: open ? '10px 14px' : '8px 14px',
-      minWidth: 160,
-    }}>
-      <div
-        onClick={() => setOpen(v => !v)}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          cursor: 'pointer', marginBottom: open ? 8 : 0,
-          fontFamily: "'Geist Mono', monospace", fontSize: 10,
-          color: '#52525b', textTransform: 'uppercase', letterSpacing: '0.04em',
-        }}
-      >
-        LEGEND <span style={{ fontSize: 8 }}>{open ? '▼' : '▶'}</span>
-      </div>
-      {open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          {LEGEND_TYPES.map(type => (
-            <div key={type} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{
-                fontSize: 10, color: ENTITY_COLORS_CSS[type] ?? '#888',
-                width: 12, textAlign: 'center', lineHeight: 1,
-              }}>
-                {SHAPE_ICONS[type]}
-              </span>
-              <span style={{
-                fontSize: 11, color: '#8a8f98',
-                fontFamily: "'Geist Mono', monospace",
-              }}>
-                {LEGEND_LABELS[type]}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Main island ───────────────────────────────────────────────────────────────
 
@@ -224,7 +164,6 @@ export function GraphPageIsland({ initialData }: Props) {
   );
 
   const totalNodes = report?.totalNodes ?? nodes.length;
-  const entityTypes = ['doc','concept','decision','flow','task','project','rationale'];
 
   if (loading) return <GraphLoadingState />;
   if (!data || totalNodes === 0) return <GraphEmptyState onBuild={handleBuild} />;
@@ -250,7 +189,9 @@ export function GraphPageIsland({ initialData }: Props) {
           {filteredNodes.length} nodes · {filteredEdges.length} edges · {report?.godNodeCount ?? 0} god-nodes
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {entityTypes.map(type => (
+          {/* Combined legend + filter: colour swatch (matches the node colour)
+              + human-readable label, and the checkbox toggles visibility. */}
+          {LEGEND_TYPES.map(type => (
             <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
               <input
                 type="checkbox"
@@ -258,14 +199,14 @@ export function GraphPageIsland({ initialData }: Props) {
                 onChange={() => toggleType(type)}
                 style={{ accentColor: ENTITY_COLORS_CSS[type] ?? '#888' }}
               />
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: '#8a8f98', fontFamily: "'Geist Mono', monospace" }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#c9ccd1', fontFamily: 'var(--sans)' }}>
                 <span style={{
-                  width: 6, height: 6, borderRadius: '50%',
+                  width: 8, height: 8, borderRadius: '50%',
                   background: ENTITY_COLORS_CSS[type] ?? '#888',
-                  boxShadow: `0 0 4px ${ENTITY_COLORS_CSS[type] ?? '#888'}`,
+                  boxShadow: `0 0 5px ${ENTITY_COLORS_CSS[type] ?? '#888'}`,
                   flexShrink: 0,
                 }} />
-                {type}
+                {LEGEND_LABELS[type] ?? type}
               </span>
             </label>
           ))}
@@ -355,9 +296,6 @@ export function GraphPageIsland({ initialData }: Props) {
           {buildStatus === 'idle' ? '↺ Rebuild' : buildStatus === 'queuing' ? 'Queuing…' : '✓ Queued'}
         </button>
       </div>
-
-      {/* Legend — bottom left */}
-      <GraphLegend />
 
       {nodes.length > 800 && (
         <div style={{

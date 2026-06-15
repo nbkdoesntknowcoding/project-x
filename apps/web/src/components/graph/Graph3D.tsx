@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import ForceGraph3DLib from 'react-force-graph-3d';
 import { forceRadial } from 'd3-force-3d';
 import * as THREE from 'three';
@@ -126,22 +126,30 @@ export function Graph3D({ nodes, edges }: Props) {
     groups.current.forEach(g => g.scale.setScalar(1));
   }, []);
 
+  // Memoize graphData so its reference is stable across re-renders. Building it
+  // inline (or regenerating Math.random curvatures) makes react-force-graph think
+  // the data changed on every render — e.g. when clicking a node sets state — and
+  // it restarts the whole simulation, causing the graph to jump/"get stuck" and
+  // making nodes unclickable mid-resettle. Only rebuild when nodes/edges change.
+  const graphData = useMemo(() => ({
+    nodes: nodes.map(n => ({ ...n, val: Math.max(n.degree ?? 1, 1) })),
+    links: edges.map(e => ({
+      ...e,
+      source: e.fromNodeId,
+      target: e.toNodeId,
+      curvature: Math.random() * 0.25,
+      curvatureRotation: Math.random() * Math.PI * 2,
+    })),
+  }), [nodes, edges]);
+
   return (
     <div ref={wrapRef} style={{ position:'relative', width:'100%', height:'100%', overflow:'hidden' }}>
       <ForceGraph3D
         ref={fg}
         width={dims.w || undefined}
         height={dims.h || undefined}
-        graphData={{
-          nodes: nodes.map(n => ({ ...n, val: Math.max(n.degree ?? 1, 1) })),
-          links: edges.map(e => ({
-            ...e,
-            source: e.fromNodeId,
-            target: e.toNodeId,
-            curvature: Math.random() * 0.25,
-            curvatureRotation: Math.random() * Math.PI * 2,
-          })),
-        }}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        graphData={graphData as any}
         backgroundColor="#000000"
         nodeThreeObject={(n: object) => { const g=createNodeObject(n as GraphNode); groups.current.set((n as GraphNode).id,g); return g; }}
         nodeThreeObjectExtend={false}
@@ -174,6 +182,10 @@ export function Graph3D({ nodes, edges }: Props) {
           data?.nodes?.forEach((n:any)=>{ n.fx=n.x; n.fy=n.y; n.fz=n.z; });
           // One-time framing only — no ambient camera motion afterwards
           fg.current?.zoomToFit(800,80);
+          // Keep the render loop alive so OrbitControls (pan/zoom) and pointer
+          // picking stay responsive after the engine cools — without this the
+          // library can idle and the scene appears frozen.
+          fg.current?.resumeAnimation?.();
         }}
         onNodeClick={onNodeClick}
         onBackgroundClick={onBgClick}
