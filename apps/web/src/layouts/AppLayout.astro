@@ -56,6 +56,14 @@ if (auth) {
       --sidebar-w: 220px;
     }
 
+    /* Lock the document to the viewport so only the main content area scrolls —
+       the topbar (header), sidebar (navbar) and status bar (footer) stay pinned. */
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+    }
+
     .app-shell {
       display: grid;
       grid-template-columns: var(--sidebar-w) 1fr;
@@ -65,6 +73,7 @@ if (auth) {
         "ap-sidebar ap-main"
         "ap-status ap-status";
       height: 100vh;
+      height: 100dvh;
       overflow: hidden;
     }
     .app-shell.has-toolbar {
@@ -153,6 +162,7 @@ if (auth) {
       background: var(--surface);
       border-right: 1px solid var(--line);
       overflow-y: auto;
+      min-height: 0;
       display: flex; flex-direction: column;
     }
 
@@ -169,6 +179,10 @@ if (auth) {
     .ap-main {
       grid-area: ap-main;
       overflow-y: auto;
+      /* min-height/width:0 lets this 1fr grid cell shrink to the available space
+         and scroll its content internally instead of expanding the whole shell. */
+      min-height: 0;
+      min-width: 0;
       background: var(--canvas);
     }
 
