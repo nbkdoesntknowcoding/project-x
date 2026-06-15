@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { ENTITY_LABELS, ENTITY_COLORS_CSS, EDGE_LABELS } from './constants';
 import { openDocPreview } from '../../lib/preview';
@@ -10,29 +10,55 @@ interface Props {
   onClose: () => void; onOpenNode: (id: string) => void;
 }
 
+const CARD_W = 320;
+const MARGIN = 16;
+
 export function NodeCard3D({ node, edges, allNodes, camera, domElement, onClose, onOpenNode }: Props) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  // anchor = the node's projected screen position; pos = the clamped card position.
+  const [anchor, setAnchor] = useState<{x:number;y:number}|null>(null);
   const [pos, setPos] = useState<{x:number;y:number}|null>(null);
 
+  // Project the selected node to screen coords whenever it changes.
   useEffect(() => {
-    if (!node) { setPos(null); return; }
+    if (!node) { setAnchor(null); setPos(null); return; }
     const v = new THREE.Vector3(node.x??0, node.y??0, node.z??0);
     v.project(camera);
     const rect = domElement.getBoundingClientRect();
-    const sx = (v.x*0.5+0.5)*rect.width+rect.left;
-    const sy = (-v.y*0.5+0.5)*rect.height+rect.top;
-    setPos({ x:Math.min(sx+40,window.innerWidth-350), y:Math.max(Math.min(sy-80,window.innerHeight-520),20) });
-  }, [node]);
+    setAnchor({ x:(v.x*0.5+0.5)*rect.width+rect.left, y:(-v.y*0.5+0.5)*rect.height+rect.top });
+    setPos(null);
+  }, [node, camera, domElement]);
 
-  if (!pos) return null;
+  // After render, measure the actual card and clamp it fully on-screen.
+  // Prefer placing to the right of the node; flip to the left if it would
+  // overflow; clamp vertically too. Runs before paint, so no flicker.
+  useLayoutEffect(() => {
+    if (!anchor || !cardRef.current) return;
+    const w = cardRef.current.offsetWidth || CARD_W;
+    const h = cardRef.current.offsetHeight || 360;
+    let x = anchor.x + 24;
+    if (x + w > window.innerWidth - MARGIN) x = anchor.x - w - 24; // flip to the left of the node
+    x = Math.min(Math.max(MARGIN, x), Math.max(MARGIN, window.innerWidth - w - MARGIN));
+    let y = anchor.y - 60;
+    y = Math.min(Math.max(MARGIN, y), Math.max(MARGIN, window.innerHeight - h - MARGIN));
+    setPos({ x, y });
+  }, [anchor]);
+
+  if (!anchor) return null;
   const color = ENTITY_COLORS_CSS[node.entityType]??'#888';
   const label = ENTITY_LABELS[node.entityType]??node.entityType;
   const conns = edges.filter(e=>e.fromNodeId===node.id||e.toNodeId===node.id).slice(0,5);
 
+  // Provisional position until the layout effect measures + refines (pre-paint).
+  const left = pos?.x ?? Math.min(Math.max(MARGIN, anchor.x + 24), window.innerWidth - CARD_W - MARGIN);
+  const top  = pos?.y ?? Math.min(Math.max(MARGIN, anchor.y - 60), window.innerHeight - 376);
+
   return (
-    <div style={{ position:'fixed', left:pos.x, top:pos.y, width:320, zIndex:1000,
+    <div ref={cardRef} style={{ position:'fixed', left, top, width:CARD_W, zIndex:1000,
+      maxHeight:`calc(100vh - ${MARGIN * 2}px)`, overflowY:'auto', overflowX:'hidden',
       background:'rgba(8,8,8,0.94)', backdropFilter:'blur(20px)',
       border:`0.5px solid ${color}44`, borderRadius:14, padding:20,
-      fontFamily:"'Geist', -apple-system, sans-serif" }}>
+      fontFamily:'var(--sans)' }}>
       <button onClick={onClose} style={{ position:'absolute',top:10,right:12,background:'none',border:'none',cursor:'pointer',color:'#52525b',fontSize:18 }}>×</button>
       <div style={{ display:'inline-flex',alignItems:'center',background:`${color}18`,border:`0.5px solid ${color}40`,borderRadius:6,padding:'3px 10px',marginBottom:10,fontSize:10,fontFamily:"'Geist Mono',monospace",color,textTransform:'uppercase' as const,letterSpacing:'0.04em' }}>{label}</div>
       <h3 style={{ fontSize:15,fontWeight:500,color:'#fafafa',margin:'0 0 6px',lineHeight:1.35 }}>{node.label}</h3>
