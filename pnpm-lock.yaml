@@ -288,6 +288,9 @@ importers:
       astro:
         specifier: ^5.0.0
         version: 5.18.1(@types/node@25.9.2)(@vercel/functions@3.6.0(@aws-sdk/credential-provider-web-identity@3.972.51))(ioredis@5.10.1)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(tsx@4.22.0)(typescript@5.9.3)(yaml@2.9.0)
+      d3-force-3d:
+        specifier: 3.0.6
+        version: 3.0.6
       ioredis:
         specifier: ^5.10.1
         version: 5.10.1
