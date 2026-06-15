@@ -21,10 +21,25 @@ export function Graph3D({ nodes, edges }: Props) {
   const fg       = useRef<any>(null);
   const groups   = useRef(new Map<string, THREE.Group>());
   const shellRef = useRef<THREE.Points | null>(null);
+  const wrapRef  = useRef<HTMLDivElement>(null);
 
   const [selNode, setSelNode] = useState<GraphNode | null>(null);
   const [cam,  setCam]  = useState<THREE.Camera | null>(null);
   const [cvs,  setCvs]  = useState<HTMLCanvasElement | null>(null);
+  // ForceGraph3D defaults its canvas to the full WINDOW size unless given explicit
+  // width/height — which overflows the app shell (hides the topbar, breaks zoomToFit
+  // framing). Measure the container and size the canvas to it.
+  const [dims, setDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => setDims({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!fg.current) return;
@@ -112,9 +127,11 @@ export function Graph3D({ nodes, edges }: Props) {
   }, []);
 
   return (
-    <div style={{ position:'relative', width:'100%', height:'100%' }}>
+    <div ref={wrapRef} style={{ position:'relative', width:'100%', height:'100%', overflow:'hidden' }}>
       <ForceGraph3D
         ref={fg}
+        width={dims.w || undefined}
+        height={dims.h || undefined}
         graphData={{
           nodes: nodes.map(n => ({ ...n, val: Math.max(n.degree ?? 1, 1) })),
           links: edges.map(e => ({
