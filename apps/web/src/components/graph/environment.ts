@@ -25,6 +25,8 @@ export function createStarField(): THREE.Points {
     opacity: 0.3, sizeAttenuation: true, depthWrite: false,
   }));
   obj.userData.isStarField = true;
+  // Never interactive — exclude from pointer raycasting so it can't absorb node clicks.
+  obj.raycast = () => {};
   return obj;
 }
 
@@ -64,5 +66,7 @@ export function createBrainBoundaryShell(graphRadius: number): THREE.Points {
     depthWrite: false, blending: THREE.AdditiveBlending,
   }));
   obj.userData.isBrainShell = true;
+  // Never interactive — exclude from pointer raycasting so it can't absorb node clicks.
+  obj.raycast = () => {};
   return obj;
 }

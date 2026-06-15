@@ -30,6 +30,18 @@ export function createNodeObject(node: GraphNode): THREE.Group {
   const mesh = new THREE.Mesh(geo, mat);
   group.add(mesh);
 
+  // Invisible, larger click hitbox. The visible sphere is only 2–10px so it's
+  // nearly impossible to click at fit-to-view zoom; this transparent sphere
+  // (opacity 0 but visible:true → still raycastable) gives a generous target.
+  // A raycast hit climbs to this Group's __graphObjType, so it resolves to the node.
+  const hitR = Math.max(radius * 2.5, 9);
+  const hitbox = new THREE.Mesh(
+    new THREE.SphereGeometry(hitR, 8, 8),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+  );
+  hitbox.userData.isHitbox = true;
+  group.add(hitbox);
+
   // NO glow sprite — removed. Edges carry the colour now.
 
   group.userData = {
