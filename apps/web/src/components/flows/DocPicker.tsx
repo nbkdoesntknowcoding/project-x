@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { FileText, Search, X } from 'lucide-react';
+import { FileText, Search, X, Eye } from 'lucide-react';
+import { openDocPreview } from '../../lib/preview';
 
 interface DocItem {
   id: string;
@@ -84,6 +85,16 @@ export function DocPicker({ value, onChange }: Props) {
         {selectedTitle ? (
           <>
             <span className="flex-1 truncate text-[var(--text-primary)]">{selectedTitle}</span>
+            {value && (
+              <span
+                role="button"
+                title="Preview doc"
+                onClick={(e) => { e.stopPropagation(); openDocPreview(value); }}
+                className="text-[var(--text-quaternary)] hover:text-[var(--text-secondary)] transition-colors"
+              >
+                <Eye size={11} strokeWidth={1.75} />
+              </span>
+            )}
             <span
               role="button"
               onClick={handleClear}
@@ -123,18 +134,30 @@ export function DocPicker({ value, onChange }: Props) {
               </div>
             )}
             {filtered.map((doc) => (
-              <button
+              <div
                 key={doc.id}
-                type="button"
-                onClick={() => handleSelect(doc)}
                 className={
-                  'w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--surface-2)] transition-colors ' +
+                  'group w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[var(--surface-2)] transition-colors ' +
                   (doc.id === value ? 'bg-[var(--surface-2)]' : '')
                 }
               >
-                <FileText size={11} className="text-[var(--text-tertiary)] shrink-0" strokeWidth={1.75} />
-                <span className="text-[12px] text-[var(--text-primary)] truncate">{doc.title}</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelect(doc)}
+                  className="flex-1 min-w-0 flex items-center gap-2 text-left"
+                >
+                  <FileText size={11} className="text-[var(--text-tertiary)] shrink-0" strokeWidth={1.75} />
+                  <span className="text-[12px] text-[var(--text-primary)] truncate">{doc.title}</span>
+                </button>
+                <button
+                  type="button"
+                  title="Preview doc"
+                  onClick={(e) => { e.stopPropagation(); openDocPreview(doc.id); }}
+                  className="shrink-0 opacity-0 group-hover:opacity-100 text-[var(--text-quaternary)] hover:text-[var(--text-primary)] transition-[opacity,color]"
+                >
+                  <Eye size={12} strokeWidth={1.75} />
+                </button>
+              </div>
             ))}
           </div>
         </div>

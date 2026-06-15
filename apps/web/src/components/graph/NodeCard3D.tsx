@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { ENTITY_LABELS, ENTITY_COLORS_CSS, EDGE_LABELS } from './constants';
+import { openDocPreview } from '../../lib/preview';
 import type { GraphNode, GraphEdge } from '../../lib/graph-types';
 
 interface Props {
@@ -54,10 +55,19 @@ export function NodeCard3D({ node, edges, allNodes, camera, domElement, onClose,
         </div>
       </>)}
       {['doc','flow','task'].includes(node.entityType) && (
-        <a href={`/app/${node.entityType==='doc'?'docs':node.entityType==='flow'?'flows':'kanban'}/${node.entityId}`}
-          style={{ display:'block',textAlign:'center' as const,background:'rgba(255,255,255,0.05)',border:'0.5px solid rgba(255,255,255,0.10)',borderRadius:8,padding:9,textDecoration:'none',color:'#fafafa',fontSize:12 }}>
-          Open {label.split(' ').pop()} →
-        </a>
+        <div style={{ display:'flex', gap:6 }}>
+          {node.entityType==='doc' && node.entityId && (
+            <button
+              onClick={() => openDocPreview(node.entityId!)}
+              style={{ flex:'0 0 auto',background:'rgba(255,255,255,0.05)',border:'0.5px solid rgba(255,255,255,0.10)',borderRadius:8,padding:'9px 12px',cursor:'pointer',color:'#fafafa',fontSize:12 }}>
+              Preview
+            </button>
+          )}
+          <a href={`/app/${node.entityType==='doc'?'docs':node.entityType==='flow'?'flows':'kanban'}/${node.entityId}`}
+            style={{ flex:1,display:'block',textAlign:'center' as const,background:'rgba(255,255,255,0.05)',border:'0.5px solid rgba(255,255,255,0.10)',borderRadius:8,padding:9,textDecoration:'none',color:'#fafafa',fontSize:12 }}>
+            Open {label.split(' ').pop()} →
+          </a>
+        </div>
       )}
     </div>
   );

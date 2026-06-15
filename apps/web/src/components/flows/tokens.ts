@@ -66,10 +66,11 @@ export const FLOW_TOKENS = {
   entryColor: '#4ade80',
   exitColor:  '#52525b',
 
-  // Typography
-  fontUI:      "'Geist', -apple-system, sans-serif",
-  fontMono:    "'Geist Mono', ui-monospace, monospace",
-  fontDisplay: "'Instrument Serif', Georgia, serif",
+  // Typography — reference the app's canonical CSS font variables so flow nodes
+  // match the rest of the application (was a separate hardcoded font stack).
+  fontUI:      'var(--sans)',
+  fontMono:    'var(--mono)',
+  fontDisplay: 'var(--serif)',
 } as const;
 
 export type NodeKind = 'instruction' | 'doc' | 'docs' | 'decision';

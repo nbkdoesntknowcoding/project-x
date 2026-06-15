@@ -5,6 +5,7 @@ import { NotificationBell } from '../components/app/NotificationBell';
 import { WorkspaceSwitcher } from '../components/nav/WorkspaceSwitcher';
 import { DevSearch } from '../components/dev/DevSearch';
 import { WorkspaceModeToggle } from '../components/app/WorkspaceModeToggle';
+import { DocPreviewHost } from '../components/preview/DocPreviewHost';
 
 interface Props {
   title: string;
@@ -269,6 +270,9 @@ if (auth) {
     {workspaceMode === 'dev_project' && (
       <DevSearch workspaceMode={workspaceMode} client:load />
     )}
+
+    <!-- GLOBAL FLOATING DOC PREVIEW (portal-mounted; available app-wide) -->
+    <DocPreviewHost client:load />
 
     <!-- STATUS BAR -->
     <footer class="ap-statusbar">
