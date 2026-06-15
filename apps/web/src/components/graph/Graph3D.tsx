@@ -139,6 +139,37 @@ export function Graph3D({ nodes, edges }: Props) {
     if (shellRef.current.length > 0) drawBrainShell(ctx, shellRef.current);
   }, []);
 
+  // ── Memoised accessor props ──────────────────────────────────────
+  // CRITICAL: these must be stable. If they're new functions on every render
+  // (e.g. after a click sets state), react-force-graph resets canvas state, and
+  // with redraw paused that blanks the canvas. They read the mutable
+  // highlightState module object, so [] deps still see current selection.
+  const nodeCanvasObjectMode = useCallback(() => 'replace' as const, []);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nodeLabel = useCallback((n: any) => (n as GraphNode).label, []);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const linkColor = useCallback((link: any) => {
+    const src = link.source;
+    const col = ENTITY_COLORS_CSS[src?.entityType] ?? '#ffffff';
+    if (highlightState.selectedId) {
+      const sid = highlightState.selectedId;
+      const fromId = src?.id ?? '';
+      const toId   = link.target?.id ?? '';
+      // col is a #rrggbb hex; dim unconnected links via an 8-digit alpha hex
+      if (fromId !== sid && toId !== sid) return col.length === 7 ? `${col}14` : col;
+    }
+    return col;
+  }, []);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const linkWidth = useCallback((link: any) => {
+    const e = link as GraphEdge;
+    if (e.provenance === 'AMBIGUOUS') return 0.4;
+    if (e.provenance === 'INFERRED')  return 0.9;
+    return 1.5;
+  }, []);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const linkCurvature = useCallback((link: any) => link.curvature ?? 0, []);
+
   return (
     <div
       ref={wrapRef}
@@ -154,35 +185,14 @@ export function Graph3D({ nodes, edges }: Props) {
 
           // ── Node rendering ────────────────────────────────────
           nodeCanvasObject={nodeCanvasObject}
-          nodeCanvasObjectMode={() => 'replace'}  // our drawNode fully replaces default
+          nodeCanvasObjectMode={nodeCanvasObjectMode}  // our drawNode fully replaces default
           nodePointerAreaPaint={nodePointerAreaPaint}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          nodeLabel={(n: any) => (n as GraphNode).label}
+          nodeLabel={nodeLabel}
 
           // ── Link styling ──────────────────────────────────────
-          // Source node's entity colour at full saturation
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          linkColor={(link: any) => {
-            const src = link.source;
-            const col = ENTITY_COLORS_CSS[src?.entityType] ?? '#ffffff';
-            // Dim if something is selected and this link isn't connected
-            if (highlightState.selectedId) {
-              const sid = highlightState.selectedId;
-              const fromId = src?.id ?? '';
-              const toId   = link.target?.id ?? '';
-              if (fromId !== sid && toId !== sid) return col.replace(')', ',0.05)').replace('rgb', 'rgba');
-            }
-            return col;
-          }}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          linkWidth={(link: any) => {
-            const e = link as GraphEdge;
-            if (e.provenance === 'AMBIGUOUS') return 0.4;
-            if (e.provenance === 'INFERRED')  return 0.9;
-            return 1.5;  // EXTRACTED: thin bright coloured line (not thick cylinder)
-          }}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          linkCurvature={(link: any) => link.curvature ?? 0}
+          linkColor={linkColor}
+          linkWidth={linkWidth}
+          linkCurvature={linkCurvature}
           linkOpacity={0.9}
 
           // ── Simulation ────────────────────────────────────────
@@ -223,6 +233,10 @@ export function Graph3D({ nodes, edges }: Props) {
           showNavInfo={false}
           enableZoomInteraction={true}
           enablePanInteraction={true}
+          // Keep repainting after the engine cools so a click (highlight) shows
+          // and a React re-render can never leave a blank, un-repainted canvas.
+          // Cheap on CPU in 2D — that's the whole reason we moved off WebGL.
+          autoPauseRedraw={false}
         />
       )}
 

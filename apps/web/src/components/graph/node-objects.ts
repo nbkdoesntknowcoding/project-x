@@ -34,6 +34,9 @@ export function drawNode(
   const x      = (node as any).x ?? 0;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const y      = (node as any).y ?? 0;
+  // Guard: createRadialGradient throws on non-finite coords. Never let one bad
+  // node position blank the whole canvas.
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
   const color  = ENTITY_COLORS_CSS[node.entityType] ?? '#ffffff';
   const radius = getRadius(node);
   const isGod  = node.isGodNode ?? false;
