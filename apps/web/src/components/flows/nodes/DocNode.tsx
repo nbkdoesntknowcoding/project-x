@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { NodeShell, TypeBadge } from './NodeShell';
 import { FLOW_TOKENS as T, handleStyle } from '../tokens';
+import { openDocPreview } from '../../../lib/preview';
 
 interface DocNodeData extends Record<string, unknown> {
   title: string;
@@ -21,9 +22,21 @@ export function DocNode({ data, selected, isConnectable }: NodeProps) {
       <TypeBadge label="Reference" icon="📄" colour={T.doc.accent} />
 
       {hasDoc
-        ? <p style={{ fontSize: 13, color: '#fafafa', lineHeight: 1.5, margin: 0 }}>
-            {d.doc_title ?? (d.doc_id ? d.doc_id.slice(0, 8) + '…' : '')}
-          </p>
+        ? <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+            <p style={{ flex: 1, fontSize: 13, color: '#fafafa', lineHeight: 1.5, margin: 0 }}>
+              {d.doc_title ?? (d.doc_id ? d.doc_id.slice(0, 8) + '…' : '')}
+            </p>
+            {d.doc_id && (
+              <button
+                className="nodrag nopan"
+                title="Preview doc"
+                onClick={(e) => { e.stopPropagation(); openDocPreview(d.doc_id!); }}
+                style={{ flexShrink: 0, background: 'none', border: 'none', cursor: 'pointer', color: '#a1a1aa', padding: 0, marginTop: 1, lineHeight: 0 }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            )}
+          </div>
         : <div style={{
             fontSize: 12, color: '#fbbf24',
             background: 'rgba(251,191,36,0.08)',

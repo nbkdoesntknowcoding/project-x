@@ -153,7 +153,7 @@ export function DocPicker({ value, onChange }: Props) {
                   type="button"
                   title="Preview doc"
                   onClick={(e) => { e.stopPropagation(); openDocPreview(doc.id); }}
-                  className="shrink-0 opacity-0 group-hover:opacity-100 text-[var(--text-quaternary)] hover:text-[var(--text-primary)] transition-[opacity,color]"
+                  className="shrink-0 text-[var(--text-quaternary)] hover:text-[var(--text-primary)] transition-colors"
                 >
                   <Eye size={12} strokeWidth={1.75} />
                 </button>
