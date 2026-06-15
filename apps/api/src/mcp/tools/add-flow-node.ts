@@ -136,7 +136,7 @@ export const ADD_FLOW_NODE_TOOL = {
       idempotency_key: { type: 'string', description: 'Caller-chosen unique key for safe retries.' },
       user_confirmed: { type: 'boolean', description: 'Must be true. Get explicit user approval first.' },
     },
-    required: ['flow_id', 'kind', 'title', 'data', 'idempotency_key', 'user_confirmed'],
+    required: ['flow_id', 'kind', 'title', 'data', 'user_confirmed'],
     additionalProperties: false,
   },
   annotations: { destructiveHint: false, title: 'Add a flow node' },
@@ -149,7 +149,7 @@ const argsSchema = z.object({
   data: z.record(z.unknown()),
   client_node_id: z.string().min(1).max(64).regex(KEBAB_RE, 'client_node_id must be kebab-case').optional(),
   position: z.object({ x: z.number(), y: z.number() }).optional(),
-  idempotency_key: z.string().min(1).max(128),
+  idempotency_key: z.string().min(1).max(128).default(() => nanoid()),
   user_confirmed: z.boolean(),
 }).strict();
 

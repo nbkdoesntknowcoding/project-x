@@ -14,6 +14,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
+import { nanoid } from 'nanoid';
 import { getOrCreateDraftVersion } from '../../flows/draft.js';
 import { flowNodes, flows, workspaceMembers } from '../../db/schema.js';
 import { withSystemPrivilege } from '../../db/with-system-privilege.js';
@@ -115,7 +116,7 @@ export const UPDATE_FLOW_NODE_TOOL = {
       idempotency_key: { type: 'string', description: 'Caller-chosen unique key for safe retries.' },
       user_confirmed: { type: 'boolean', description: 'Must be true. Get explicit user approval first.' },
     },
-    required: ['flow_id', 'client_node_id', 'data', 'idempotency_key', 'user_confirmed'],
+    required: ['flow_id', 'client_node_id', 'data', 'user_confirmed'],
     additionalProperties: false,
   },
   annotations: { destructiveHint: false, title: 'Update a flow node' },
@@ -127,7 +128,7 @@ const argsSchema = z.object({
   data: z.record(z.unknown()),
   title: z.string().min(1).max(200).optional(),
   position: z.object({ x: z.number(), y: z.number() }).optional(),
-  idempotency_key: z.string().min(1).max(128),
+  idempotency_key: z.string().min(1).max(128).default(() => nanoid()),
   user_confirmed: z.boolean(),
 }).strict();
 

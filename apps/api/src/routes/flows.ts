@@ -2,7 +2,7 @@ import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
-import { flows, flowVersions, flowNodes, flowEdges } from '../db/schema.js';
+import { flows, flowVersions, flowNodes, flowEdges, users } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { renderNodeContent, topologicalWalk } from '../lib/flows/walk.js';
 import { enforceFreeFlowLimit } from '../plugins/free-limits.js';
@@ -56,6 +56,10 @@ const edgeSchema = z.object({
 const draftSaveSchema = z.object({
   nodes: z.array(nodeSchema),
   edges: z.array(edgeSchema),
+});
+
+const restoreVersionSchema = z.object({
+  version_id: z.string().uuid(),
 });
 
 /**
@@ -313,21 +317,27 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
         if (!flow) return null;
 
         const wantPublished = req.query.version === 'published';
-        let versionId: string | null = null;
 
-        if (wantPublished) {
-          versionId = flow.publishedVersionId;
-        } else {
-          const draft = await tx
-            .select({ id: flowVersions.id })
-            .from(flowVersions)
-            .where(
-              and(eq(flowVersions.flowId, flow.id), eq(flowVersions.isPublished, false)),
-            )
-            .orderBy(desc(flowVersions.versionNumber))
-            .limit(1);
-          versionId = draft[0]?.id ?? null;
-        }
+        // Latest draft (unpublished) version, if any.
+        const draftRows = await tx
+          .select({ id: flowVersions.id })
+          .from(flowVersions)
+          .where(
+            and(eq(flowVersions.flowId, flow.id), eq(flowVersions.isPublished, false)),
+          )
+          .orderBy(desc(flowVersions.versionNumber))
+          .limit(1);
+        const draftVersionId = draftRows[0]?.id ?? null;
+
+        // Which graph to render:
+        //   ?version=published → the published version
+        //   otherwise          → the draft if one exists, ELSE fall back to the
+        //                         published version. A flow that was published
+        //                         with no pending edits has no draft, and must
+        //                         still render (this is the empty-canvas fix).
+        const versionId = wantPublished
+          ? flow.publishedVersionId
+          : (draftVersionId ?? flow.publishedVersionId);
 
         const nodes = versionId
           ? await tx
@@ -354,39 +364,18 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
               .where(eq(flowEdges.flowVersionId, versionId))
           : [];
 
-        // Also return the draft id so the UI knows where its next save lands.
-        const draft = await tx
-          .select({ id: flowVersions.id })
-          .from(flowVersions)
-          .where(
-            and(eq(flowVersions.flowId, flow.id), eq(flowVersions.isPublished, false)),
-          )
-          .orderBy(desc(flowVersions.versionNumber))
-          .limit(1);
-
-        // Compute has_unpublished_changes: compare flows.updatedAt vs published version createdAt.
-        // PUT /draft always bumps flows.updatedAt, so if it's newer than when we published, edits exist.
-        let hasUnpublishedChanges = false;
-        if (!flow.publishedVersionId) {
-          hasUnpublishedChanges = true; // never published
-        } else {
-          const pubVer = await tx
-            .select({ createdAt: flowVersions.createdAt })
-            .from(flowVersions)
-            .where(eq(flowVersions.id, flow.publishedVersionId))
-            .limit(1);
-          if (pubVer[0]) {
-            // If flow was edited (updatedAt > published.createdAt by more than 2s), there are changes.
-            hasUnpublishedChanges = flow.updatedAt.getTime() - pubVer[0].createdAt.getTime() > 2000;
-          }
-        }
+        // Unsaved/unpublished changes exist iff a draft (unpublished) version
+        // exists. Drafts are created only when the flow is edited after publish,
+        // so their presence is the single source of truth — no fragile timestamp
+        // comparison. (Brand-new, never-published flows always have a draft.)
+        const hasUnpublishedChanges = draftVersionId !== null;
 
         return {
           flow,
           nodes,
           edges,
           versionId,
-          draftVersionId: draft[0]?.id ?? null,
+          draftVersionId,
           isPublished: !!flow.publishedVersionId,
           hasUnpublishedChanges,
         };
@@ -542,47 +531,14 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
         .set({ publishedVersionId: draft.id })
         .where(eq(flows.id, flow.id));
 
-      // Open a new draft version mirroring the now-published graph so
-      // editing can continue without rerouting the published reference.
-      const [newDraft] = await tx
-        .insert(flowVersions)
-        .values({
-          flowId: flow.id,
-          workspaceId: auth.tenant_id,
-          versionNumber: draft.versionNumber + 1,
-          isPublished: false,
-          createdBy: auth.sub,
-        })
-        .returning();
-      if (!newDraft) throw new Error('new_draft_insert_failed');
-
-      if (nodes.length > 0) {
-        await tx.insert(flowNodes).values(
-          nodes.map((n) => ({
-            flowVersionId: newDraft.id,
-            clientNodeId: n.client_node_id,
-            kind: n.kind,
-            title: n.title,
-            positionX: n.position_x,
-            positionY: n.position_y,
-            data: n.data,
-          })),
-        );
-      }
-      if (edges.length > 0) {
-        await tx.insert(flowEdges).values(
-          edges.map((e) => ({
-            flowVersionId: newDraft.id,
-            fromNodeId: e.from_node_id,
-            toNodeId: e.to_node_id,
-            fromSocket: e.from_socket,
-          })),
-        );
-      }
+      // No mirrored draft is created here (Model B): after publishing there is
+      // no unpublished draft, so the flow reads as "published, no changes" and
+      // GET falls back to the published graph. A fresh draft is created lazily
+      // (cloning the published graph) on the next edit via getOrCreateDraftVersion.
 
       return {
         published_version_id: draft.id,
-        new_draft_version_id: newDraft.id,
+        new_draft_version_id: null,
         version_number: draft.versionNumber,
       };
     });
@@ -593,6 +549,157 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(409).send(outcome);
     }
     return reply.send(outcome);
+  });
+
+  // -------------------------------------------------------------------
+  // GET /api/flows/:id/versions — version history for the History panel
+  // -------------------------------------------------------------------
+  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
+    '/api/flows/:id/versions',
+    async (req, reply) => {
+      if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+      const limit = Math.min(Math.max(Number(req.query.limit ?? 50) || 50, 1), 200);
+
+      const result = await withTenant(req.auth.tenant_id, async (tx) => {
+        const flow = await resolveFlow(tx, req.params.id);
+        if (!flow) return null;
+
+        const versions = await tx
+          .select({
+            id: flowVersions.id,
+            versionNumber: flowVersions.versionNumber,
+            isPublished: flowVersions.isPublished,
+            publishMessage: flowVersions.publishMessage,
+            createdAt: flowVersions.createdAt,
+            createdBy: flowVersions.createdBy,
+            authorName: users.displayName,
+            authorEmail: users.email,
+          })
+          .from(flowVersions)
+          .leftJoin(users, eq(users.id, flowVersions.createdBy))
+          .where(eq(flowVersions.flowId, flow.id))
+          .orderBy(desc(flowVersions.versionNumber))
+          .limit(limit);
+
+        // Current draft = the latest unpublished version (highest versionNumber).
+        const currentDraftId = versions.find((v) => !v.isPublished)?.id ?? null;
+
+        const out = [];
+        for (const v of versions) {
+          const nc = await tx
+            .select({ n: count() })
+            .from(flowNodes)
+            .where(eq(flowNodes.flowVersionId, v.id));
+          const ec = await tx
+            .select({ n: count() })
+            .from(flowEdges)
+            .where(eq(flowEdges.flowVersionId, v.id));
+          out.push({
+            id: v.id,
+            version_number: v.versionNumber,
+            is_published: v.isPublished,
+            created_at: v.createdAt.toISOString(),
+            created_by: {
+              id: v.createdBy ?? null,
+              display_name: v.authorName ?? null,
+              email: v.authorEmail ?? null,
+            },
+            publish_message: v.publishMessage ?? null,
+            node_count: Number(nc[0]?.n ?? 0),
+            edge_count: Number(ec[0]?.n ?? 0),
+            is_current_draft: v.id === currentDraftId,
+            is_published_version: v.id === flow.publishedVersionId,
+          });
+        }
+        return out;
+      });
+
+      if (!result) return reply.code(404).send({ error: 'flow_not_found' });
+      return reply.send({ versions: result });
+    },
+  );
+
+  // -------------------------------------------------------------------
+  // POST /api/flows/:id/restore-version — copy a version's graph into the draft
+  // -------------------------------------------------------------------
+  app.post<{ Params: { id: string } }>('/api/flows/:id/restore-version', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const parsed = restoreVersionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'bad_request', issues: parsed.error.issues });
+    }
+    const auth = req.auth;
+
+    const result = await withTenant(auth.tenant_id, async (tx) => {
+      const flow = await resolveFlow(tx, req.params.id);
+      if (!flow) return { error: 'flow_not_found' as const };
+
+      // The source version must belong to this flow.
+      const srcRows = await tx
+        .select({ id: flowVersions.id })
+        .from(flowVersions)
+        .where(and(eq(flowVersions.id, parsed.data.version_id), eq(flowVersions.flowId, flow.id)))
+        .limit(1);
+      const src = srcRows[0];
+      if (!src) return { error: 'version_not_found' as const };
+
+      const srcNodes = await tx
+        .select({
+          client_node_id: flowNodes.clientNodeId,
+          kind: flowNodes.kind,
+          title: flowNodes.title,
+          position_x: flowNodes.positionX,
+          position_y: flowNodes.positionY,
+          data: flowNodes.data,
+        })
+        .from(flowNodes)
+        .where(eq(flowNodes.flowVersionId, src.id));
+      const srcEdges = await tx
+        .select({
+          from_node_id: flowEdges.fromNodeId,
+          to_node_id: flowEdges.toNodeId,
+          from_socket: flowEdges.fromSocket,
+        })
+        .from(flowEdges)
+        .where(eq(flowEdges.flowVersionId, src.id));
+
+      // Land the restored graph in the current draft (creating one if needed),
+      // full-replace strategy.
+      const draft = await getOrCreateDraftVersion(tx, flow.id, auth.sub, auth.tenant_id);
+      await tx.delete(flowEdges).where(eq(flowEdges.flowVersionId, draft.id));
+      await tx.delete(flowNodes).where(eq(flowNodes.flowVersionId, draft.id));
+      if (srcNodes.length > 0) {
+        await tx.insert(flowNodes).values(
+          srcNodes.map((n) => ({
+            flowVersionId: draft.id,
+            clientNodeId: n.client_node_id,
+            kind: n.kind,
+            title: n.title,
+            positionX: n.position_x,
+            positionY: n.position_y,
+            data: n.data,
+          })),
+        );
+      }
+      if (srcEdges.length > 0) {
+        await tx.insert(flowEdges).values(
+          srcEdges.map((e) => ({
+            flowVersionId: draft.id,
+            fromNodeId: e.from_node_id,
+            toNodeId: e.to_node_id,
+            fromSocket: e.from_socket,
+          })),
+        );
+      }
+      await tx.update(flows).set({ updatedAt: new Date() }).where(eq(flows.id, flow.id));
+
+      return { draft_version_id: draft.id, node_count: srcNodes.length, edge_count: srcEdges.length };
+    });
+
+    if ('error' in result) {
+      return reply.code(result.error === 'flow_not_found' || result.error === 'version_not_found' ? 404 : 400).send(result);
+    }
+    return reply.send(result);
   });
 
   // -------------------------------------------------------------------

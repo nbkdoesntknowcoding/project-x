@@ -21,6 +21,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
+import { nanoid } from 'nanoid';
 import { getOrCreateDraftVersion, wouldCreateFlowCycle } from '../../flows/draft.js';
 import { flowEdges, flowNodes, flows, workspaceMembers } from '../../db/schema.js';
 import { withSystemPrivilege } from '../../db/with-system-privilege.js';
@@ -95,7 +96,7 @@ export const CONNECT_FLOW_NODES_TOOL = {
       idempotency_key: { type: 'string', description: 'Caller-chosen unique key for safe retries.' },
       user_confirmed: { type: 'boolean', description: 'Must be true. Get explicit user approval first.' },
     },
-    required: ['flow_id', 'from_node_id', 'to_node_id', 'idempotency_key', 'user_confirmed'],
+    required: ['flow_id', 'from_node_id', 'to_node_id', 'user_confirmed'],
     additionalProperties: false,
   },
   annotations: { destructiveHint: false, title: 'Connect two flow nodes' },
@@ -106,7 +107,7 @@ const argsSchema = z.object({
   from_node_id: z.string().min(1).max(64),
   to_node_id: z.string().min(1).max(64),
   branch_label: z.string().min(1).max(64).regex(KEBAB_RE, 'branch_label must be kebab-case').optional(),
-  idempotency_key: z.string().min(1).max(128),
+  idempotency_key: z.string().min(1).max(128).default(() => nanoid()),
   user_confirmed: z.boolean(),
 }).strict();
 
