@@ -72,10 +72,10 @@ export const joinWorkspaceRoutes: FastifyPluginAsync = async (app) => {
         tx.insert(workspaceMembers).values({
           workspaceId: workspace_id,
           userId: user_id,
-          role: 'viewer',
+          role: 'editor',
         }),
       );
-      role = 'viewer';
+      role = 'editor';
     }
 
     const jwt = await signJwt({

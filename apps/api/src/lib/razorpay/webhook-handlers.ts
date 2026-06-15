@@ -151,9 +151,12 @@ export async function handleSubscriptionActivated(event: RazorpayWebhookEvent): 
 
   await upsertSubscription(event, wsId, planKey);
 
-  // Only workspaces.plan exists on workspaces — status/period live in subscriptions
+  // Only workspaces.plan exists on workspaces — status/period live in subscriptions.
+  // planKey is a plan slug ('individual' | 'team' | 'business'); workspaces.plan is
+  // free text, so store the slug verbatim (the previous 'pro'|'team' cast dropped
+  // 'business', leaving Business workspaces mislabelled).
   await db.update(workspaces).set({
-    plan: planKey as 'pro' | 'team',
+    plan: planKey,
   }).where(eq(workspaces.id, wsId));
 
   console.log(`[razorpay-webhook] subscription.activated → workspace ${wsId} plan=${planKey}`);

@@ -11,6 +11,7 @@ import { emailQueue } from '../queue/email.js';
 import { signInvitationToken, verifyInvitationToken } from '../lib/invitation-token.js';
 import { signJwt } from '../lib/jwt.js';
 import { requireRole, RoleError } from '../lib/role.js';
+import { scopesForRole } from '../lib/scopes.js';
 import { syncSubscriptionSeats } from '../lib/billing/sync-seats.js';
 
 const JWT_COOKIE = 'boppl_jwt';
@@ -396,7 +397,7 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
         .set({ acceptedAt: new Date(), acceptedBy: req.auth!.sub })
         .where(eq(invitations.id, row.id));
 
-      return { workspace_id: row.workspaceId };
+      return { workspace_id: row.workspaceId, role: row.role };
     });
 
     if ('error' in result) {
@@ -407,7 +408,7 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
       sub: req.auth.sub,
       tenant_id: result.workspace_id,
       email: req.auth.email,
-      scopes: ['docs:read'],
+      scopes: scopesForRole(result.role),
     });
     reply.setCookie(JWT_COOKIE, jwt, {
       path: '/',

@@ -1063,7 +1063,11 @@ const totalItems = isInsideFolder
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!res.ok) { alert('Failed to create doc'); return null; }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.message ?? 'Failed to create doc');
+        return null;
+      }
       const { doc } = await res.json();
       return doc;
     }

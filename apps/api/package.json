@@ -19,7 +19,8 @@
     "test:round-trip": "vitest run src/tests/round-trip",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "consolidate:domain": "tsx src/scripts/consolidate-domain-workspace.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.74",

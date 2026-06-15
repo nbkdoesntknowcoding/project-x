@@ -1,4 +1,4 @@
-import { count, eq, ilike } from 'drizzle-orm';
+import { count, eq, ilike, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '../db/index.js';
 import {
@@ -7,11 +7,50 @@ import {
   flowNodes,
   flows,
   flowVersions,
+  subscriptions,
   users,
   workspaceMembers,
   workspaces,
 } from '../db/schema.js';
+import { ACTIVE_STATUSES } from '../plugins/subscription.js';
 import { emptyYjsState } from './yjs.js';
+
+// Role priority for choosing a default workspace when a user belongs to several.
+const ROLE_RANK: Record<string, number> = { owner: 4, admin: 3, editor: 2, viewer: 1 };
+
+/**
+ * Choose which workspace a multi-workspace user should land in at login.
+ * Preference order:
+ *   1. A workspace with an ACTIVE paid subscription (so invited teammates of a
+ *      paid team default into the team, not their own free personal workspace).
+ *   2. Higher role (owner > admin > editor > viewer).
+ *   3. Most recently joined.
+ */
+async function pickDefaultWorkspaceId(
+  memberships: { workspaceId: string; role: string; joinedAt: Date | null }[],
+): Promise<string> {
+  if (memberships.length === 1) return memberships[0]!.workspaceId;
+
+  const wsIds = memberships.map((m) => m.workspaceId);
+  const subs = await db
+    .select({ workspaceId: subscriptions.workspaceId, status: subscriptions.status })
+    .from(subscriptions)
+    .where(inArray(subscriptions.workspaceId, wsIds));
+  const paid = new Set(
+    subs.filter((s) => ACTIVE_STATUSES.has(s.status as never)).map((s) => s.workspaceId),
+  );
+
+  const sorted = [...memberships].sort((a, b) => {
+    const ap = paid.has(a.workspaceId) ? 1 : 0;
+    const bp = paid.has(b.workspaceId) ? 1 : 0;
+    if (ap !== bp) return bp - ap; // paid workspace first
+    const ar = ROLE_RANK[a.role] ?? 0;
+    const br = ROLE_RANK[b.role] ?? 0;
+    if (ar !== br) return br - ar; // higher role first
+    return (b.joinedAt?.getTime() ?? 0) - (a.joinedAt?.getTime() ?? 0); // newest first
+  });
+  return sorted[0]!.workspaceId;
+}
 
 // Common free / personal email providers — skip domain-join prompt for these
 // so e.g. two Gmail users don't see each other's workspace.
@@ -70,14 +109,18 @@ export async function bootstrapUserAndWorkspace(
     userId = created.id;
   }
 
-  const membership = await db
-    .select()
+  const memberships = await db
+    .select({
+      workspaceId: workspaceMembers.workspaceId,
+      role: workspaceMembers.role,
+      joinedAt: workspaceMembers.joinedAt,
+    })
     .from(workspaceMembers)
-    .where(eq(workspaceMembers.userId, userId))
-    .limit(1);
+    .where(eq(workspaceMembers.userId, userId));
 
-  if (membership[0]) {
-    return { type: 'ready', user_id: userId, tenant_id: membership[0].workspaceId };
+  if (memberships.length > 0) {
+    const tenantId = await pickDefaultWorkspaceId(memberships);
+    return { type: 'ready', user_id: userId, tenant_id: tenantId };
   }
 
   // Brand-new user — check whether another workspace already uses this domain.
