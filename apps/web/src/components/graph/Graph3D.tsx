@@ -1,36 +1,37 @@
+// apps/web/src/components/graph/Graph3D.tsx
 'use client';
-import { useRef, useCallback, useEffect, useMemo, useState } from 'react';
-import ForceGraph3DLib from 'react-force-graph-3d';
+import { useRef, useCallback, useEffect, useState, useMemo } from 'react';
+import ForceGraph2DLib from 'react-force-graph-2d';
 import { forceRadial } from 'd3-force-3d';
-import * as THREE from 'three';
-// react-force-graph-3d's exported prop types are stricter than the runtime API
-// (e.g. linkCurveRotation). Cast to any so the documented props pass typecheck.
+// react-force-graph-2d's exported prop types are stricter than the runtime API.
+// Cast to any so the documented props pass typecheck.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ForceGraph3D = ForceGraph3DLib as any;
-import { createNodeObject, clearNodeCache } from './node-objects';
-import { setHighlight, clearHighlight } from './highlight';
-import { setupBlackEnvironment, createStarField, createBrainBoundaryShell } from './environment';
-import { ENTITY_COLORS_CSS } from './constants';
+const ForceGraph2D = ForceGraph2DLib as any;
+import { drawNode, getPointerArea } from './node-objects';
+import { setHighlight, clearHighlight, highlightState } from './highlight';
+import {
+  generateStars, drawStars,
+  generateBrainShell, drawBrainShell,
+  type Star, type BrainPoint,
+} from './environment';
 import { NodeCard3D } from './NodeCard3D';
+import { ENTITY_COLORS_CSS } from './constants';
 import type { GraphNode, GraphEdge } from '../../lib/graph-types';
 
 interface Props { nodes: GraphNode[]; edges: GraphEdge[]; }
 
 export function Graph3D({ nodes, edges }: Props) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fg       = useRef<any>(null);
-  const groups   = useRef(new Map<string, THREE.Group>());
-  const shellRef = useRef<THREE.Points | null>(null);
-  const wrapRef  = useRef<HTMLDivElement>(null);
+  const fg          = useRef<any>(null);
+  const wrapRef     = useRef<HTMLDivElement>(null);
+  const starsRef    = useRef<Star[]>([]);
+  const shellRef    = useRef<BrainPoint[]>([]);
+  const iTimer      = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  const [dims,    setDims]    = useState({ w: 0, h: 0 });
   const [selNode, setSelNode] = useState<GraphNode | null>(null);
-  const [cam,  setCam]  = useState<THREE.Camera | null>(null);
-  const [cvs,  setCvs]  = useState<HTMLCanvasElement | null>(null);
-  // ForceGraph3D defaults its canvas to the full WINDOW size unless given explicit
-  // width/height — which overflows the app shell (hides the topbar, breaks zoomToFit
-  // framing). Measure the container and size the canvas to it.
-  const [dims, setDims] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
 
+  // ── Canvas sizing ───────────────────────────────────────────────
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -41,159 +42,202 @@ export function Graph3D({ nodes, edges }: Props) {
     return () => ro.disconnect();
   }, []);
 
+  // ── Stars (generated once when dims are known) ──────────────────
   useEffect(() => {
-    if (!fg.current) return;
-    clearNodeCache(); groups.current.clear();
-    const renderer = fg.current.renderer() as THREE.WebGLRenderer;
-    const scene    = fg.current.scene()    as THREE.Scene;
-    setupBlackEnvironment(renderer, scene);
-    scene.add(createStarField());
-    setCam(fg.current.camera());
-    setCvs(renderer.domElement);
-  }, []);
+    if (dims.w > 0 && starsRef.current.length === 0) {
+      starsRef.current = generateStars(dims.w, dims.h);
+    }
+  }, [dims]);
 
-  // ── FORCES — dendritic neuron layout ──────────────────────────────
+  // ── Forces ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!fg.current) return;
 
-    // Strong repulsion — spreads branches far from each other
+    // Repulsion — pushes branches apart
     fg.current.d3Force('charge')?.strength(-80);
 
-    // Tight link distance — keeps each branch chain close together
+    // Tight link distance — branches stay bundled
     fg.current.d3Force('link')?.distance(() => 20).strength(1.0);
 
-    // Radial force — the dendrite engine.
-    // High-degree hub nodes → centre. Low-degree leaf nodes → periphery.
+    // Radial force — hub nodes to centre, leaf nodes to periphery
+    // This creates the dendritic branching structure
     fg.current.d3Force('radial', forceRadial(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (node: any) => {
         const deg = Math.min(node.degree ?? 0, 50);
-        return (1 - deg / 50) * 200;
+        return (1 - deg / 50) * 200; // leaf node → 200 units out, hub → 0
       },
-      0, 0, 0,
+      0, 0,
     ).strength(0.4));
 
-    // Z-layer: spread communities across depth planes for a 3D feel
-    fg.current.d3Force('z-layer', (alpha: number) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      nodes.forEach((n: any) => {
-        const tz = ((n.communityId ?? 0) % 5) * 25 - 50;
-        n.vz = (n.vz ?? 0) + (tz - (n.z ?? 0)) * 0.005 * alpha;
-      });
-    });
-
-    // Remove the confinement force — radial force handles positioning now.
-    // Confinement and radial fight each other.
+    // No z-layer force in 2D
+    fg.current.d3Force('z-layer', null);
     fg.current.d3Force('confine', null);
   }, [nodes]);
 
-  // ── New-node entrance (event-driven only, not ambient motion) ─────
-  useEffect(() => {
-    const h = (e: Event) => {
-      const { nodeId } = (e as CustomEvent).detail as { nodeId: string };
-      setTimeout(() => {
-        const g = groups.current.get(nodeId);
-        if (!g) return;
-        g.scale.setScalar(0);
-        const s0 = performance.now();
-        const grow = () => {
-          const p = Math.min((performance.now() - s0) / 1200, 1);
-          g.scale.setScalar(Math.max(0, 1 + 1.7 * Math.pow(p - 1, 3) + 1.7 * Math.pow(p - 1, 2)));
-          if (p < 1) requestAnimationFrame(grow);
-        };
-        requestAnimationFrame(grow);
-      }, 300);
-    };
-    window.addEventListener('mnema:graph_node_added', h);
-    return () => window.removeEventListener('mnema:graph_node_added', h);
-  }, []);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onNodeClick = useCallback((raw: any) => {
-    const node = raw as GraphNode;
-    setSelNode(node);
-    const conn = edges.filter(e => e.fromNodeId === node.id || e.toNodeId === node.id).map(e => e.fromNodeId === node.id ? e.toNodeId : e.fromNodeId);
-    setHighlight(node.id, conn, groups.current);
-    const h = Math.hypot(raw.x ?? 0, raw.y ?? 0, raw.z ?? 0);
-    if (h > 0) {
-      const ratio = 1 + 160 / h;
-      fg.current?.cameraPosition({ x: (raw.x ?? 0) * ratio, y: (raw.y ?? 0) * ratio, z: (raw.z ?? 0) * ratio }, { x: raw.x ?? 0, y: raw.y ?? 0, z: raw.z ?? 0 }, 900);
-    }
-  }, [edges]);
-
-  const onBgClick = useCallback(() => {
-    setSelNode(null); clearHighlight(groups.current);
-    groups.current.forEach(g => g.scale.setScalar(1));
-  }, []);
-
-  // Memoize graphData so its reference is stable across re-renders. Building it
-  // inline (or regenerating Math.random curvatures) makes react-force-graph think
-  // the data changed on every render — e.g. when clicking a node sets state — and
-  // it restarts the whole simulation, causing the graph to jump/"get stuck" and
-  // making nodes unclickable mid-resettle. Only rebuild when nodes/edges change.
+  // ── Stable graphData ────────────────────────────────────────────
   const graphData = useMemo(() => ({
     nodes: nodes.map(n => ({ ...n, val: Math.max(n.degree ?? 1, 1) })),
     links: edges.map(e => ({
       ...e,
       source: e.fromNodeId,
       target: e.toNodeId,
-      curvature: Math.random() * 0.25,
+      // Gentle random curvature — organic branch sweep
+      curvature:         Math.random() * 0.2,
       curvatureRotation: Math.random() * Math.PI * 2,
     })),
   }), [nodes, edges]);
 
+  // ── Node click ──────────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const onNodeClick = useCallback((raw: any) => {
+    clearTimeout(iTimer.current);
+    const node = raw as GraphNode;
+    setSelNode(node);
+    const conn = edges
+      .filter(e => e.fromNodeId === node.id || e.toNodeId === node.id)
+      .map(e => e.fromNodeId === node.id ? e.toNodeId : e.fromNodeId);
+    setHighlight(node.id, conn);
+  }, [edges]);
+
+  const onBgClick = useCallback(() => {
+    setSelNode(null);
+    clearHighlight();
+  }, []);
+
+  // ── nodeCanvasObject — draws each node on the 2D canvas ─────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nodeCanvasObject = useCallback((node: any, ctx: CanvasRenderingContext2D) => {
+    const n         = node as GraphNode;
+    const selected  = highlightState.selectedId === n.id;
+    const connected = highlightState.connectedIds.has(n.id);
+    const any       = highlightState.selectedId !== null;
+    drawNode(n, ctx, selected, connected, any);
+  }, []);
+
+  // ── nodePointerAreaPaint — defines click hit area ────────────────
+  const nodePointerAreaPaint = useCallback((
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    node: any,
+    colour: string,
+    ctx: CanvasRenderingContext2D,
+  ) => {
+    const n = node as GraphNode;
+    ctx.fillStyle = colour;
+    ctx.beginPath();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ctx.arc((node as any).x ?? 0, (node as any).y ?? 0, getPointerArea(n), 0, 2 * Math.PI);
+    ctx.fill();
+  }, []);
+
+  // ── onRenderFramePre — draws stars + brain shell before nodes ────
+  // This callback runs inside ForceGraph2D's own render loop (no extra RAF)
+  const onRenderFramePre = useCallback((ctx: CanvasRenderingContext2D) => {
+    // Draw background stars
+    if (starsRef.current.length > 0) drawStars(ctx, starsRef.current);
+    // Draw brain shell if computed
+    if (shellRef.current.length > 0) drawBrainShell(ctx, shellRef.current);
+  }, []);
+
   return (
-    <div ref={wrapRef} style={{ position:'relative', width:'100%', height:'100%', overflow:'hidden' }}>
-      <ForceGraph3D
-        ref={fg}
-        width={dims.w || undefined}
-        height={dims.h || undefined}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        graphData={graphData as any}
-        backgroundColor="#000000"
-        nodeThreeObject={(n: object) => { const g=createNodeObject(n as GraphNode); groups.current.set((n as GraphNode).id,g); return g; }}
-        nodeThreeObjectExtend={false}
-        nodeLabel={(n: object) => (n as GraphNode).label}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        linkColor={(link: object) => { const src = (link as any).source; return ENTITY_COLORS_CSS[src?.entityType] ?? '#ffffff'; }}
-        linkWidth={(link: object) => { const e=link as GraphEdge; if(e.provenance==='AMBIGUOUS') return 0.3; if(e.provenance==='INFERRED') return 1.0; return 2.0; }}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        linkCurvature={(link: object) => (link as any).curvature ?? 0}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        linkCurveRotation={(link: object) => (link as any).curvatureRotation ?? 0}
-        linkOpacity={0.85}
-        d3AlphaDecay={0.02}
-        d3VelocityDecay={0.4}
-        warmupTicks={60}
-        onEngineStop={() => {
+    <div
+      ref={wrapRef}
+      style={{ position: 'relative', width: '100%', height: '100%', background: '#000000' }}
+    >
+      {dims.w > 0 && (
+        <ForceGraph2D
+          ref={fg}
+          width={dims.w}
+          height={dims.h}
+          graphData={graphData}
+          backgroundColor="#000000"
+
+          // ── Node rendering ────────────────────────────────────
+          nodeCanvasObject={nodeCanvasObject}
+          nodeCanvasObjectMode={() => 'replace'}  // our drawNode fully replaces default
+          nodePointerAreaPaint={nodePointerAreaPaint}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const data=fg.current?.graphData(); const scene=fg.current?.scene() as THREE.Scene|undefined;
-          let maxR=0;
+          nodeLabel={(n: any) => (n as GraphNode).label}
+
+          // ── Link styling ──────────────────────────────────────
+          // Source node's entity colour at full saturation
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          data?.nodes?.forEach((n:any)=>{ const r=Math.sqrt((n.x??0)**2+(n.y??0)**2+(n.z??0)**2); if(r>maxR) maxR=r; });
-          if (scene && maxR > 10) {
-            if (shellRef.current) { scene.remove(shellRef.current); shellRef.current.geometry.dispose(); }
-            const shell = createBrainBoundaryShell(maxR*1.5);
-            scene.add(shell); shellRef.current=shell;
-            console.log(`[Brain] graphR=${maxR.toFixed(0)} shellR=${(maxR*1.5).toFixed(0)}`);
-          }
-          // Pin nodes so the layout stops drifting once settled
+          linkColor={(link: any) => {
+            const src = link.source;
+            const col = ENTITY_COLORS_CSS[src?.entityType] ?? '#ffffff';
+            // Dim if something is selected and this link isn't connected
+            if (highlightState.selectedId) {
+              const sid = highlightState.selectedId;
+              const fromId = src?.id ?? '';
+              const toId   = link.target?.id ?? '';
+              if (fromId !== sid && toId !== sid) return col.replace(')', ',0.05)').replace('rgb', 'rgba');
+            }
+            return col;
+          }}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          data?.nodes?.forEach((n:any)=>{ n.fx=n.x; n.fy=n.y; n.fz=n.z; });
-          // One-time framing only — no ambient camera motion afterwards
-          fg.current?.zoomToFit(800,80);
-          // Keep the render loop alive so OrbitControls (pan/zoom) and pointer
-          // picking stay responsive after the engine cools — without this the
-          // library can idle and the scene appears frozen.
-          fg.current?.resumeAnimation?.();
-        }}
-        onNodeClick={onNodeClick}
-        onBackgroundClick={onBgClick}
-        showNavInfo={false}
-      />
-      {selNode && cam && cvs && (
-        <NodeCard3D node={selNode} edges={edges} allNodes={nodes} camera={cam} domElement={cvs}
-          onClose={onBgClick} onOpenNode={(id)=>{ const n=nodes.find(x=>x.id===id); if(n) onNodeClick(n); }} />
+          linkWidth={(link: any) => {
+            const e = link as GraphEdge;
+            if (e.provenance === 'AMBIGUOUS') return 0.4;
+            if (e.provenance === 'INFERRED')  return 0.9;
+            return 1.5;  // EXTRACTED: thin bright coloured line (not thick cylinder)
+          }}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          linkCurvature={(link: any) => link.curvature ?? 0}
+          linkOpacity={0.9}
+
+          // ── Simulation ────────────────────────────────────────
+          // No cooldownTicks — natural alpha decay
+          d3AlphaDecay={0.02}
+          d3VelocityDecay={0.4}
+          warmupTicks={80}
+
+          onEngineStop={() => {
+            // Compute brain shell from settled node positions
+            const data = fg.current?.graphData();
+            let maxR = 0, cx = 0, cy = 0;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            data?.nodes?.forEach((n: any) => {
+              const r = Math.sqrt((n.x ?? 0) ** 2 + (n.y ?? 0) ** 2);
+              if (r > maxR) maxR = r;
+              cx += (n.x ?? 0);
+              cy += (n.y ?? 0);
+            });
+            const count = data?.nodes?.length ?? 1;
+            cx /= count; cy /= count;
+
+            if (maxR > 10) {
+              shellRef.current = generateBrainShell(cx, cy, maxR);
+              console.log(`[Graph2D] graphR=${maxR.toFixed(0)} shellR=${(maxR*1.5).toFixed(0)}`);
+            }
+
+            // Fit the view to show all nodes with padding
+            fg.current?.zoomToFit(800, 60);
+          }}
+
+          // ── Background pass ───────────────────────────────────
+          onRenderFramePre={onRenderFramePre}
+
+          // ── Interaction ───────────────────────────────────────
+          onNodeClick={onNodeClick}
+          onBackgroundClick={onBgClick}
+          showNavInfo={false}
+          enableZoomInteraction={true}
+          enablePanInteraction={true}
+        />
+      )}
+
+      {selNode && (
+        <NodeCard3D
+          node={selNode}
+          edges={edges}
+          allNodes={nodes}
+          fgRef={fg}
+          onClose={onBgClick}
+          onOpenNode={(id) => {
+            const n = nodes.find(x => x.id === id);
+            if (n) onNodeClick(n);
+          }}
+        />
       )}
     </div>
   );

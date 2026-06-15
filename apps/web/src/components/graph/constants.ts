@@ -1,5 +1,3 @@
-import * as THREE from 'three';
-
 export const ENTITY_LABELS: Record<string, string> = {
   doc:       '📄 Document',
   flow:      '⑂ Workflow',

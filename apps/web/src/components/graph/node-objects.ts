@@ -1,68 +1,79 @@
-import * as THREE from 'three';
-import { ENTITY_COLORS_HEX } from './constants';
+// apps/web/src/components/graph/node-objects.ts
+import { ENTITY_COLORS_CSS } from './constants';
 import type { GraphNode } from '../../lib/graph-types';
 
-const cache = new Map<string, THREE.Group>();
+// Convert CSS hex color (#rrggbb) to rgba string
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
-export function createNodeObject(node: GraphNode): THREE.Group {
-  const hit = cache.get(node.id);
-  if (hit) return hit;
-
-  const group  = new THREE.Group();
-  const isGod  = node.isGodNode ?? false;
-  const degree = node.degree ?? 0;
-  const hex    = ENTITY_COLORS_HEX[node.entityType] ?? 0x888888;
-
-  // Smaller nodes — edges are the visual hero now
-  const radius = 2 + Math.min(degree * 0.15, 4) + (isGod ? 4 : 0);
-  // Regular leaf: radius 2. High-degree hub: radius ~6. God-node: radius ~10.
-
-  const geo = new THREE.SphereGeometry(radius, 12, 12);
-  const mat = new THREE.MeshStandardMaterial({
-    color: hex,
-    emissive: hex,
-    emissiveIntensity: isGod ? 2.0 : 1.0,
-    roughness: 0.2,
-    metalness: 0.1,
-    transparent: true,
-    opacity: 1.0,
-    toneMapped: false, // render the exact hex so nodes match the legend swatches
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  group.add(mesh);
-
-  // Invisible, larger click hitbox. The visible sphere is only 2–10px so it's
-  // nearly impossible to click at fit-to-view zoom; this transparent sphere
-  // (opacity 0 but visible:true → still raycastable) gives a generous target.
-  // A raycast hit climbs to this Group's __graphObjType, so it resolves to the node.
-  const hitR = Math.max(radius * 2.5, 9);
-  const hitbox = new THREE.Mesh(
-    new THREE.SphereGeometry(hitR, 8, 8),
-    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
-  );
-  hitbox.userData.isHitbox = true;
-  group.add(hitbox);
-
-  // NO glow sprite — removed. Edges carry the colour now.
-
-  group.userData = {
-    nodeId: node.id,
-    isGod,
-    mat,
-    baseEmissive: isGod ? 2.0 : 1.0,
-    mesh,
-    glow: null, // null so highlight.ts doesn't crash
+// Node radius — same scale as before: 2–10 units
+export function getRadius(node: GraphNode): number {
+  const base: Record<string, number> = {
+    doc: 4, concept: 3, decision: 5, flow: 4,
+    flow_step: 2, task: 3, project: 6, rationale: 2, session: 2,
   };
-
-  cache.set(node.id, group);
-  return group;
+  return (base[node.entityType] ?? 3)
+    + Math.min((node.degree ?? 0) * 0.25, 5)
+    + ((node.isGodNode ?? false) ? 6 : 0);
 }
 
-// All automated motion removed per product direction — the scene is static
-// unless the user moves the mouse (pan / zoom / orbit). Kept as a no-op so the
-// render-loop call signature and any callers remain intact.
-export function animateNode(_group: THREE.Group, _dt: number, _t: number): void {
-  // intentionally empty — no ambient/automated motion
+// Draw a single node on the 2D canvas.
+// Called by ForceGraph2D's nodeCanvasObject prop every frame.
+export function drawNode(
+  node: GraphNode,
+  ctx: CanvasRenderingContext2D,
+  selected: boolean,
+  connected: boolean,
+  anySelected: boolean,
+): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const x      = (node as any).x ?? 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const y      = (node as any).y ?? 0;
+  const color  = ENTITY_COLORS_CSS[node.entityType] ?? '#ffffff';
+  const radius = getRadius(node);
+  const isGod  = node.isGodNode ?? false;
+
+  // Opacity dimming when something else is selected
+  let alpha = 1.0;
+  if (anySelected && !selected && !connected) alpha = 0.06;
+
+  // ── Glow halo ────────────────────────────────────────────────────
+  // Soft radial gradient behind the node — the "glow" from the reference image
+  const glowR = radius * (isGod ? 4.5 : 3.0);
+  const grd   = ctx.createRadialGradient(x, y, 0, x, y, glowR);
+  grd.addColorStop(0,   hexToRgba(color, 0.55 * alpha));
+  grd.addColorStop(0.3, hexToRgba(color, 0.18 * alpha));
+  grd.addColorStop(1,   hexToRgba(color, 0));
+  ctx.beginPath();
+  ctx.arc(x, y, glowR, 0, 2 * Math.PI);
+  ctx.fillStyle = grd;
+  ctx.fill();
+
+  // ── Node dot ──────────────────────────────────────────────────────
+  // The small solid circle — same as the reference dots
+  const dotAlpha = selected ? 1.0 : alpha;
+  const dotR     = selected ? radius * 1.3 : radius;
+  ctx.beginPath();
+  ctx.arc(x, y, dotR, 0, 2 * Math.PI);
+  ctx.fillStyle = hexToRgba(color, dotAlpha);
+  ctx.fill();
+
+  // God-node: bright white inner core
+  if (isGod && dotAlpha > 0.1) {
+    ctx.beginPath();
+    ctx.arc(x, y, dotR * 0.4, 0, 2 * Math.PI);
+    ctx.fillStyle = `rgba(255,255,255,${0.7 * dotAlpha})`;
+    ctx.fill();
+  }
 }
 
-export function clearNodeCache(): void { cache.clear(); }
+// Pointer area — how far from node centre counts as a click.
+// The default (node radius) is too small for tiny nodes.
+export function getPointerArea(node: GraphNode): number {
+  return Math.max(getRadius(node) * 2.5, 8);
+}

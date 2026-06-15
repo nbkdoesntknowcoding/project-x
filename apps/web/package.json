@@ -44,6 +44,7 @@
     "prosemirror-view": "^1.41.8",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-force-graph-2d": "^1.29.1",
     "react-force-graph-3d": "^1.29.1",
     "recharts": "^3.8.1",
     "remark-math": "^6.0.0",

@@ -1,76 +1,81 @@
-import * as THREE from 'three';
+// apps/web/src/components/graph/environment.ts
 
-export function setupBlackEnvironment(renderer: THREE.WebGLRenderer, scene: THREE.Scene): void {
-  renderer.setClearColor(0x000000, 1);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  // react-force-graph's renderer defaults to ACESFilmic tone mapping, which
-  // desaturates/shifts colours so nodes render differently from the flat hex
-  // swatches in the legend. Disable it so node colours match the legend exactly.
-  renderer.toneMapping = THREE.NoToneMapping;
-  scene.background = null;
-  scene.fog        = null;
-}
+// Pre-compute star field positions once (static, never recalculated)
+export interface Star { x: number; y: number; r: number; a: number; }
 
-export function createStarField(): THREE.Points {
-  const n = 2000;
-  const pos = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    const phi   = Math.acos(2 * Math.random() - 1);
-    const theta = 2 * Math.PI * Math.random();
-    const r     = 1500 + Math.random() * 1000;
-    pos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
-    pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
-    pos[i*3+2] = r * Math.cos(phi);
+export function generateStars(canvasW: number, canvasH: number): Star[] {
+  const stars: Star[] = [];
+  for (let i = 0; i < 200; i++) {
+    stars.push({
+      x: Math.random() * canvasW,
+      y: Math.random() * canvasH,
+      r: Math.random() * 0.8 + 0.2,
+      a: Math.random() * 0.35 + 0.05,
+    });
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const obj = new THREE.Points(geo, new THREE.PointsMaterial({
-    color: 0xffffff, size: 1.0, transparent: true,
-    opacity: 0.3, sizeAttenuation: true, depthWrite: false,
-  }));
-  obj.userData.isStarField = true;
-  // Never interactive — exclude from pointer raycasting so it can't absorb node clicks.
-  obj.raycast = () => {};
-  return obj;
+  return stars;
 }
 
-// Human brain boundary. Called ONLY in onEngineStop with actual graph radius.
-// Shell at graphRadius × 1.5. Brain proportions from MRI: AP(z)=1.0, LR(x)=0.83, SI(y)=0.69.
-export function createBrainBoundaryShell(graphRadius: number): THREE.Points {
-  const r = graphRadius;
-  const n = 2000;
-  const pos = new Float32Array(n * 3);
+// Draw stars onto the canvas background (called before nodes/edges render)
+export function drawStars(ctx: CanvasRenderingContext2D, stars: Star[]): void {
+  ctx.save();
+  for (const s of stars) {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, 2 * Math.PI);
+    ctx.fillStyle = `rgba(255,255,255,${s.a})`;
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Brain boundary shell — 2D projection of the 3D brain shape.
+// Pre-computed ellipse points with the same MRI proportions as before.
+// Called once after onEngineStop with the graph's bounding radius.
+export interface BrainPoint { x: number; y: number; }
+
+export function generateBrainShell(
+  cx: number,          // graph centre X in graph coords
+  cy: number,          // graph centre Y in graph coords
+  graphRadius: number, // actual radius of settled graph
+): BrainPoint[] {
+  const r    = graphRadius * 1.5;
+  const pts: BrainPoint[] = [];
   const golden = Math.PI * (1 + Math.sqrt(5));
 
-  for (let i = 0; i < n; i++) {
-    const t    = i / n;
+  for (let i = 0; i < 600; i++) {
+    const t    = i / 600;
     const incl = Math.acos(1 - 2 * t);
     const azim = golden * i;
+    // Project 3D brain shape onto XY plane (top-down view)
     let x = 0.83 * Math.sin(incl) * Math.cos(azim);
-    let y = 0.69 * Math.cos(incl);
-    let z = 1.00 * Math.sin(incl) * Math.sin(azim);
+    const y = 1.00 * Math.sin(incl) * Math.sin(azim);
 
-    // Interhemispheric fissure
-    if (y > 0) y -= 0.10 * Math.exp(-Math.pow(x / 0.07, 2)) * (y / 0.69);
-    // Frontal pole
-    if (z < -0.65) { const f = (-z-0.65)/0.35; x *= (1-0.25*f); y *= (1-0.15*f); }
-    // Occipital pole
-    if (z > 0.65)  { const f = (z-0.65)/0.35;  x *= (1-0.35*f); y *= (1-0.20*f); }
-    // Temporal lobe
-    if (y < 0 && y > -0.45 && Math.abs(x) > 0.55 && z > -0.4 && z < 0.3) { x *= 1.12; y -= 0.08; }
+    // Frontal/occipital narrowing (z-axis mapped to y in 2D top view)
+    if (y < -0.65) { const f = (-y - 0.65) / 0.35; x *= (1 - 0.25 * f); }
+    if (y > 0.65)  { const f = (y - 0.65) / 0.35;  x *= (1 - 0.35 * f); }
 
-    pos[i*3] = x*r; pos[i*3+1] = y*r; pos[i*3+2] = z*r;
+    // Interhemispheric fissure (centre dip at x≈0)
+    // In top-down view this is a slight inward curve at the midline
+    const fissure = 0.05 * Math.exp(-Math.pow(x / 0.07, 2));
+    if (x > 0) x -= fissure;
+    else x += fissure;
+
+    pts.push({ x: cx + x * r, y: cy + y * r });
   }
+  return pts;
+}
 
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const obj = new THREE.Points(geo, new THREE.PointsMaterial({
-    color: 0x7b9ec4, size: 1.8, transparent: true,
-    opacity: 0.30, sizeAttenuation: true,
-    depthWrite: false, blending: THREE.AdditiveBlending,
-  }));
-  obj.userData.isBrainShell = true;
-  // Never interactive — exclude from pointer raycasting so it can't absorb node clicks.
-  obj.raycast = () => {};
-  return obj;
+// Draw brain shell dots onto the canvas
+export function drawBrainShell(
+  ctx: CanvasRenderingContext2D,
+  pts: BrainPoint[],
+): void {
+  ctx.save();
+  ctx.fillStyle = 'rgba(123,158,196,0.28)';
+  for (const p of pts) {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 1.2, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+  ctx.restore();
 }

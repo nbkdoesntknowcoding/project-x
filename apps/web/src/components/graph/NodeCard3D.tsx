@@ -1,65 +1,51 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import * as THREE from 'three';
+import { useEffect, useState } from 'react';
 import { ENTITY_LABELS, ENTITY_COLORS_CSS, EDGE_LABELS } from './constants';
 import { openDocPreview } from '../../lib/preview';
 import type { GraphNode, GraphEdge } from '../../lib/graph-types';
 
 interface Props {
-  node: GraphNode; edges: GraphEdge[]; allNodes: GraphNode[];
-  camera: THREE.Camera; domElement: HTMLCanvasElement;
-  onClose: () => void; onOpenNode: (id: string) => void;
+  node: GraphNode | null;
+  edges: GraphEdge[];
+  allNodes: GraphNode[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fgRef: React.RefObject<any>;  // the ForceGraph2D ref
+  onClose: () => void;
+  onOpenNode: (id: string) => void;
 }
 
-const CARD_W = 320;
-const MARGIN = 16;
+export function NodeCard3D({ node, edges, allNodes, fgRef, onClose, onOpenNode }: Props) {
+  const [pos, setPos] = useState<{x:number;y:number}|null>(null);
 
-// Horizontal placement uses the FIXED card width (no measurement) so it can
-// never overflow: place to the right of the node if there's room, else to the
-// left, else dock to the viewport's right edge via CSS `right` (impossible to
-// clip). Returns either { left } or { right }.
-function horizontalPlacement(anchorX: number): { left: number } | { right: number } {
-  const vw = window.innerWidth;
-  if (anchorX + 24 + CARD_W <= vw - MARGIN) return { left: Math.max(MARGIN, anchorX + 24) };
-  if (anchorX - 24 - CARD_W >= MARGIN)      return { left: anchorX - 24 - CARD_W };
-  return { right: MARGIN };
-}
-
-export function NodeCard3D({ node, edges, allNodes, camera, domElement, onClose, onOpenNode }: Props) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  // anchor = the node's projected screen position; top = clamped vertical position.
-  const [anchor, setAnchor] = useState<{x:number;y:number}|null>(null);
-  const [top, setTop] = useState<number|null>(null);
-
-  // Project the selected node to screen coords whenever it changes.
   useEffect(() => {
-    if (!node) { setAnchor(null); setTop(null); return; }
-    const v = new THREE.Vector3(node.x??0, node.y??0, node.z??0);
-    v.project(camera);
-    const rect = domElement.getBoundingClientRect();
-    setAnchor({ x:(v.x*0.5+0.5)*rect.width+rect.left, y:(-v.y*0.5+0.5)*rect.height+rect.top });
-    setTop(null);
-  }, [node, camera, domElement]);
+    if (!node || !fgRef) { setPos(null); return; }
 
-  // Vertical clamp needs the card's measured height (width is fixed → handled
-  // without measurement). Runs before paint, so no flicker.
-  useLayoutEffect(() => {
-    if (!anchor || !cardRef.current) return;
-    const h = cardRef.current.offsetHeight || 360;
-    setTop(Math.min(Math.max(MARGIN, anchor.y - 60), Math.max(MARGIN, window.innerHeight - h - MARGIN)));
-  }, [anchor]);
+    // ForceGraph2D: graph2ScreenCoords converts graph coords to screen coords
+    const screenPt = fgRef.current?.graph2ScreenCoords(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (node as any).x ?? 0,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (node as any).y ?? 0,
+    );
+    if (!screenPt) { setPos(null); return; }
 
-  if (!anchor) return null;
+    const { x: sx, y: sy } = screenPt;
+
+    setPos({
+      x: sx > window.innerWidth / 2
+        ? Math.max(sx - 370, 10)          // open to the LEFT when node is right-side
+        : Math.min(sx + 20, window.innerWidth - 350),  // open to the RIGHT when left-side
+      y: Math.max(Math.min(sy - 80, window.innerHeight - 520), 20),
+    });
+  }, [node]); // fgRef excluded — snapshot at click time
+
+  if (!pos || !node) return null;
   const color = ENTITY_COLORS_CSS[node.entityType]??'#888';
   const label = ENTITY_LABELS[node.entityType]??node.entityType;
   const conns = edges.filter(e=>e.fromNodeId===node.id||e.toNodeId===node.id).slice(0,5);
 
-  const hpos = horizontalPlacement(anchor.x);
-  // Provisional vertical until the layout effect measures the height (pre-paint).
-  const topVal = top ?? Math.min(Math.max(MARGIN, anchor.y - 60), Math.max(MARGIN, window.innerHeight - 376));
-
   return (
-    <div ref={cardRef} style={{ position:'fixed', ...hpos, top:topVal, width:CARD_W, zIndex:1000,
-      maxHeight:`calc(100vh - ${MARGIN * 2}px)`, overflowY:'auto', overflowX:'hidden',
+    <div style={{ position:'fixed', left:pos.x, top:pos.y, width:320, zIndex:1000,
+      maxHeight:'calc(100vh - 32px)', overflowY:'auto', overflowX:'hidden',
       background:'rgba(8,8,8,0.94)', backdropFilter:'blur(20px)',
       border:`0.5px solid ${color}44`, borderRadius:14, padding:20,
       fontFamily:'var(--sans)' }}>
