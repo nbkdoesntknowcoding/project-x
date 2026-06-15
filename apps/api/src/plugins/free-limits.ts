@@ -11,7 +11,7 @@
  * Paid workspaces (any active subscription) bypass limits entirely.
  */
 
-import { and, count, eq, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, isNull } from 'drizzle-orm';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { db } from '../db/index.js';
 import { docs, flows, subscriptions } from '../db/schema.js';
@@ -22,11 +22,15 @@ const FREE_FLOW_LIMIT = 5;
 
 /** True if this workspace has an active paid subscription. */
 async function hasPaidSubscription(workspaceId: string): Promise<boolean> {
+  // Read the NEWEST subscription row (a workspace accumulates rows on every
+  // plan change/upgrade; older ones become cancelled). Must match
+  // checkSubscriptionGate's desc(createdAt) ordering — reading the oldest row
+  // wrongly treated upgraded Business workspaces as free.
   const sub = await db
     .select({ status: subscriptions.status })
     .from(subscriptions)
     .where(eq(subscriptions.workspaceId, workspaceId))
-    .orderBy(subscriptions.createdAt)
+    .orderBy(desc(subscriptions.createdAt))
     .limit(1);
 
   return sub.length > 0 && ACTIVE_STATUSES.has(sub[0]!.status as never);
