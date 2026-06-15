@@ -26,6 +26,7 @@ export function createNodeObject(node: GraphNode): THREE.Group {
     metalness: 0.1,
     transparent: true,
     opacity: 1.0,
+    toneMapped: false, // render the exact hex so nodes match the legend swatches
   });
   const mesh = new THREE.Mesh(geo, mat);
   group.add(mesh);

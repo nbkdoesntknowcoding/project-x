@@ -3,6 +3,10 @@ import * as THREE from 'three';
 export function setupBlackEnvironment(renderer: THREE.WebGLRenderer, scene: THREE.Scene): void {
   renderer.setClearColor(0x000000, 1);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  // react-force-graph's renderer defaults to ACESFilmic tone mapping, which
+  // desaturates/shifts colours so nodes render differently from the flat hex
+  // swatches in the legend. Disable it so node colours match the legend exactly.
+  renderer.toneMapping = THREE.NoToneMapping;
   scene.background = null;
   scene.fog        = null;
 }
