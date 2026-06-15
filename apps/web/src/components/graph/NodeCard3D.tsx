@@ -13,35 +13,39 @@ interface Props {
 const CARD_W = 320;
 const MARGIN = 16;
 
+// Horizontal placement uses the FIXED card width (no measurement) so it can
+// never overflow: place to the right of the node if there's room, else to the
+// left, else dock to the viewport's right edge via CSS `right` (impossible to
+// clip). Returns either { left } or { right }.
+function horizontalPlacement(anchorX: number): { left: number } | { right: number } {
+  const vw = window.innerWidth;
+  if (anchorX + 24 + CARD_W <= vw - MARGIN) return { left: Math.max(MARGIN, anchorX + 24) };
+  if (anchorX - 24 - CARD_W >= MARGIN)      return { left: anchorX - 24 - CARD_W };
+  return { right: MARGIN };
+}
+
 export function NodeCard3D({ node, edges, allNodes, camera, domElement, onClose, onOpenNode }: Props) {
   const cardRef = useRef<HTMLDivElement>(null);
-  // anchor = the node's projected screen position; pos = the clamped card position.
+  // anchor = the node's projected screen position; top = clamped vertical position.
   const [anchor, setAnchor] = useState<{x:number;y:number}|null>(null);
-  const [pos, setPos] = useState<{x:number;y:number}|null>(null);
+  const [top, setTop] = useState<number|null>(null);
 
   // Project the selected node to screen coords whenever it changes.
   useEffect(() => {
-    if (!node) { setAnchor(null); setPos(null); return; }
+    if (!node) { setAnchor(null); setTop(null); return; }
     const v = new THREE.Vector3(node.x??0, node.y??0, node.z??0);
     v.project(camera);
     const rect = domElement.getBoundingClientRect();
     setAnchor({ x:(v.x*0.5+0.5)*rect.width+rect.left, y:(-v.y*0.5+0.5)*rect.height+rect.top });
-    setPos(null);
+    setTop(null);
   }, [node, camera, domElement]);
 
-  // After render, measure the actual card and clamp it fully on-screen.
-  // Prefer placing to the right of the node; flip to the left if it would
-  // overflow; clamp vertically too. Runs before paint, so no flicker.
+  // Vertical clamp needs the card's measured height (width is fixed → handled
+  // without measurement). Runs before paint, so no flicker.
   useLayoutEffect(() => {
     if (!anchor || !cardRef.current) return;
-    const w = cardRef.current.offsetWidth || CARD_W;
     const h = cardRef.current.offsetHeight || 360;
-    let x = anchor.x + 24;
-    if (x + w > window.innerWidth - MARGIN) x = anchor.x - w - 24; // flip to the left of the node
-    x = Math.min(Math.max(MARGIN, x), Math.max(MARGIN, window.innerWidth - w - MARGIN));
-    let y = anchor.y - 60;
-    y = Math.min(Math.max(MARGIN, y), Math.max(MARGIN, window.innerHeight - h - MARGIN));
-    setPos({ x, y });
+    setTop(Math.min(Math.max(MARGIN, anchor.y - 60), Math.max(MARGIN, window.innerHeight - h - MARGIN)));
   }, [anchor]);
 
   if (!anchor) return null;
@@ -49,12 +53,12 @@ export function NodeCard3D({ node, edges, allNodes, camera, domElement, onClose,
   const label = ENTITY_LABELS[node.entityType]??node.entityType;
   const conns = edges.filter(e=>e.fromNodeId===node.id||e.toNodeId===node.id).slice(0,5);
 
-  // Provisional position until the layout effect measures + refines (pre-paint).
-  const left = pos?.x ?? Math.min(Math.max(MARGIN, anchor.x + 24), window.innerWidth - CARD_W - MARGIN);
-  const top  = pos?.y ?? Math.min(Math.max(MARGIN, anchor.y - 60), window.innerHeight - 376);
+  const hpos = horizontalPlacement(anchor.x);
+  // Provisional vertical until the layout effect measures the height (pre-paint).
+  const topVal = top ?? Math.min(Math.max(MARGIN, anchor.y - 60), Math.max(MARGIN, window.innerHeight - 376));
 
   return (
-    <div ref={cardRef} style={{ position:'fixed', left, top, width:CARD_W, zIndex:1000,
+    <div ref={cardRef} style={{ position:'fixed', ...hpos, top:topVal, width:CARD_W, zIndex:1000,
       maxHeight:`calc(100vh - ${MARGIN * 2}px)`, overflowY:'auto', overflowX:'hidden',
       background:'rgba(8,8,8,0.94)', backdropFilter:'blur(20px)',
       border:`0.5px solid ${color}44`, borderRadius:14, padding:20,
