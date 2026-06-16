@@ -39,8 +39,7 @@ from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketTransport,
     FastAPIWebsocketParams,
 )
-from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.serializers.base_serializer import FrameSerializer, FrameSerializerType
+from pipecat.serializers.base_serializer import FrameSerializer  # 1.2.1 has no FrameSerializerType
 from pipecat.frames.frames import Frame, InputAudioRawFrame, OutputAudioRawFrame
 
 from pipecat.services.deepgram.stt import DeepgramSTTService
@@ -77,10 +76,8 @@ class RawMulawSerializer(FrameSerializer):
 
     SAMPLE_RATE = 8000
 
-    @property
-    def type(self) -> FrameSerializerType:
-        return FrameSerializerType.BINARY
-
+    # No `type` property in Pipecat 1.2.1 — the transport sends binary when
+    # serialize() returns bytes (our case) and text when it returns str.
     async def serialize(self, frame: Frame):
         if isinstance(frame, OutputAudioRawFrame):
             # PCM16 (pipeline rate) -> µ-law 8kHz
@@ -107,11 +104,14 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         params=FastAPIWebsocketParams(
             serializer=serializer,
             audio_in_enabled=True,
+            audio_in_sample_rate=8000,
             audio_out_enabled=True,
+            audio_out_sample_rate=8000,   # native µ-law rate
             add_wav_header=False,
-            vad_enabled=True,
-            vad_analyzer=SileroVADAnalyzer(),
-            audio_out_sample_rate=8000,
+            # NOTE: Pipecat 1.2.1's FastAPIWebsocketParams has no vad_enabled/
+            # vad_analyzer fields (verified). VAD / turn-detection wiring is a
+            # Phase 2 follow-up; Deepgram STT still emits transcripts without it,
+            # so Phase 1 capture verification works.
         ),
     )
 
