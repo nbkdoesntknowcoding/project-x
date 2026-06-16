@@ -4,40 +4,33 @@
 # stack, because it needs host PulseAudio + ipc:host + Chromium — kept isolated
 # from the core api/workers stack (infra/docker-compose.prod.yml).
 #
+# All secrets come straight from infra/.env via `env_file` (same as the core api
+# service) — no ${VAR} interpolation, so no need to pass --env-file on the CLI.
+#
 # Prereq (run once on the host): bash scripts/setup-pulseaudio.sh
-# Deploy:  docker compose -f docker-compose.meeting.yml --env-file infra/.env up -d --build
+# Deploy:  docker compose -f docker-compose.meeting.yml up -d --build
 #
 # voice-clone/ is NOT in any build context — it is local dev reference only.
 services:
   pipecat-meeting:
     build: ./pipecat-meeting
     restart: unless-stopped
+    env_file:
+      - infra/.env            # OPENAI/DEEPGRAM/ELEVENLABS/DATABASE_URL/MNEMA_*/ACTIVE_PERSONA_ID
     ports:
-      - "127.0.0.1:8765:8765"   # WebSocket for audio bridge (internal only)
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_LLM_MODEL=${OPENAI_LLM_MODEL:-gpt-4o-mini}
-      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
-      - ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}
-      - ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID}
-      - ELEVENLABS_OUTPUT_FORMAT=${ELEVENLABS_OUTPUT_FORMAT:-ulaw_8000}
-      - DATABASE_URL=${DATABASE_URL}
-      - ACTIVE_PERSONA_ID=${ACTIVE_PERSONA_ID}
-      - MNEMA_API_URL=${MNEMA_API_URL}
-      - MNEMA_API_KEY=${MNEMA_API_KEY}
+      - "127.0.0.1:8765:8765" # WebSocket for audio bridge (internal only)
 
   meeting-bot:
     build: ./meeting-bot
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:3001:3001"   # /join control endpoint (internal only)
+    env_file:
+      - infra/.env            # BOT_GOOGLE_EMAIL/MNEMA_*/ENABLE_INJECTION
     environment:
-      - BOT_GOOGLE_EMAIL=${BOT_GOOGLE_EMAIL}
+      # service-specific overrides (not secrets)
       - PIPECAT_MEETING_WS_URL=ws://pipecat-meeting:8765
-      - MNEMA_API_URL=${MNEMA_API_URL}
-      - MNEMA_API_KEY=${MNEMA_API_KEY}
-      - ENABLE_INJECTION=${ENABLE_INJECTION:-false}   # Phase 2 gate — keep false until Phase 1 verified
       - PULSE_SERVER=unix:/run/pulse/native
+    ports:
+      - "127.0.0.1:3001:3001" # /join control endpoint (internal only)
     volumes:
       - ./.auth:/app/.auth        # Saved Google auth state
       - /run/pulse:/run/pulse     # PulseAudio socket from host
