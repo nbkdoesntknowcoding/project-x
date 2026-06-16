@@ -7,7 +7,7 @@ import { forceRadial } from 'd3-force-3d';
 // Cast to any so the documented props pass typecheck.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ForceGraph2D = ForceGraph2DLib as any;
-import { drawNode, getPointerArea } from './node-objects';
+import { drawNode } from './node-objects';
 import { setHighlight, clearHighlight, highlightState } from './highlight';
 import {
   generateStars, drawStars,
@@ -115,21 +115,6 @@ export function Graph3D({ nodes, edges }: Props) {
     drawNode(n, ctx, selected, connected, any);
   }, []);
 
-  // ── nodePointerAreaPaint — defines click hit area ────────────────
-  const nodePointerAreaPaint = useCallback((
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    node: any,
-    colour: string,
-    ctx: CanvasRenderingContext2D,
-  ) => {
-    const n = node as GraphNode;
-    ctx.fillStyle = colour;
-    ctx.beginPath();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ctx.arc((node as any).x ?? 0, (node as any).y ?? 0, getPointerArea(n), 0, 2 * Math.PI);
-    ctx.fill();
-  }, []);
-
   // ── onRenderFramePre — draws stars + brain shell before nodes ────
   // This callback runs inside ForceGraph2D's own render loop (no extra RAF)
   const onRenderFramePre = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -190,7 +175,7 @@ export function Graph3D({ nodes, edges }: Props) {
 
           // ── Node rendering ────────────────────────────────────
           nodeCanvasObject={nodeCanvasObject}
-          nodePointerAreaPaint={nodePointerAreaPaint}
+          nodeRelSize={5}
           nodeLabel={nodeLabel}
 
           // ── Link styling ──────────────────────────────────────
@@ -237,12 +222,9 @@ export function Graph3D({ nodes, edges }: Props) {
           onNodeClick={onNodeClick}
           onBackgroundClick={onBgClick}
           showNavInfo={false}
+          enablePointerInteraction={true}
           enableZoomInteraction={true}
           enablePanInteraction={true}
-          // Keep repainting after the engine cools so a click (highlight) shows
-          // and a React re-render can never leave a blank, un-repainted canvas.
-          // Cheap on CPU in 2D — that's the whole reason we moved off WebGL.
-          autoPauseRedraw={false}
         />
       )}
 
