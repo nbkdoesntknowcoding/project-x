@@ -13,3 +13,8 @@ apps/api/keys/
 infra/.env
 infra/.env.*
 !infra/.env.prod.example
+
+# Meeting bot
+__pycache__/
+*.pyc
+.auth/
