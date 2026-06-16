@@ -42,33 +42,35 @@ export function Graph3D({ nodes, edges }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // ── Post-mount resize kick ───────────────────────────────────────
-  // On some setups (notably Retina / devicePixelRatio=2, inside a grid that lays
-  // out after the canvas first paints), react-force-graph's OFFSCREEN hit-test
-  // canvas ends up out of sync with the visible canvas: the graph draws fine but
-  // clicks/hover hit nothing until the next window resize. Users found that
-  // opening devtools (a resize) "fixes" it — that resize re-runs the library's
-  // adjustCanvasSize, which re-syncs the hit-test canvas. Do that automatically:
-  // once the graph has a size, nudge the dimensions (and restore) a couple of
-  // times over the first second so the hit-test canvas is rebuilt at the correct
-  // size without the user having to resize anything.
-  const kicked = useRef(false);
-  useEffect(() => {
-    if (dims.w === 0 || kicked.current) return;
-    kicked.current = true;
+  // ── Hit-test canvas re-sync ──────────────────────────────────────
+  // On Retina (devicePixelRatio=2), inside a grid that finishes laying out AFTER
+  // the canvas first paints, react-force-graph's OFFSCREEN hit-test canvas ends up
+  // out of sync with the visible one: the graph draws fine but clicks/hover hit
+  // nothing until the next *window resize*. Opening devtools (a resize) is what
+  // "fixes" it — the resize re-runs the library's adjustCanvasSize, rebuilding the
+  // hit-test canvas at the correct size/scale. Replicate that resize automatically.
+  //
+  // The ForceGraph2D ref exposes no width()/height() setters, so the only way to
+  // re-run adjustCanvasSize is to change the width/height PROPS. Perturb dims by 1px
+  // then restore on the next frame — two separate tasks so React 18 doesn't batch
+  // them into a single (no-op) update. Do it AFTER the graph has settled; firing
+  // during the 300-node simulation gets absorbed before the final zoom locks in.
+  const resyncHit = useCallback(() => {
     const el = wrapRef.current;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    const rafs: number[] = [];
-    const kick = () => {
-      const w = el?.clientWidth ?? dims.w;
-      const h = el?.clientHeight ?? dims.h;
-      if (w === 0 || h === 0) return;
-      setDims({ w: w - 1, h });                       // perturb → forces adjustCanvasSize
-      rafs.push(requestAnimationFrame(() => setDims({ w, h }))); // restore → re-syncs hit canvas
-    };
-    [120, 400, 900].forEach(ms => timers.push(setTimeout(kick, ms)));
-    return () => { timers.forEach(clearTimeout); rafs.forEach(cancelAnimationFrame); };
-  }, [dims.w]);
+    if (!el) return;
+    const w = el.clientWidth, h = el.clientHeight;
+    if (!w || !h) return;
+    setDims({ w: w - 1, h });                       // perturb → adjustCanvasSize at "new" size
+    requestAnimationFrame(() => setDims({ w, h }));  // restore → rebuilds hit-test canvas
+  }, []);
+
+  // Fallback in case onEngineStop is slow/never fires: re-sync a few times over the
+  // first few seconds after the graph has a size.
+  useEffect(() => {
+    if (dims.w === 0) return;
+    const timers = [1500, 4000, 7000].map(ms => setTimeout(resyncHit, ms));
+    return () => timers.forEach(clearTimeout);
+  }, [dims.w === 0, resyncHit]);
 
   // ── Stars (generated once when dims are known) ──────────────────
   useEffect(() => {
@@ -264,6 +266,11 @@ export function Graph3D({ nodes, edges }: Props) {
 
             // Fit the view to show all nodes with padding
             fg.current?.zoomToFit(800, 60);
+
+            // The graph is now settled and visible — re-sync the offscreen hit-test
+            // canvas so clicks work without the user having to resize the window.
+            // Fire just after zoomToFit finishes (its duration is 800ms).
+            setTimeout(resyncHit, 900);
           }}
 
           // ── Background pass ───────────────────────────────────
