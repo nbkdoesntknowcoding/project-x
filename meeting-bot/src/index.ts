@@ -17,7 +17,7 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', injection: ENABLE_INJ
 
 // POST /join — called by Mnema or calendar integration when a meeting starts
 app.post('/join', async (req, res) => {
-  const { meetingUrl, meetingPlatform, meetingTitle, projectId } = req.body;
+  const { meetingUrl, meetingPlatform, meetingTitle, projectId, meetingPassword } = req.body;
 
   const PIPECAT_WS = process.env.PIPECAT_MEETING_WS_URL ?? 'ws://localhost:8765';
   const PULSE_SINK = process.env.PULSE_SINK ?? 'mnema_meeting_sink';
@@ -47,26 +47,25 @@ app.post('/join', async (req, res) => {
     }
 
     // Join the meeting
-    let bot;
     if (meetingPlatform === 'zoom') {
-      bot = new ZoomBot({
+      const bot = new ZoomBot({
         displayName: 'Mnema',
         googleAccountEmail: '',
         googleAccountPassword: '',
         pulseSinkName: PULSE_SINK,
         pulseSourceName: PULSE_SOURCE,
       });
+      await bot.join(meetingUrl, meetingPassword);  // meetingUrl = numeric Zoom meeting id
     } else {
-      bot = new GoogleMeetBot({
+      const bot = new GoogleMeetBot({
         displayName: 'Mnema',
         googleAccountEmail: process.env.BOT_GOOGLE_EMAIL!,
         googleAccountPassword: process.env.BOT_GOOGLE_PASSWORD!,
         pulseSinkName: PULSE_SINK,
         pulseSourceName: PULSE_SOURCE,
       });
+      await bot.join(meetingUrl);
     }
-
-    await bot.join(meetingUrl);
 
     res.json({ success: true, message: 'Bot joined meeting', meetingTitle, projectId });
   } catch (err) {
