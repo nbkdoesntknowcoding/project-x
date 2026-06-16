@@ -144,7 +144,11 @@ export function Graph3D({ nodes, edges }: Props) {
   // (e.g. after a click sets state), react-force-graph resets canvas state, and
   // with redraw paused that blanks the canvas. They read the mutable
   // highlightState module object, so [] deps still see current selection.
-  const nodeCanvasObjectMode = useCallback(() => 'replace' as const, []);
+  //
+  // NOTE: do NOT pass a nodeCanvasObjectMode accessor — supplying one (even one
+  // returning 'replace') makes react-force-graph-2d never call nodeCanvasObject,
+  // so all nodes vanish. The library already defaults the mode to 'replace' when
+  // nodeCanvasObject is set.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodeLabel = useCallback((n: any) => (n as GraphNode).label, []);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -186,7 +190,6 @@ export function Graph3D({ nodes, edges }: Props) {
 
           // ── Node rendering ────────────────────────────────────
           nodeCanvasObject={nodeCanvasObject}
-          nodeCanvasObjectMode={nodeCanvasObjectMode}  // our drawNode fully replaces default
           nodePointerAreaPaint={nodePointerAreaPaint}
           nodeLabel={nodeLabel}
 
@@ -203,17 +206,19 @@ export function Graph3D({ nodes, edges }: Props) {
           warmupTicks={80}
 
           onEngineStop={() => {
-            // Compute brain shell from settled node positions
-            const data = fg.current?.graphData();
+            // NOTE: react-force-graph-2d's ref has NO graphData() method (only the
+            // 3D build does). Read positions from the memoized graphData.nodes — the
+            // library mutates those objects in place with x/y as it simulates.
             let maxR = 0, cx = 0, cy = 0;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            data?.nodes?.forEach((n: any) => {
+            const ns = graphData.nodes as any[];
+            ns.forEach((n) => {
               const r = Math.sqrt((n.x ?? 0) ** 2 + (n.y ?? 0) ** 2);
               if (r > maxR) maxR = r;
               cx += (n.x ?? 0);
               cy += (n.y ?? 0);
             });
-            const count = data?.nodes?.length ?? 1;
+            const count = ns.length || 1;
             cx /= count; cy /= count;
 
             if (maxR > 10) {
