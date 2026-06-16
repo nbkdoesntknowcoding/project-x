@@ -79,8 +79,10 @@ export function drawNode(
   }
 }
 
-// Pointer area — how far from node centre counts as a click.
-// The default (node radius) is too small for tiny nodes.
+// Pointer hit radius — must MATCH the visible dot so "click what you see" holds.
+// Big hit areas (e.g. degree-based) make hubs swallow nearby small nodes, so a
+// click on a doc opens an overlapping task. Keep it tight: the dot size, with a
+// small floor so tiny leaves are still hittable.
 export function getPointerArea(node: GraphNode): number {
-  return Math.max(getRadius(node) * 2.5, 8);
+  return Math.max(getRadius(node) + 1, 5);
 }

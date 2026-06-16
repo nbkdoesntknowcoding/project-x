@@ -7,7 +7,7 @@ import { forceRadial } from 'd3-force-3d';
 // Cast to any so the documented props pass typecheck.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ForceGraph2D = ForceGraph2DLib as any;
-import { drawNode } from './node-objects';
+import { drawNode, getPointerArea } from './node-objects';
 import { setHighlight, clearHighlight, highlightState } from './highlight';
 import {
   generateStars, drawStars,
@@ -115,6 +115,22 @@ export function Graph3D({ nodes, edges }: Props) {
     drawNode(n, ctx, selected, connected, any);
   }, []);
 
+  // ── nodePointerAreaPaint — hit area MATCHING the visible dot ──────
+  // Without this, react-force-graph uses a degree-based circle, so high-degree
+  // hubs get huge click zones that swallow nearby small nodes (click a doc →
+  // a task opens). Paint a tight hit circle at the node, sized to its dot.
+  const nodePointerAreaPaint = useCallback((
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    node: any,
+    colour: string,
+    ctx: CanvasRenderingContext2D,
+  ) => {
+    ctx.fillStyle = colour;
+    ctx.beginPath();
+    ctx.arc(node.x ?? 0, node.y ?? 0, getPointerArea(node as GraphNode), 0, 2 * Math.PI);
+    ctx.fill();
+  }, []);
+
   // ── onRenderFramePre — draws stars + brain shell before nodes ────
   // This callback runs inside ForceGraph2D's own render loop (no extra RAF)
   const onRenderFramePre = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -175,7 +191,7 @@ export function Graph3D({ nodes, edges }: Props) {
 
           // ── Node rendering ────────────────────────────────────
           nodeCanvasObject={nodeCanvasObject}
-          nodeRelSize={5}
+          nodePointerAreaPaint={nodePointerAreaPaint}
           nodeLabel={nodeLabel}
 
           // ── Link styling ──────────────────────────────────────
