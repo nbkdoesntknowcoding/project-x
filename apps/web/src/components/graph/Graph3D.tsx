@@ -257,6 +257,7 @@ export function Graph3D({ nodes, edges }: Props) {
           edges={edges}
           allNodes={nodes}
           fgRef={fg}
+          containerRef={wrapRef}
           onClose={onBgClick}
           onOpenNode={(id) => {
             const n = nodes.find(x => x.id === id);

@@ -175,9 +175,11 @@ export function GraphPageIsland({ initialData }: Props) {
         <Graph3D nodes={filteredNodes} edges={filteredEdges as GraphEdge[]} />
       </Suspense>
 
-      {/* Stats + type filters — top left */}
+      {/* Stats + type filters — top left.
+          pointerEvents:'none' so the panel never blocks clicks on graph nodes
+          behind it; only the actual controls (labels) re-enable pointer events. */}
       <div style={{
-        position: 'absolute', top: 14, left: 14, zIndex: 20,
+        position: 'absolute', top: 14, left: 14, zIndex: 20, pointerEvents: 'none',
         background: 'rgba(10,10,10,0.82)', backdropFilter: 'blur(14px)',
         border: '0.5px solid rgba(255,255,255,0.07)',
         borderRadius: 12, padding: '10px 14px', minWidth: 180,
@@ -192,7 +194,7 @@ export function GraphPageIsland({ initialData }: Props) {
           {/* Combined legend + filter: colour swatch (matches the node colour)
               + human-readable label, and the checkbox toggles visibility. */}
           {LEGEND_TYPES.map(type => (
-            <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
+            <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', pointerEvents: 'auto' }}>
               <input
                 type="checkbox"
                 checked={!hiddenTypes.has(type)}
@@ -210,19 +212,20 @@ export function GraphPageIsland({ initialData }: Props) {
               </span>
             </label>
           ))}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', marginTop: 4 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', marginTop: 4, pointerEvents: 'auto' }}>
             <input type="checkbox" checked={godOnly} onChange={e => setGodOnly(e.target.checked)} style={{ accentColor: '#fbbf24' }} />
             <span style={{ fontSize: 11, color: '#8a8f98', fontFamily: "'Geist Mono', monospace" }}>· god-nodes only</span>
           </label>
         </div>
       </div>
 
-      {/* Search + build — top right */}
+      {/* Search + build — top right. Same click-through treatment: the wrapper
+          doesn't block graph clicks; the input/results/button re-enable them. */}
       <div style={{
-        position: 'absolute', top: 14, right: 14, zIndex: 20,
+        position: 'absolute', top: 14, right: 14, zIndex: 20, pointerEvents: 'none',
         display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end',
       }}>
-        <div style={{ position: 'relative' }}>
+        <div style={{ position: 'relative', pointerEvents: 'auto' }}>
           <input
             type="search"
             value={searchQuery}
@@ -284,6 +287,7 @@ export function GraphPageIsland({ initialData }: Props) {
           onClick={handleBuild}
           disabled={buildStatus !== 'idle'}
           style={{
+            pointerEvents: 'auto',
             height: 32, padding: '0 14px', borderRadius: 8,
             background: buildStatus === 'queued' ? 'rgba(74,222,128,0.12)' : 'rgba(96,165,250,0.12)',
             border: buildStatus === 'queued' ? '0.5px solid rgba(74,222,128,0.3)' : '0.5px solid rgba(96,165,250,0.25)',

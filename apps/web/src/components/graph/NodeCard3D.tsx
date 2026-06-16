@@ -9,17 +9,21 @@ interface Props {
   allNodes: GraphNode[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   fgRef: React.RefObject<any>;  // the ForceGraph2D ref
+  containerRef: React.RefObject<HTMLDivElement | null>;  // the graph wrapper (for canvas offset)
   onClose: () => void;
   onOpenNode: (id: string) => void;
 }
 
-export function NodeCard3D({ node, edges, allNodes, fgRef, onClose, onOpenNode }: Props) {
+export function NodeCard3D({ node, edges, allNodes, fgRef, containerRef, onClose, onOpenNode }: Props) {
   const [pos, setPos] = useState<{x:number;y:number}|null>(null);
 
   useEffect(() => {
     if (!node || !fgRef) { setPos(null); return; }
 
-    // ForceGraph2D: graph2ScreenCoords converts graph coords to screen coords
+    // ForceGraph2D: graph2ScreenCoords returns coords RELATIVE TO THE CANVAS
+    // (0,0 = canvas top-left), not the viewport. The card is position:fixed, so we
+    // must add the canvas's viewport offset — otherwise the card opens shifted by
+    // the sidebar/topbar (e.g. 220px left, 44px up) and is easy to miss entirely.
     const screenPt = fgRef.current?.graph2ScreenCoords(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (node as any).x ?? 0,
@@ -28,7 +32,11 @@ export function NodeCard3D({ node, edges, allNodes, fgRef, onClose, onOpenNode }
     );
     if (!screenPt) { setPos(null); return; }
 
-    const { x: sx, y: sy } = screenPt;
+    const rect = containerRef?.current?.getBoundingClientRect();
+    const offX = rect?.left ?? 0;
+    const offY = rect?.top ?? 0;
+    const sx = screenPt.x + offX;
+    const sy = screenPt.y + offY;
 
     setPos({
       x: sx > window.innerWidth / 2
