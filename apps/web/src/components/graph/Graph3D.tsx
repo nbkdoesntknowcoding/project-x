@@ -64,13 +64,43 @@ export function Graph3D({ nodes, edges }: Props) {
     requestAnimationFrame(() => setDims({ w, h }));  // restore → rebuilds hit-test canvas
   }, []);
 
-  // Fallback in case onEngineStop is slow/never fires: re-sync a few times over the
-  // first few seconds after the graph has a size.
+  // Re-sync a few times over the first several seconds (covers slow settles) and
+  // whenever the window is resized.
   useEffect(() => {
     if (dims.w === 0) return;
-    const timers = [1500, 4000, 7000].map(ms => setTimeout(resyncHit, ms));
-    return () => timers.forEach(clearTimeout);
+    const timers = [1500, 4000, 7000, 11000].map(ms => setTimeout(resyncHit, ms));
+    window.addEventListener('resize', resyncHit);
+    return () => { timers.forEach(clearTimeout); window.removeEventListener('resize', resyncHit); };
   }, [dims.w === 0, resyncHit]);
+
+  // ── DIAGNOSTIC (temporary) ───────────────────────────────────────
+  // Logs the canvas/transform state at load and on each pointer press, so the
+  // broken-on-Retina state can be captured WITHOUT opening devtools (which resizes
+  // the page and "fixes" it). Read these `[GRAPH-DIAG]` lines from the console.
+  useEffect(() => {
+    if (dims.w === 0) return;
+    const snap = (tag: string, ev?: PointerEvent) => {
+      const c = wrapRef.current?.querySelector('canvas') as HTMLCanvasElement | null;
+      if (!c) { console.log('[GRAPH-DIAG]', tag, 'no-canvas'); return; }
+      const r = c.getBoundingClientRect();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tf = (c.getContext('2d') as any)?.getTransform?.();
+      console.log('[GRAPH-DIAG]', tag, JSON.stringify({
+        dpr: window.devicePixelRatio,
+        win: { w: window.innerWidth, h: window.innerHeight },
+        canvasAttr: { w: c.width, h: c.height },
+        canvasCss: { w: Math.round(r.width), h: Math.round(r.height), left: Math.round(r.left), top: Math.round(r.top) },
+        ctxScale: tf ? { a: +tf.a.toFixed(3), d: +tf.d.toFixed(3), e: Math.round(tf.e), f: Math.round(tf.f) } : null,
+        zoom: typeof fg.current?.zoom === 'function' ? +fg.current.zoom().toFixed(3) : null,
+        ptr: ev ? { clientX: Math.round(ev.clientX), clientY: Math.round(ev.clientY), relX: Math.round(ev.clientX - r.left), relY: Math.round(ev.clientY - r.top) } : null,
+      }));
+    };
+    const t = setTimeout(() => snap('load'), 4000);
+    const onDown = (e: Event) => snap('pointerdown', e as PointerEvent);
+    const el = wrapRef.current;
+    el?.addEventListener('pointerdown', onDown, true);
+    return () => { clearTimeout(t); el?.removeEventListener('pointerdown', onDown, true); };
+  }, [dims.w === 0]);
 
   // ── Stars (generated once when dims are known) ──────────────────
   useEffect(() => {
@@ -266,11 +296,6 @@ export function Graph3D({ nodes, edges }: Props) {
 
             // Fit the view to show all nodes with padding
             fg.current?.zoomToFit(800, 60);
-
-            // The graph is now settled and visible — re-sync the offscreen hit-test
-            // canvas so clicks work without the user having to resize the window.
-            // Fire just after zoomToFit finishes (its duration is 800ms).
-            setTimeout(resyncHit, 900);
           }}
 
           // ── Background pass ───────────────────────────────────

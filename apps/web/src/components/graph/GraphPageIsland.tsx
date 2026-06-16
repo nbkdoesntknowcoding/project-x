@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { ENTITY_COLORS_CSS } from './constants';
 import type { GraphNode, GraphEdge, GraphData } from '../../lib/graph-types';
 
@@ -149,19 +149,24 @@ export function GraphPageIsland({ initialData }: Props) {
   const edges = data?.edges ?? [];
   const report = data?.report;
 
-  const displayNodes = nodes.length > 800
-    ? [...nodes].sort((a, b) => (b.degree ?? 0) - (a.degree ?? 0)).slice(0, 500)
-    : nodes;
-
-  const filteredNodes = displayNodes.filter(n => {
-    if (hiddenTypes.has(n.entityType)) return false;
-    if (godOnly && !n.isGodNode) return false;
-    return true;
-  });
-  const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
-  const filteredEdges = edges.filter(e =>
-    filteredNodeIds.has(e.fromNodeId) && filteredNodeIds.has(e.toNodeId)
-  );
+  // CRITICAL: memoize the filtered node/edge arrays. Without this they are rebuilt
+  // (new array identities) on EVERY render, so Graph3D's graphData useMemo recomputes
+  // and the force simulation re-heats from scratch — the graph never settles, so
+  // onEngineStop (zoom-fit, hit-test re-sync, etc.) never fires and clicks are flaky.
+  // Recompute only when the data or filters actually change.
+  const { filteredNodes, filteredEdges } = useMemo(() => {
+    const display = nodes.length > 800
+      ? [...nodes].sort((a, b) => (b.degree ?? 0) - (a.degree ?? 0)).slice(0, 500)
+      : nodes;
+    const fNodes = display.filter(n => {
+      if (hiddenTypes.has(n.entityType)) return false;
+      if (godOnly && !n.isGodNode) return false;
+      return true;
+    });
+    const ids = new Set(fNodes.map(n => n.id));
+    const fEdges = edges.filter(e => ids.has(e.fromNodeId) && ids.has(e.toNodeId));
+    return { filteredNodes: fNodes, filteredEdges: fEdges };
+  }, [data, hiddenTypes, godOnly]);
 
   const totalNodes = report?.totalNodes ?? nodes.length;
 
