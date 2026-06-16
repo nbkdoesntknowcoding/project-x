@@ -42,6 +42,34 @@ export function Graph3D({ nodes, edges }: Props) {
     return () => ro.disconnect();
   }, []);
 
+  // ── Post-mount resize kick ───────────────────────────────────────
+  // On some setups (notably Retina / devicePixelRatio=2, inside a grid that lays
+  // out after the canvas first paints), react-force-graph's OFFSCREEN hit-test
+  // canvas ends up out of sync with the visible canvas: the graph draws fine but
+  // clicks/hover hit nothing until the next window resize. Users found that
+  // opening devtools (a resize) "fixes" it — that resize re-runs the library's
+  // adjustCanvasSize, which re-syncs the hit-test canvas. Do that automatically:
+  // once the graph has a size, nudge the dimensions (and restore) a couple of
+  // times over the first second so the hit-test canvas is rebuilt at the correct
+  // size without the user having to resize anything.
+  const kicked = useRef(false);
+  useEffect(() => {
+    if (dims.w === 0 || kicked.current) return;
+    kicked.current = true;
+    const el = wrapRef.current;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const rafs: number[] = [];
+    const kick = () => {
+      const w = el?.clientWidth ?? dims.w;
+      const h = el?.clientHeight ?? dims.h;
+      if (w === 0 || h === 0) return;
+      setDims({ w: w - 1, h });                       // perturb → forces adjustCanvasSize
+      rafs.push(requestAnimationFrame(() => setDims({ w, h }))); // restore → re-syncs hit canvas
+    };
+    [120, 400, 900].forEach(ms => timers.push(setTimeout(kick, ms)));
+    return () => { timers.forEach(clearTimeout); rafs.forEach(cancelAnimationFrame); };
+  }, [dims.w]);
+
   // ── Stars (generated once when dims are known) ──────────────────
   useEffect(() => {
     if (dims.w > 0 && starsRef.current.length === 0) {
