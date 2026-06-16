@@ -7,7 +7,7 @@ import { forceRadial } from 'd3-force-3d';
 // Cast to any so the documented props pass typecheck.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ForceGraph2D = ForceGraph2DLib as any;
-import { drawNode, getPointerArea } from './node-objects';
+import { drawNode, getPointerArea, getRadius } from './node-objects';
 import { setHighlight, clearHighlight, highlightState } from './highlight';
 import {
   generateStars, drawStars,
@@ -41,66 +41,6 @@ export function Graph3D({ nodes, edges }: Props) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
-  // ── Hit-test canvas re-sync ──────────────────────────────────────
-  // On Retina (devicePixelRatio=2), inside a grid that finishes laying out AFTER
-  // the canvas first paints, react-force-graph's OFFSCREEN hit-test canvas ends up
-  // out of sync with the visible one: the graph draws fine but clicks/hover hit
-  // nothing until the next *window resize*. Opening devtools (a resize) is what
-  // "fixes" it — the resize re-runs the library's adjustCanvasSize, rebuilding the
-  // hit-test canvas at the correct size/scale. Replicate that resize automatically.
-  //
-  // The ForceGraph2D ref exposes no width()/height() setters, so the only way to
-  // re-run adjustCanvasSize is to change the width/height PROPS. Perturb dims by 1px
-  // then restore on the next frame — two separate tasks so React 18 doesn't batch
-  // them into a single (no-op) update. Do it AFTER the graph has settled; firing
-  // during the 300-node simulation gets absorbed before the final zoom locks in.
-  const resyncHit = useCallback(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const w = el.clientWidth, h = el.clientHeight;
-    if (!w || !h) return;
-    setDims({ w: w - 1, h });                       // perturb → adjustCanvasSize at "new" size
-    requestAnimationFrame(() => setDims({ w, h }));  // restore → rebuilds hit-test canvas
-  }, []);
-
-  // Re-sync a few times over the first several seconds (covers slow settles) and
-  // whenever the window is resized.
-  useEffect(() => {
-    if (dims.w === 0) return;
-    const timers = [1500, 4000, 7000, 11000].map(ms => setTimeout(resyncHit, ms));
-    window.addEventListener('resize', resyncHit);
-    return () => { timers.forEach(clearTimeout); window.removeEventListener('resize', resyncHit); };
-  }, [dims.w === 0, resyncHit]);
-
-  // ── DIAGNOSTIC (temporary) ───────────────────────────────────────
-  // Logs the canvas/transform state at load and on each pointer press, so the
-  // broken-on-Retina state can be captured WITHOUT opening devtools (which resizes
-  // the page and "fixes" it). Read these `[GRAPH-DIAG]` lines from the console.
-  useEffect(() => {
-    if (dims.w === 0) return;
-    const snap = (tag: string, ev?: PointerEvent) => {
-      const c = wrapRef.current?.querySelector('canvas') as HTMLCanvasElement | null;
-      if (!c) { console.log('[GRAPH-DIAG]', tag, 'no-canvas'); return; }
-      const r = c.getBoundingClientRect();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tf = (c.getContext('2d') as any)?.getTransform?.();
-      console.log('[GRAPH-DIAG]', tag, JSON.stringify({
-        dpr: window.devicePixelRatio,
-        win: { w: window.innerWidth, h: window.innerHeight },
-        canvasAttr: { w: c.width, h: c.height },
-        canvasCss: { w: Math.round(r.width), h: Math.round(r.height), left: Math.round(r.left), top: Math.round(r.top) },
-        ctxScale: tf ? { a: +tf.a.toFixed(3), d: +tf.d.toFixed(3), e: Math.round(tf.e), f: Math.round(tf.f) } : null,
-        zoom: typeof fg.current?.zoom === 'function' ? +fg.current.zoom().toFixed(3) : null,
-        ptr: ev ? { clientX: Math.round(ev.clientX), clientY: Math.round(ev.clientY), relX: Math.round(ev.clientX - r.left), relY: Math.round(ev.clientY - r.top) } : null,
-      }));
-    };
-    const t = setTimeout(() => snap('load'), 4000);
-    const onDown = (e: Event) => snap('pointerdown', e as PointerEvent);
-    const el = wrapRef.current;
-    el?.addEventListener('pointerdown', onDown, true);
-    return () => { clearTimeout(t); el?.removeEventListener('pointerdown', onDown, true); };
-  }, [dims.w === 0]);
 
   // ── Stars (generated once when dims are known) ──────────────────
   useEffect(() => {
@@ -164,6 +104,76 @@ export function Graph3D({ nodes, edges }: Props) {
     setSelNode(null);
     clearHighlight();
   }, []);
+
+  // ── Custom click hit-testing (does NOT use force-graph's hit detection) ──
+  // react-force-graph maps clicks to nodes via an OFFSCREEN "shadow" canvas. On
+  // Retina that shadow canvas desyncs from the visible one on first paint, so
+  // clicks/hover hit nothing until a window resize. Instead of fighting that, we
+  // ignore it entirely: on a click we convert the pointer to GRAPH coordinates via
+  // screen2GraphCoords (which uses the very same d3 zoom transform that draws the
+  // visible nodes, so it can never desync) and select the nearest node. Pure
+  // geometry against the on-screen positions — works regardless of dpr/resize.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (el == null) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nodesOf = () => graphData.nodes as any[];
+
+    const nearest = (clientX: number, clientY: number) => {
+      const canvas = el.querySelector('canvas');
+      const inst = fg.current;
+      if (!canvas || !inst || typeof inst.screen2GraphCoords !== 'function') return null;
+      const rect = canvas.getBoundingClientRect();
+      const g = inst.screen2GraphCoords(clientX - rect.left, clientY - rect.top);
+      if (!g || !Number.isFinite(g.x)) return null;
+      let best: GraphNode | null = null;
+      let bestD = Infinity;
+      for (const n of nodesOf()) {
+        if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) continue;
+        const dd = Math.hypot(n.x - g.x, n.y - g.y);
+        if (dd < bestD) { bestD = dd; best = n; }
+      }
+      if (!best) return null;
+      const zoom = typeof inst.zoom === 'function' ? inst.zoom() : 1;
+      // accept if within the node's dot plus ~14px of screen slack (converted to
+      // graph units), so small nodes stay easy to hit without swallowing neighbours.
+      const threshold = getRadius(best) + 14 / (zoom || 1);
+      return bestD <= threshold ? best : null;
+    };
+
+    let down: { x: number; y: number } | null = null;
+    const onDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; };
+    const onUp = (e: PointerEvent) => {
+      const d = down; down = null;
+      if (!d) return;
+      // ignore pans/drags — only a (near-)stationary press counts as a click
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) return;
+      if (e.target !== el.querySelector('canvas')) return; // not a click on the canvas (e.g. a panel)
+      const hit = nearest(e.clientX, e.clientY);
+      if (hit) onNodeClick(hit); else onBgClick();
+    };
+    let cursorRaf = 0;
+    const onMove = (e: PointerEvent) => {
+      if (down) return; // don't recompute the cursor mid-drag
+      if (cursorRaf) return;
+      cursorRaf = requestAnimationFrame(() => {
+        cursorRaf = 0;
+        const canvas = el.querySelector('canvas');
+        if (canvas) canvas.style.cursor = nearest(e.clientX, e.clientY) ? 'pointer' : '';
+      });
+    };
+
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointermove', onMove, { passive: true });
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointermove', onMove);
+      if (cursorRaf) cancelAnimationFrame(cursorRaf);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graphData, onNodeClick, onBgClick]);
 
   // ── nodeCanvasObject — draws each node on the 2D canvas ─────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -302,8 +312,9 @@ export function Graph3D({ nodes, edges }: Props) {
           onRenderFramePre={onRenderFramePre}
 
           // ── Interaction ───────────────────────────────────────
-          onNodeClick={onNodeClick}
-          onBackgroundClick={onBgClick}
+          // NOTE: node/background clicks are handled by our own geometric
+          // hit-testing effect above (force-graph's offscreen hit-test desyncs on
+          // Retina). We still let the library own pan + zoom.
           showNavInfo={false}
           enablePointerInteraction={true}
           enableZoomInteraction={true}
