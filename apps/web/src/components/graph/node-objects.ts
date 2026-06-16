@@ -43,7 +43,7 @@ export function drawNode(
 
   // Opacity dimming when something else is selected
   let alpha = 1.0;
-  if (anySelected && !selected && !connected) alpha = 0.06;
+  if (anySelected && !selected && !connected) alpha = 0.22;
 
   // ── Glow halo ────────────────────────────────────────────────────
   // Luminous radial bloom behind the dot — the soft glow from the reference.

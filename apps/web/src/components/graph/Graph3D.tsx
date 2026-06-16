@@ -206,6 +206,13 @@ export function Graph3D({ nodes, edges }: Props) {
           d3VelocityDecay={0.4}
           warmupTicks={80}
 
+          // CRITICAL: keep the canvas live. With autoPauseRedraw=true (the default),
+          // once the engine stops force-graph stops calling refreshShadowCanvas, so the
+          // offscreen hit-test canvas freezes at a stale transform and every click resolves
+          // to the wrong node (force-graph.js:613,647). Keeping redraw on also makes the
+          // highlight/selection repaint immediately (no "vanish after a click").
+          autoPauseRedraw={false}
+
           onEngineStop={() => {
             // NOTE: react-force-graph-2d's ref has NO graphData() method (only the
             // 3D build does). Read positions from the memoized graphData.nodes — the
