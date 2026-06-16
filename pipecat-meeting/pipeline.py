@@ -24,11 +24,17 @@ import uvicorn
 logger = logging.getLogger("pipecat-meeting")
 logging.basicConfig(level=logging.INFO)
 
-# ── Pipecat imports (Pipecat 1.2.x, same as VAP) ─────────────────────────────
+# ── Pipecat imports (verified against the installed Pipecat 1.2.1) ───────────
+# NOTE: 1.2.1 uses the universal LLMContext + LLMContextAggregatorPair; there is
+# no OpenAILLMContext / llm.create_context_aggregator (those were an older API the
+# VAP's assembler.py still references behind a try/except).
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
+from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
+from pipecat.adapters.schemas.tools_schema import ToolsSchema
+from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketTransport,
     FastAPIWebsocketParams,
@@ -42,6 +48,22 @@ from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 
 from meeting_persona import build_meeting_persona
+from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS  # OpenAI function-tool dicts
+
+
+def _mnema_tools_schema() -> ToolsSchema:
+    """Convert the OpenAI-format Mnema tool dicts to Pipecat 1.2.1 FunctionSchemas."""
+    fns = []
+    for t in MNEMA_TOOL_DEFINITIONS:
+        f = t["function"]
+        params = f.get("parameters", {})
+        fns.append(FunctionSchema(
+            name=f["name"],
+            description=f.get("description", ""),
+            properties=params.get("properties", {}),
+            required=params.get("required", []),
+        ))
+    return ToolsSchema(standard_tools=fns)
 
 
 # ── Raw µ-law 8kHz serializer (replaces TwilioFrameSerializer) ───────────────
@@ -120,22 +142,22 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         model="eleven_flash_v2_5",
     )
 
-    # Mnema tool schemas, passed to GPT-4o-mini alongside any VAP tools (STEP 8).
-    from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS  # OpenAI function-tool format
-    context = OpenAILLMContext(
+    # Context = system prompt (meeting-observer persona) + Mnema tool schemas (STEP 8),
+    # passed to GPT-4o-mini. Universal LLMContext + aggregator pair (Pipecat 1.2.1).
+    context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
-        tools=MNEMA_TOOL_DEFINITIONS,
+        tools=_mnema_tools_schema(),
     )
-    context_aggregator = llm.create_context_aggregator(context)
+    aggregators = LLMContextAggregatorPair(context)
 
     pipeline = Pipeline([
         transport.input(),
         stt,
-        context_aggregator.user(),
+        aggregators.user(),
         llm,
         tts,
         transport.output(),
-        context_aggregator.assistant(),
+        aggregators.assistant(),
     ])
 
     task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
