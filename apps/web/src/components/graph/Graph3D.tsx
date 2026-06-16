@@ -134,11 +134,18 @@ export function Graph3D({ nodes, edges }: Props) {
         if (dd < bestD) { bestD = dd; best = n; }
       }
       if (!best) return null;
-      const zoom = typeof inst.zoom === 'function' ? inst.zoom() : 1;
-      // accept if within the node's dot plus ~14px of screen slack (converted to
-      // graph units), so small nodes stay easy to hit without swallowing neighbours.
-      const threshold = getRadius(best) + 14 / (zoom || 1);
-      return bestD <= threshold ? best : null;
+      const zoom = (typeof inst.zoom === 'function' ? inst.zoom() : 1) || 1;
+      // Work in SCREEN pixels and size the click target to the whole VISIBLE node —
+      // the bright dot PLUS its glow halo (drawNode draws the glow out to ~3.6× the
+      // dot radius) — plus a small fixed slack. This is the key fix: the target now
+      // matches what the user sees at any zoom (when zoomed out the dot is tiny but
+      // the glow still reads as clickable). Nearest-node selection keeps it
+      // unambiguous; a click in genuinely empty space falls outside every node's
+      // glow and clears the selection.
+      const dotPx = getRadius(best) * zoom;
+      const screenThreshold = dotPx * 2.6 + 14; // ~glow extent + slack, in px
+      const screenDist = bestD * zoom;
+      return screenDist <= screenThreshold ? best : null;
     };
 
     let down: { x: number; y: number } | null = null;
