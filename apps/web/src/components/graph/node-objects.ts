@@ -46,19 +46,19 @@ export function drawNode(
   if (anySelected && !selected && !connected) alpha = 0.06;
 
   // ── Glow halo ────────────────────────────────────────────────────
-  // Soft radial gradient behind the node — the "glow" from the reference image
-  const glowR = radius * (isGod ? 4.5 : 3.0);
+  // Luminous radial bloom behind the dot — the soft glow from the reference.
+  const glowR = radius * (isGod ? 5.0 : 3.6);
   const grd   = ctx.createRadialGradient(x, y, 0, x, y, glowR);
-  grd.addColorStop(0,   hexToRgba(color, 0.55 * alpha));
-  grd.addColorStop(0.3, hexToRgba(color, 0.18 * alpha));
-  grd.addColorStop(1,   hexToRgba(color, 0));
+  grd.addColorStop(0,    hexToRgba(color, 0.50 * alpha));
+  grd.addColorStop(0.25, hexToRgba(color, 0.14 * alpha));
+  grd.addColorStop(1,    hexToRgba(color, 0));
   ctx.beginPath();
   ctx.arc(x, y, glowR, 0, 2 * Math.PI);
   ctx.fillStyle = grd;
   ctx.fill();
 
   // ── Node dot ──────────────────────────────────────────────────────
-  // The small solid circle — same as the reference dots
+  // Bright saturated circle — the colored tips from the reference image.
   const dotAlpha = selected ? 1.0 : alpha;
   const dotR     = selected ? radius * 1.3 : radius;
   ctx.beginPath();
@@ -66,11 +66,15 @@ export function drawNode(
   ctx.fillStyle = hexToRgba(color, dotAlpha);
   ctx.fill();
 
-  // God-node: bright white inner core
-  if (isGod && dotAlpha > 0.1) {
+  // ── Hot centre (bloom highlight) ─────────────────────────────────
+  // A small brighter core gives every dot the neon "lit" look from the
+  // reference; god-nodes get a stronger white core.
+  if (dotAlpha > 0.1) {
     ctx.beginPath();
-    ctx.arc(x, y, dotR * 0.4, 0, 2 * Math.PI);
-    ctx.fillStyle = `rgba(255,255,255,${0.7 * dotAlpha})`;
+    ctx.arc(x, y, dotR * (isGod ? 0.45 : 0.4), 0, 2 * Math.PI);
+    ctx.fillStyle = isGod
+      ? `rgba(255,255,255,${0.78 * dotAlpha})`
+      : `rgba(255,255,255,${0.35 * dotAlpha})`;
     ctx.fill();
   }
 }

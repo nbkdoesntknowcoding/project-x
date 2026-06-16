@@ -82,8 +82,8 @@ export function Graph3D({ nodes, edges }: Props) {
       ...e,
       source: e.fromNodeId,
       target: e.toNodeId,
-      // Gentle random curvature — organic branch sweep
-      curvature:         Math.random() * 0.2,
+      // Random curvature — long sweeping organic branches like the reference
+      curvature:         (Math.random() - 0.5) * 0.6,
       curvatureRotation: Math.random() * Math.PI * 2,
     })),
   }), [nodes, edges]);
@@ -163,9 +163,10 @@ export function Graph3D({ nodes, edges }: Props) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const linkWidth = useCallback((link: any) => {
     const e = link as GraphEdge;
-    if (e.provenance === 'AMBIGUOUS') return 0.4;
-    if (e.provenance === 'INFERRED')  return 0.9;
-    return 1.5;
+    // Thin filaments — the reference connections are hair-thin bright curves.
+    if (e.provenance === 'AMBIGUOUS') return 0.25;
+    if (e.provenance === 'INFERRED')  return 0.55;
+    return 1.0;
   }, []);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const linkCurvature = useCallback((link: any) => link.curvature ?? 0, []);
@@ -193,7 +194,7 @@ export function Graph3D({ nodes, edges }: Props) {
           linkColor={linkColor}
           linkWidth={linkWidth}
           linkCurvature={linkCurvature}
-          linkOpacity={0.9}
+          linkOpacity={0.85}
 
           // ── Simulation ────────────────────────────────────────
           // No cooldownTicks — natural alpha decay
