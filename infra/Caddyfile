@@ -31,3 +31,14 @@ http://docs.theboringpeople.in {
         format console
     }
 }
+
+# Public WebSocket ingress for the Recall meeting bot: Recall streams mixed meeting
+# audio here → pipecat-meeting (which must be attached to this Caddy network).
+# Requires a Cloudflare DNS record for meet-ws.theboringpeople.in (orange-cloud).
+http://meet-ws.theboringpeople.in {
+    reverse_proxy pipecat-meeting:8765
+    log {
+        output stdout
+        format console
+    }
+}

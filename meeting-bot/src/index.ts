@@ -1,77 +1,47 @@
-// meeting-bot/src/index.ts  (STEP 10 — Main Service Entry Point)
+// meeting-bot/src/index.ts — Recall-based meeting controller.
+//
+// Thin HTTP service: /join asks Recall to send a bot ("Mnema") into the meeting.
+// Recall streams the meeting's mixed audio to pipecat-meeting (via the public WS),
+// which runs Deepgram → GPT-4o-mini (+ Mnema tools) → ElevenLabs, and (talking
+// path) plays the reply back through Recall Output Media.
 import express from 'express';
-import { GoogleMeetBot } from './browser/join-meet';
-import { ZoomBot } from './browser/join-zoom';
-import { CaptureBridge } from './audio/capture-bridge';
-import { InjectionBridge } from './audio/injection-bridge';
+import { createBot, leaveBot } from './recall';
 
 const app = express();
 app.use(express.json());
 
-// Phase 2 (audio injection) is gated OFF by default. HARD RULE: do not enable it
-// until Phase 1 verification passes (bot joins + transcript appears in turn table).
-// Flip ENABLE_INJECTION=true once Phase 1 is verified.
-const ENABLE_INJECTION = process.env.ENABLE_INJECTION === 'true';
+app.get('/health', (_req, res) => res.json({ status: 'ok', backend: 'recall' }));
 
-app.get('/health', (_req, res) => res.json({ status: 'ok', injection: ENABLE_INJECTION }));
-
-// POST /join — called by Mnema or calendar integration when a meeting starts
+// POST /join — { meetingUrl } (meetingPlatform optional; Recall detects it from the URL)
 app.post('/join', async (req, res) => {
-  const { meetingUrl, meetingPlatform, meetingTitle, projectId, meetingPassword } = req.body;
-
-  const PIPECAT_WS = process.env.PIPECAT_MEETING_WS_URL ?? 'ws://localhost:8765';
-  const PULSE_SINK = process.env.PULSE_SINK ?? 'mnema_meeting_sink';
-  const PULSE_SOURCE = process.env.PULSE_SOURCE ?? 'mnema_meeting_source';
-
+  const { meetingUrl } = req.body ?? {};
+  if (!meetingUrl) return res.status(400).json({ success: false, error: 'meetingUrl required' });
   try {
-    // Phase 1: Start audio capture bridge (participants → Pipecat)
-    const capture = new CaptureBridge({
-      pulseSinkMonitor: `${PULSE_SINK}.monitor`,
-      pipecatWsUrl: PIPECAT_WS,
-      sampleRate: 8000,
-    });
-    await capture.start();
-    console.log('[Main] Phase 1: Capture bridge started');
-
-    // Phase 2: Start audio injection bridge (Pipecat TTS → meeting). Gated.
-    let injection: InjectionBridge | null = null;
-    if (ENABLE_INJECTION) {
-      injection = new InjectionBridge();
-      await injection.start(PULSE_SOURCE);
-      console.log('[Main] Phase 2: Injection bridge started');
-      // Forward TTS frames the Pipecat meeting transport sends back (over the same
-      // capture WebSocket) into the virtual source so the bot is heard.
-      capture.onAudioFromPipecat((chunk) => injection!.injectAudio(chunk));
-    } else {
-      console.log('[Main] Phase 2: Injection DISABLED (ENABLE_INJECTION!=true) — capture/transcript only');
-    }
-
-    // Join the meeting
-    if (meetingPlatform === 'zoom') {
-      const bot = new ZoomBot({
-        displayName: 'Mnema',
-        googleAccountEmail: '',
-        googleAccountPassword: '',
-        pulseSinkName: PULSE_SINK,
-        pulseSourceName: PULSE_SOURCE,
-      });
-      await bot.join(meetingUrl, meetingPassword);  // meetingUrl = numeric Zoom meeting id
-    } else {
-      const bot = new GoogleMeetBot({
-        displayName: 'Mnema',
-        googleAccountEmail: process.env.BOT_GOOGLE_EMAIL!,
-        googleAccountPassword: process.env.BOT_GOOGLE_PASSWORD!,
-        pulseSinkName: PULSE_SINK,
-        pulseSourceName: PULSE_SOURCE,
-      });
-      await bot.join(meetingUrl);
-    }
-
-    res.json({ success: true, message: 'Bot joined meeting', meetingTitle, projectId });
+    const bot = await createBot(meetingUrl);
+    console.log('[MeetingBot] Recall bot created:', bot.id, 'for', meetingUrl);
+    res.json({ success: true, botId: bot.id });
   } catch (err) {
-    console.error('[Main] Failed to join meeting:', err);
+    console.error('[MeetingBot] join failed:', err);
     res.status(500).json({ success: false, error: String(err) });
   }
 });
 
-app.listen(3001, () => console.log('[MeetingBot] Service on port 3001'));
+// POST /leave — { botId }
+app.post('/leave', async (req, res) => {
+  const { botId } = req.body ?? {};
+  if (!botId) return res.status(400).json({ success: false, error: 'botId required' });
+  try {
+    await leaveBot(botId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: String(err) });
+  }
+});
+
+// Recall status webhooks land here (bot joined / done / errored). Logged for now.
+app.post('/recall/webhook', (req, res) => {
+  console.log('[MeetingBot] Recall webhook:', JSON.stringify(req.body));
+  res.json({ ok: true });
+});
+
+app.listen(3001, () => console.log('[MeetingBot] Recall controller on port 3001'));

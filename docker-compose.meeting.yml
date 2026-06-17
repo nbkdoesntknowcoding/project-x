@@ -1,39 +1,38 @@
-# docker-compose.meeting.yml — Mnema Meeting Bot stack (part of this monorepo).
+# docker-compose.meeting.yml — Mnema Meeting Bot stack (Recall.ai front end).
 #
-# Deployed on the SAME VPS / repo as Mnema (/srv/mnema) but as its OWN compose
-# stack, because it needs host PulseAudio + ipc:host + Chromium — kept isolated
-# from the core api/workers stack (infra/docker-compose.prod.yml).
+# Recall joins the meeting and streams mixed audio to pipecat-meeting over a PUBLIC
+# WebSocket (Caddy: meet-ws.theboringpeople.in → pipecat-meeting:8765). pipecat runs
+# Deepgram → GPT-4o-mini (+ Mnema tools) → ElevenLabs and (talking) plays the reply
+# back via Recall Output Media. meeting-bot is just the Recall REST controller.
 #
-# All secrets come straight from infra/.env via `env_file` (same as the core api
-# service) — no ${VAR} interpolation, so no need to pass --env-file on the CLI.
-#
-# Prereq (run once on the host): bash scripts/setup-pulseaudio.sh
+# Secrets come from infra/.env via env_file (same as the core api service).
 # Deploy:  docker compose -f docker-compose.meeting.yml up -d --build
-#
-# voice-clone/ is NOT in any build context — it is local dev reference only.
 services:
   pipecat-meeting:
     build: ./pipecat-meeting
     restart: unless-stopped
     env_file:
-      - infra/.env            # OPENAI/DEEPGRAM/ELEVENLABS/DATABASE_URL/MNEMA_*/ACTIVE_PERSONA_ID
+      - infra/.env            # OPENAI/DEEPGRAM/ELEVENLABS/RECALL_*/MEETING_WS_SECRET
     ports:
-      - "127.0.0.1:8765:8765" # WebSocket for audio bridge (internal only)
+      - "127.0.0.1:8765:8765" # local health; public access is via Caddy
+    networks:
+      - internal              # so Caddy (infra stack) can reach it by service name
 
   meeting-bot:
     build: ./meeting-bot
     restart: unless-stopped
     env_file:
-      - infra/.env            # BOT_GOOGLE_EMAIL/MNEMA_*/ENABLE_INJECTION
-    environment:
-      # service-specific overrides (not secrets)
-      - PIPECAT_MEETING_WS_URL=ws://pipecat-meeting:8765
-      - PULSE_SERVER=unix:/run/pulse/native
+      - infra/.env            # RECALL_API_KEY, RECALL_REGION, RECALL_AUDIO_WSS, MNEMA_*
     ports:
       - "127.0.0.1:3001:3001" # /join control endpoint (internal only)
-    volumes:
-      - ./.auth:/app/.auth        # Saved Google auth state
-      - /run/pulse:/run/pulse     # PulseAudio socket from host
-    ipc: host                     # Required for PulseAudio in container
     depends_on:
       - pipecat-meeting
+
+# Reuse the core stack's Caddy network so meet-ws.theboringpeople.in can reverse_proxy
+# to pipecat-meeting. NOTE: confirm the actual network name on the VPS with
+# `docker network ls | grep internal` and set it here (compose prefixes it with the
+# core stack's project name, e.g. mnema_internal or infra_internal).
+networks:
+  internal:
+    external: true
+    name: mnema_internal
