@@ -29,10 +29,9 @@ services:
       - pipecat-meeting
 
 # Reuse the core stack's Caddy network so meet-ws.theboringpeople.in can reverse_proxy
-# to pipecat-meeting. NOTE: confirm the actual network name on the VPS with
-# `docker network ls | grep internal` and set it here (compose prefixes it with the
-# core stack's project name, e.g. mnema_internal or infra_internal).
+# to pipecat-meeting. Confirmed on the VPS via `docker network ls | grep internal`:
+# the core Mnema stack's network is `mnema-prod_internal`.
 networks:
   internal:
     external: true
-    name: mnema_internal
+    name: mnema-prod_internal
