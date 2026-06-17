@@ -33,8 +33,9 @@ export class GoogleMeetBot extends EventEmitter {
     // PULSE_SINK: all audio Chromium plays goes to our virtual sink (capture).
     // PULSE_SOURCE: Chromium reads its mic from our virtual source (injection).
     this.browser = await chromium.launch({
-      headless: true,
-      args: [
+      channel: 'chrome',     // REAL Google Chrome (not bundled Chromium) — Meet treats
+      headless: false,       // headless Chromium as unsupported. Headful under Xvfb
+      args: [                // (the container runs node via xvfb-run) looks like a user.
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--use-fake-ui-for-media-stream',           // Auto-grant mic/camera permissions
@@ -46,7 +47,7 @@ export class GoogleMeetBot extends EventEmitter {
         ...process.env,
         PULSE_SINK: this.config.pulseSinkName,        // Route audio output here
         PULSE_SOURCE: this.config.pulseSourceName,    // Read mic from here
-        DISPLAY: ':1',                                // Virtual X display (Xvfb)
+        // DISPLAY is provided by xvfb-run (do not hardcode it)
       },
     });
 
