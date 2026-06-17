@@ -42,7 +42,9 @@ from pipecat.transports.websocket.fastapi import (
 from pipecat.serializers.base_serializer import FrameSerializer  # 1.2.1 has no FrameSerializerType
 from pipecat.frames.frames import Frame, InputAudioRawFrame, OutputAudioRawFrame
 
-from pipecat.services.deepgram.stt import DeepgramSTTService
+# deepgram-sdk 6.x removed LiveOptions; Pipecat ships a compatibility wrapper in
+# its own deepgram service module — import it from there, not from `deepgram`.
+from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 
@@ -115,18 +117,20 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         ),
     )
 
-    # ── STT (unchanged from VAP) ─────────────────────────────────────────────
+    # ── STT — Deepgram Nova-3 ────────────────────────────────────────────────
+    # live_options must be a deepgram LiveOptions object (not a dict) in 1.2.1.
+    # encoding=linear16 because RawMulawSerializer already decodes µ-law → PCM16
+    # before frames reach the pipeline.
     stt = DeepgramSTTService(
         api_key=os.environ["DEEPGRAM_API_KEY"],
-        live_options={
-            "model": "nova-3",
-            "language": "multi",
-            "encoding": "mulaw",
-            "sample_rate": 8000,
-            "channels": 1,
-            "interim_results": True,
-            "endpointing": False,
-        },
+        live_options=LiveOptions(
+            model="nova-3",
+            language="multi",
+            encoding="linear16",
+            sample_rate=8000,
+            channels=1,
+            interim_results=True,
+        ),
     )
 
     # ── LLM (unchanged) — Mnema tools registered via OpenAILLMContext tools ──
