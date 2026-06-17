@@ -1,6 +1,9 @@
 // meeting-bot/src/browser/join-meet.ts  (STEP 7 — Playwright Google Meet joiner)
-import { chromium, Browser, BrowserContext, Page } from 'playwright';
+import { chromium, Browser, Page } from 'playwright';
 import { EventEmitter } from 'events';
+import { existsSync, statSync } from 'node:fs';
+
+const GOOGLE_AUTH_PATH = '.auth/google-bot.json';
 
 export interface MeetingBotConfig {
   displayName: string;          // 'Mnema' — what participants see
@@ -39,14 +42,23 @@ export class GoogleMeetBot extends EventEmitter {
       },
     });
 
+    // Load the saved Google session so the bot is already signed in as the bot
+    // account. Generate this file once via an interactive login (see README/notes)
+    // and place it at .auth/google-bot.json. A tiny/empty file means "no auth".
+    const hasAuth = existsSync(GOOGLE_AUTH_PATH) && statSync(GOOGLE_AUTH_PATH).size > 100;
+    if (hasAuth) {
+      console.log('[MeetBot] Loaded saved Google auth from', GOOGLE_AUTH_PATH);
+    } else {
+      console.warn('[MeetBot] No valid saved Google auth at', GOOGLE_AUTH_PATH,
+        '— the join will likely hit a sign-in wall. Generate it once interactively.');
+    }
+
     const context = await this.browser.newContext({
       permissions: ['microphone', 'camera'],
+      ...(hasAuth ? { storageState: GOOGLE_AUTH_PATH } : {}),
     });
 
     this.page = await context.newPage();
-
-    // Sign in with the bot's Google account
-    await this._signInGoogle(context);
 
     // Navigate to the meeting
     await this.page.goto(meetingUrl);
@@ -59,20 +71,6 @@ export class GoogleMeetBot extends EventEmitter {
 
     console.log('[MeetBot] Joined meeting as', this.config.displayName);
     this.emit('joined');
-  }
-
-  private async _signInGoogle(context: BrowserContext): Promise<void> {
-    // Sign into the dedicated bot Google account.
-    // Use a saved auth state (auth.json) to avoid login every time.
-    // On first run: headless=false, sign in manually, save state.
-    try {
-      await context.storageState({ path: '.auth/google-bot.json' });
-      console.log('[MeetBot] Using saved Google auth');
-    } catch {
-      console.warn('[MeetBot] No saved auth — sign in manually on first run');
-      // Manual sign-in flow: set headless: false above, sign in, then save state
-      await context.storageState({ path: '.auth/google-bot.json' });
-    }
   }
 
   private async _handlePreJoin(): Promise<void> {
