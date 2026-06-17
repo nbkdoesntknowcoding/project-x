@@ -19,3 +19,7 @@ pipecat-ai[silero,openai,deepgram,elevenlabs,websocket]==1.2.1
 # removed LiveOptions).
 
 numpy>=1.26.0
+
+# Direct REST calls: ElevenLabs mp3 synthesis (output), Recall Output Audio POST,
+# and the Mnema tool API. (openai already pulls httpx, but pin it explicitly.)
+httpx>=0.27.0

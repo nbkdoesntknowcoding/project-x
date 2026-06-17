@@ -1,21 +1,20 @@
 """
-pipecat-meeting/pipeline.py — Meeting-bot Pipecat pipeline (STEP 6).
+pipecat-meeting/pipeline.py — Meeting-bot Pipecat pipeline (Recall.ai front end).
 
-Copied from voice-clone/media-worker/pipeline/assembler.py. Per the build prompt,
-we change ONLY the transport: the VAP uses FastAPIWebsocketTransport +
-TwilioFrameSerializer; the meeting bot keeps FastAPIWebsocketTransport but swaps
-the serializer to RawMulawSerializer, because the meeting-bot CaptureBridge sends
-RAW µ-law 8kHz binary frames (not Twilio's JSON/base64 wire format) and expects
-raw µ-law 8kHz binary TTS frames back (forwarded to InjectionBridge).
+Recall joins the meeting and streams real-time MIXED audio to this service over a
+public WebSocket (Caddy: meet-ws.theboringpeople.in → here:8765). The audio is
+mono 16-bit LE PCM @ 16 kHz wrapped in `audio_mixed_raw.data` JSON messages
+(see recall_io.RecallSerializer). The pipeline runs:
 
-Everything else — Deepgram STT, GPT-4o-mini LLM, ElevenLabs TTS, Silero VAD,
-context aggregator — is UNCHANGED from the VAP.
+    Deepgram STT → GPT-4o-mini (+ Mnema tools) → [assistant text]
 
-This module also hosts the WebSocket server on :8765 that the CaptureBridge
-connects to (ws://pipecat-meeting:8765).
+and speaks each reply back into the meeting via Recall's Output Audio endpoint
+(ElevenLabs cloned voice → mp3 → POST), handled by recall_io.RecallSpeaker.
+Recall's realtime WS is input-only, so we do NOT send audio back over it.
+
+Pipecat 1.2.1 (pinned). Imports verified against the installed package.
 """
 import os
-import audioop  # µ-law <-> PCM16 (stdlib)
 import logging
 
 from fastapi import FastAPI, WebSocket
@@ -24,10 +23,6 @@ import uvicorn
 logger = logging.getLogger("pipecat-meeting")
 logging.basicConfig(level=logging.INFO)
 
-# ── Pipecat imports (verified against the installed Pipecat 1.2.1) ───────────
-# NOTE: 1.2.1 uses the universal LLMContext + LLMContextAggregatorPair; there is
-# no OpenAILLMContext / llm.create_context_aggregator (those were an older API the
-# VAP's assembler.py still references behind a try/except).
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -39,17 +34,15 @@ from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketTransport,
     FastAPIWebsocketParams,
 )
-from pipecat.serializers.base_serializer import FrameSerializer  # 1.2.1 has no FrameSerializerType
-from pipecat.frames.frames import Frame, InputAudioRawFrame, OutputAudioRawFrame
-
-# deepgram-sdk 6.x removed LiveOptions; Pipecat ships a compatibility wrapper in
-# its own deepgram service module — import it from there, not from `deepgram`.
 from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
 from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 
 from meeting_persona import build_meeting_persona
-from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS  # OpenAI function-tool dicts
+from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS
+from mnema_client import register_mnema_tools
+from recall_io import BotState, RecallSerializer, RecallSpeaker, RECALL_INPUT_SAMPLE_RATE
+
+MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
 
 
 def _mnema_tools_schema() -> ToolsSchema:
@@ -67,87 +60,45 @@ def _mnema_tools_schema() -> ToolsSchema:
     return ToolsSchema(standard_tools=fns)
 
 
-# ── Raw µ-law 8kHz serializer (replaces TwilioFrameSerializer) ───────────────
-class RawMulawSerializer(FrameSerializer):
-    """
-    Wire format: raw µ-law 8kHz mono binary frames (no Twilio JSON/base64).
-      IN  (deserialize): µ-law bytes from CaptureBridge → PCM16 → InputAudioRawFrame
-      OUT (serialize):   OutputAudioRawFrame PCM16 → µ-law bytes → InjectionBridge
-    Mirrors what TwilioFrameSerializer does, minus the Twilio Media Streams envelope.
-    """
-
-    SAMPLE_RATE = 8000
-
-    # No `type` property in Pipecat 1.2.1 — the transport sends binary when
-    # serialize() returns bytes (our case) and text when it returns str.
-    async def serialize(self, frame: Frame):
-        if isinstance(frame, OutputAudioRawFrame):
-            # PCM16 (pipeline rate) -> µ-law 8kHz
-            pcm = frame.audio
-            if frame.sample_rate != self.SAMPLE_RATE:
-                pcm, _ = audioop.ratecv(pcm, 2, 1, frame.sample_rate, self.SAMPLE_RATE, None)
-            return audioop.lin2ulaw(pcm, 2)
-        return None
-
-    async def deserialize(self, data):
-        if isinstance(data, (bytes, bytearray)):
-            # µ-law 8kHz -> PCM16
-            pcm = audioop.ulaw2lin(bytes(data), 2)
-            return InputAudioRawFrame(audio=pcm, sample_rate=self.SAMPLE_RATE, num_channels=1)
-        return None
-
-
 async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: str) -> None:
-    """One meeting = one pipeline run. Identical to the VAP chain, raw-µ-law serializer."""
-    serializer = RawMulawSerializer()
+    """One meeting = one pipeline run. Audio in from Recall, replies out via Output Audio."""
+    state = BotState()
+    serializer = RecallSerializer(state)
 
     transport = FastAPIWebsocketTransport(
         websocket=websocket,
         params=FastAPIWebsocketParams(
             serializer=serializer,
             audio_in_enabled=True,
-            audio_in_sample_rate=8000,
-            audio_out_enabled=True,
-            audio_out_sample_rate=8000,   # native µ-law rate
+            audio_in_sample_rate=RECALL_INPUT_SAMPLE_RATE,  # 16 kHz S16LE mono
+            audio_out_enabled=False,  # output goes via Recall Output Audio, not this WS
             add_wav_header=False,
-            # NOTE: Pipecat 1.2.1's FastAPIWebsocketParams has no vad_enabled/
-            # vad_analyzer fields (verified). VAD / turn-detection wiring is a
-            # Phase 2 follow-up; Deepgram STT still emits transcripts without it,
-            # so Phase 1 capture verification works.
         ),
     )
 
-    # ── STT — Deepgram Nova-3 ────────────────────────────────────────────────
-    # live_options must be a deepgram LiveOptions object (not a dict) in 1.2.1.
-    # encoding=linear16 because RawMulawSerializer already decodes µ-law → PCM16
-    # before frames reach the pipeline.
+    # ── STT — Deepgram Nova-3 (linear16 @ 16 kHz to match Recall mixed audio) ──
     stt = DeepgramSTTService(
         api_key=os.environ["DEEPGRAM_API_KEY"],
         live_options=LiveOptions(
             model="nova-3",
             language="multi",
             encoding="linear16",
-            sample_rate=8000,
+            sample_rate=RECALL_INPUT_SAMPLE_RATE,
             channels=1,
             interim_results=True,
         ),
     )
 
-    # ── LLM (unchanged) — Mnema tools registered via OpenAILLMContext tools ──
+    # ── LLM — GPT-4o-mini with Mnema tools registered for real execution ──────
     llm = OpenAILLMService(
         api_key=os.environ["OPENAI_API_KEY"],
         model=os.environ.get("OPENAI_LLM_MODEL", "gpt-4o-mini"),
     )
+    register_mnema_tools(llm)
 
-    # ── TTS (unchanged) — ElevenLabs cloned voice ────────────────────────────
-    tts = ElevenLabsTTSService(
-        api_key=os.environ["ELEVENLABS_API_KEY"],
-        voice_id=os.environ["ELEVENLABS_VOICE_ID"],
-        model="eleven_flash_v2_5",
-    )
+    # ── Speak replies into the meeting (ElevenLabs mp3 → Recall Output Audio) ──
+    speaker = RecallSpeaker(state)
 
-    # Context = system prompt (meeting-observer persona) + Mnema tool schemas (STEP 8),
-    # passed to GPT-4o-mini. Universal LLMContext + aggregator pair (Pipecat 1.2.1).
     context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
         tools=_mnema_tools_schema(),
@@ -159,9 +110,9 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         stt,
         aggregators.user(),
         llm,
-        tts,
-        transport.output(),
+        speaker,             # capture assistant text → speak via Recall Output Audio
         aggregators.assistant(),
+        transport.output(),  # control-frame sink (no audio leaves over Recall's WS)
     ])
 
     task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
@@ -171,19 +122,24 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     logger.info("[meeting-pipeline] finished")
 
 
-# ── WebSocket server (CaptureBridge connects here: ws://pipecat-meeting:8765) ─
+# ── WebSocket server: Recall connects to wss://meet-ws.../<MEETING_WS_SECRET> ──
 app = FastAPI()
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "backend": "recall"}
 
 
-@app.websocket("/")
-async def meeting_ws(websocket: WebSocket):
+@app.websocket("/{secret}")
+async def meeting_ws(websocket: WebSocket, secret: str):
+    # Recall connects from the public internet; gate on the shared secret in the path.
+    if not MEETING_WS_SECRET or secret != MEETING_WS_SECRET:
+        await websocket.close(code=4403)
+        logger.warning("[meeting-ws] rejected connection (bad secret)")
+        return
     await websocket.accept()
-    logger.info("[meeting-ws] CaptureBridge connected")
+    logger.info("[meeting-ws] Recall connected")
     system_prompt = build_meeting_persona(
         workspace_name=os.environ.get("MNEMA_WORKSPACE", "The Boring People"),
     )
