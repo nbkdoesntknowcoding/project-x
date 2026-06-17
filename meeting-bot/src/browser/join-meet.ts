@@ -21,6 +21,13 @@ export class GoogleMeetBot extends EventEmitter {
     super();
   }
 
+  private async snapshot(tag: string): Promise<void> {
+    try {
+      await this.page?.screenshot({ path: `/app/.auth/meet-${tag}.png`, fullPage: true });
+      console.log(`[MeetBot] saved screenshot .auth/meet-${tag}.png`);
+    } catch {}
+  }
+
   async join(meetingUrl: string): Promise<void> {
     // Launch Chromium with PulseAudio audio routing.
     // PULSE_SINK: all audio Chromium plays goes to our virtual sink (capture).
@@ -30,7 +37,8 @@ export class GoogleMeetBot extends EventEmitter {
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--use-fake-ui-for-media-stream',     // Auto-grant mic/camera permissions
+        '--use-fake-ui-for-media-stream',           // Auto-grant mic/camera permissions
+        '--disable-blink-features=AutomationControlled', // hide navigator.webdriver
         '--alsa-output-device=pulse',
         '--alsa-input-device=pulse',
       ],
@@ -55,19 +63,30 @@ export class GoogleMeetBot extends EventEmitter {
 
     const context = await this.browser.newContext({
       permissions: ['microphone', 'camera'],
+      // Real Chrome UA — headless Chromium advertises "HeadlessChrome", which Meet
+      // treats as an unsupported browser and redirects to its marketing page.
+      userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      viewport: { width: 1280, height: 720 },
       ...(hasAuth ? { storageState: GOOGLE_AUTH_PATH } : {}),
     });
 
     this.page = await context.newPage();
 
     // Navigate to the meeting
-    await this.page.goto(meetingUrl);
+    await this.page.goto(meetingUrl, { waitUntil: 'domcontentloaded' });
+    await this.page.waitForTimeout(3000);             // let Meet's SPA settle
+    console.log('[MeetBot] landed on', this.page.url());
+    await this.snapshot('prejoin');
 
-    // Handle pre-join screen
-    await this._handlePreJoin();
-
-    // Wait until inside the meeting
-    await this._waitUntilJoined();
+    try {
+      // Handle pre-join screen
+      await this._handlePreJoin();
+      // Wait until inside the meeting
+      await this._waitUntilJoined();
+    } catch (e) {
+      await this.snapshot('join-failed');
+      throw new Error(`Meet join failed at ${this.page.url()} — see .auth/meet-join-failed.png. ${e}`);
+    }
 
     console.log('[MeetBot] Joined meeting as', this.config.displayName);
     this.emit('joined');
