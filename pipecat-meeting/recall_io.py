@@ -17,6 +17,7 @@ OUTPUT (pipeline → meeting) — Stage 2, true barge-in:
 """
 import os
 import json
+import time
 import base64
 import logging
 
@@ -42,6 +43,9 @@ class BotState:
     def __init__(self) -> None:
         self.bot_id: str | None = None
         self.cid: str | None = None
+        # monotonic time until which the bot is considered "speaking" — used by
+        # InputGate to mute the (echoing) mixed input so the bot doesn't hear itself.
+        self.speaking_until: float = 0.0
 
 
 class RecallSerializer(FrameSerializer):
@@ -81,6 +85,27 @@ class RecallSerializer(FrameSerializer):
         return InputAudioRawFrame(
             audio=pcm, sample_rate=RECALL_INPUT_SAMPLE_RATE, num_channels=1
         )
+
+
+class InputGate(FrameProcessor):
+    """Half-duplex echo guard. Recall's `audio_mixed_raw` is a MIX of all participants
+    INCLUDING the bot's own Output Media voice — with no echo cancellation, the bot
+    would hear itself, fire VAD, and interrupt its own replies (a self-cancelling loop).
+
+    While the bot is speaking (state.speaking_until in the future), drop incoming
+    InputAudioRawFrames so STT/VAD never see the bot's echo. Trade-off: the user can't
+    barge in mid-reply. True full-duplex barge-in needs Recall separate-participant
+    streams (so the bot's own track can be excluded) — a follow-up."""
+
+    def __init__(self, state: BotState) -> None:
+        super().__init__()
+        self._state = state
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, InputAudioRawFrame) and time.monotonic() < self._state.speaking_until:
+            return  # drop — this is (mostly) the bot's own echo
+        await self.push_frame(frame, direction)
 
 
 # ── Output Media webpage registry ─────────────────────────────────────────────
@@ -127,6 +152,9 @@ class WebOutputProcessor(FrameProcessor):
                     await ws.send_text(json.dumps({"type": "interrupt"}))
                     logger.info("[recall] sent interrupt to page (cid %s)", self._state.cid)
             elif isinstance(frame, TTSAudioRawFrame) and frame.audio:
+                # Mark the bot as speaking (+0.8s tail) so InputGate mutes the echoing
+                # mixed input until shortly after the bot finishes.
+                self._state.speaking_until = time.monotonic() + 0.8
                 if ws is None:
                     if not self._warned:
                         logger.warning(

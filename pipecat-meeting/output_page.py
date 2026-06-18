@@ -3,20 +3,20 @@ output_page.py — the webpage Recall loads as the bot's camera for Output Media
 
 Recall's Output Media streams a webpage's audio+video into the meeting. We serve this
 page from pipecat itself (GET /output-page) over the existing meet-ws route, so the
-page and its audio WebSocket are same-origin and reuse the meet-ws cert — no new
-subdomain/cert needed.
+page and its audio WebSocket are same-origin and reuse the meet-ws cert.
 
 The page:
-  - connects to  wss://<host>/output/<secret>?bot=<botId>
-  - receives BINARY frames = raw PCM16 mono (the bot's TTS) → plays them gaplessly
-    via Web Audio, scheduling each buffer right after the previous one
-  - receives TEXT frames = JSON control: {"type":"interrupt"} flushes all queued/
-    playing audio immediately (barge-in), {"type":"config","sampleRate":N} sets rate
+  - connects to  wss://<host>/output/<secret>?cid=<cid>
+  - receives BINARY frames = raw PCM16 mono (the bot's TTS) and feeds them to a single
+    continuous AudioWorklet player (a FIFO that emits samples gaplessly) — this is the
+    approach Recall's own voice-agent demo uses (WavStreamPlayer). It avoids the drift/
+    gaps/garble of hand-scheduling individual BufferSources.
+  - receives TEXT frames = JSON control: {"type":"interrupt"} clears the FIFO instantly
+    (barge-in), {"type":"config","sampleRate":N} ignored (rate fixed at load).
   - renders a branded placeholder (Output Media always sends the camera video)
 
-PCM rate is passed as ?rate=… (default 24000, matching the ElevenLabs pcm_24000 TTS).
-Buffers are created at the PCM rate; the AudioContext resamples on playback, so it
-works regardless of the device/context native rate.
+PCM rate is passed as ?rate=… (default 24000, matching ElevenLabs pcm_24000). The
+AudioContext is created at that rate so samples map 1:1.
 """
 
 _HTML = r"""<!doctype html>
@@ -56,49 +56,62 @@ _HTML = r"""<!doctype html>
     location.host + '/output/' + encodeURIComponent(secret) +
     '?cid=' + encodeURIComponent(cid);
 
-  var ac = null, nextTime = 0, sources = [], speakingTimer = null;
+  // AudioWorklet that holds a FIFO of Float32 chunks and emits them gaplessly,
+  // sample-accurate — no manual scheduling. (WavStreamPlayer pattern.)
+  var workletCode =
+    "class StreamProcessor extends AudioWorkletProcessor {" +
+    "  constructor(){ super(); this.q=[]; this.i=0;" +
+    "    this.port.onmessage=(e)=>{ var d=e.data;" +
+    "      if(d.event==='write'){ this.q.push(d.buffer); }" +
+    "      else if(d.event==='clear'){ this.q=[]; this.i=0; } }; }" +
+    "  process(inputs, outputs){ var out=outputs[0][0]; if(!out) return true;" +
+    "    for(var n=0;n<out.length;n++){" +
+    "      if(this.q.length===0){ out[n]=0; continue; }" +
+    "      out[n]=this.q[0][this.i++];" +
+    "      if(this.i>=this.q[0].length){ this.q.shift(); this.i=0; } }" +
+    "    return true; } }" +
+    "registerProcessor('stream_processor', StreamProcessor);";
 
-  function ctx() {
-    if (!ac) {
-      ac = new (window.AudioContext || window.webkitAudioContext)();
-      // Recall's browser can start the context suspended; keep nudging it to run so
-      // audio plays in real time instead of queuing up and playing a minute late.
-      setInterval(function () { if (ac && ac.state !== 'running') { try { ac.resume(); } catch (e) {} } }, 300);
-    }
-    if (ac.state !== 'running') { try { ac.resume(); } catch (e) {} }
-    return ac;
-  }
+  var ac = null, node = null, ready = false, speakingTimer = null;
+
   function markSpeaking() {
     brandEl.classList.add('speaking');
     if (speakingTimer) clearTimeout(speakingTimer);
     speakingTimer = setTimeout(function () { brandEl.classList.remove('speaking'); }, 400);
   }
+
+  function initAudio() {
+    if (ac) return Promise.resolve();
+    try {
+      ac = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: sampleRate });
+    } catch (e) {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    var blob = new Blob([workletCode], { type: 'application/javascript' });
+    var url = URL.createObjectURL(blob);
+    // Keep nudging the context to run (Recall's browser may start it suspended).
+    setInterval(function () { if (ac && ac.state !== 'running') { try { ac.resume(); } catch (e) {} } }, 300);
+    return ac.audioWorklet.addModule(url).then(function () {
+      node = new AudioWorkletNode(ac, 'stream_processor', { outputChannelCount: [1] });
+      node.connect(ac.destination);
+      ready = true;
+      try { ac.resume(); } catch (e) {}
+    }).catch(function (err) { statusEl.textContent = 'audio init failed'; });
+  }
+
   function play(arrayBuf) {
-    var c = ctx();
-    // If the context isn't actually running yet, DROP this chunk rather than queue it —
-    // queuing while suspended is what causes the 1-minute-late, garbled playback.
-    if (c.state !== 'running') { return; }
+    if (!ready || !node) return;            // not initialised yet — drop (don't backlog)
+    if (ac.state !== 'running') { try { ac.resume(); } catch (e) {} }
     var i16 = new Int16Array(arrayBuf);
     if (!i16.length) return;
     var f32 = new Float32Array(i16.length);
     for (var i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
-    var buf = c.createBuffer(1, f32.length, sampleRate);
-    buf.getChannelData(0).set(f32);
-    var src = c.createBufferSource();
-    src.buffer = buf; src.connect(c.destination);
-    var now = c.currentTime;
-    // Resync if we've drifted: behind real time (underrun) or absurdly far ahead (backlog).
-    if (nextTime < now + 0.08 || nextTime > now + 4) nextTime = now + 0.08;
-    src.start(nextTime);
-    nextTime += buf.duration;
-    sources.push(src);
-    src.onended = function () { sources = sources.filter(function (s) { return s !== src; }); };
+    node.port.postMessage({ event: 'write', buffer: f32 }, [f32.buffer]);
     markSpeaking();
   }
+
   function interrupt() {
-    for (var i = 0; i < sources.length; i++) { try { sources[i].stop(); } catch (e) {} }
-    sources = [];
-    if (ac) nextTime = ac.currentTime;
+    if (node) node.port.postMessage({ event: 'clear' });
     brandEl.classList.remove('speaking');
   }
 
@@ -106,13 +119,12 @@ _HTML = r"""<!doctype html>
     var ws;
     try { ws = new WebSocket(wsUrl); } catch (e) { setTimeout(connect, 1000); return; }
     ws.binaryType = 'arraybuffer';
-    ws.onopen = function () { statusEl.textContent = 'live'; ctx(); };
+    ws.onopen = function () { statusEl.textContent = 'live'; };
     ws.onmessage = function (ev) {
       if (typeof ev.data === 'string') {
         try {
           var m = JSON.parse(ev.data);
           if (m.type === 'interrupt') interrupt();
-          else if (m.type === 'config' && m.sampleRate) sampleRate = m.sampleRate;
         } catch (e) {}
       } else {
         play(ev.data);
@@ -121,8 +133,8 @@ _HTML = r"""<!doctype html>
     ws.onerror = function () { try { ws.close(); } catch (e) {} };
     ws.onclose = function () { statusEl.textContent = 'reconnecting…'; setTimeout(connect, 1000); };
   }
-  ctx();      // create + start resuming the audio context immediately
-  connect();
+
+  initAudio().then(connect);
 })();
 </script>
 </body>

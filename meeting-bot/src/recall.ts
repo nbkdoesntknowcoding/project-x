@@ -54,6 +54,9 @@ export async function createBot(meetingUrl: string): Promise<CreateBotResult> {
     meeting_url: meetingUrl,
     bot_name: 'Mnema',
     metadata: { cid },
+    // Output Media audio is choppy/muffled on the default 250-millicore bot; Recall
+    // recommends web_4_core for real-time audio agents.
+    variant: { zoom: 'web_4_core', google_meet: 'web_4_core', microsoft_teams: 'web_4_core' },
     recording_config: {
       // Enable mixed audio capture (required) ...
       audio_mixed_raw: {},

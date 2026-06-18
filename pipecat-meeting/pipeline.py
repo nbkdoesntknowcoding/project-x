@@ -62,6 +62,7 @@ from mnema_client import register_mnema_tools, MnemaMCP
 from recall_io import (
     BotState,
     RecallSerializer,
+    InputGate,
     WebOutputProcessor,
     register_output_ws,
     unregister_output_ws,
@@ -281,6 +282,7 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
 
     pipeline = Pipeline([
         transport.input(),
+        InputGate(state),       # half-duplex: mute the bot's own echo while it speaks
         stt,
         NoiseGate(),            # drop sub-3-char STT noise before it reaches the LLM
         TurnMetricsEarly(metrics),  # stamp end-of-user-speech
