@@ -150,11 +150,13 @@ class SilentGate(FrameProcessor):
             if stripped[0] == "[":
                 if stripped.startswith(SILENT_TOKEN):
                     self._decided = True
+                    logger.info("[silentgate] suppressed reply (not addressed)")
                     return
                 if SILENT_TOKEN.startswith(stripped):
                     return  # still could become the sentinel — wait for more
             # Real speech — emit what we buffered, then stream the rest.
             self._decided = False
+            logger.info("[silentgate] speaking: %s", stripped[:80])
             await self.push_frame(LLMTextFrame(self._buf), direction)
             return
 

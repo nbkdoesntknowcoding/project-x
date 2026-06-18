@@ -110,6 +110,8 @@ class WebOutputProcessor(FrameProcessor):
     def __init__(self, state: BotState) -> None:
         super().__init__()
         self._state = state
+        self._sent = 0
+        self._warned = False
 
     def _ws(self):
         cid = self._state.cid
@@ -119,13 +121,28 @@ class WebOutputProcessor(FrameProcessor):
         await super().process_frame(frame, direction)
 
         ws = self._ws()
-        if ws is not None:
-            try:
-                if isinstance(frame, UserStartedSpeakingFrame):
+        try:
+            if isinstance(frame, UserStartedSpeakingFrame):
+                if ws is not None:
                     await ws.send_text(json.dumps({"type": "interrupt"}))
-                elif isinstance(frame, TTSAudioRawFrame) and frame.audio:
+                    logger.info("[recall] sent interrupt to page (cid %s)", self._state.cid)
+            elif isinstance(frame, TTSAudioRawFrame) and frame.audio:
+                if ws is None:
+                    if not self._warned:
+                        logger.warning(
+                            "[recall] TTS audio produced but NO page WS connected (cid=%s)",
+                            self._state.cid,
+                        )
+                        self._warned = True
+                else:
                     await ws.send_bytes(frame.audio)
-            except Exception as e:  # noqa: BLE001 — a dead page WS must not kill the pipeline
-                logger.warning("[recall] output send failed (cid %s): %s", self._state.cid, e)
+                    self._sent += 1
+                    if self._sent == 1 or self._sent % 50 == 0:
+                        logger.info(
+                            "[recall] streamed %d audio chunks to page (cid %s)",
+                            self._sent, self._state.cid,
+                        )
+        except Exception as e:  # noqa: BLE001 — a dead page WS must not kill the pipeline
+            logger.warning("[recall] output send failed (cid %s): %s", self._state.cid, e)
 
         await self.push_frame(frame, direction)
