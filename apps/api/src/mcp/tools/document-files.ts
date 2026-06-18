@@ -10,7 +10,7 @@ import { eq, and } from 'drizzle-orm';
 import type { McpAuthContext } from '../auth.js';
 import { withTenant } from '../../db/with-tenant.js';
 import { withSystemPrivilege } from '../../db/with-system-privilege.js';
-import { attachments, docs } from '../../db/schema.js';
+import { attachments, docs, folders } from '../../db/schema.js';
 import { ingestDocx } from '../../lib/documents/ingest-docx.js';
 import { ingestPdf } from '../../lib/documents/ingest-pdf.js';
 import { generateDocx } from '../../lib/documents/generate-docx.js';
@@ -103,14 +103,21 @@ export async function uploadDocFile(
     markdown = r.markdown; title = r.title; usedOcr = r.usedOcr; pageCount = r.pageCount;
   }
 
-  const [doc] = await withTenant(workspaceId, (tx) =>
-    tx.insert(docs).values({
+  const [doc] = await withTenant(workspaceId, async (tx) => {
+    // Hierarchy: inherit the target folder's project (null if unfiled).
+    let projectId: string | null = null;
+    if (folder_id) {
+      const f = await tx.select({ projectId: folders.projectId }).from(folders)
+        .where(eq(folders.id, folder_id)).limit(1);
+      projectId = f[0]?.projectId ?? null;
+    }
+    return tx.insert(docs).values({
       workspaceId, path: `upload-${randomUUID()}`, title, markdown,
       yjsState: emptyYjsState(), contentHash: contentHash(markdown),
       createdBy: ctx.user_id, updatedBy: ctx.user_id,
-      folderId: folder_id ?? null, sourceAttachmentId: attachment.id,
-    }).returning(),
-  );
+      folderId: folder_id ?? null, projectId, sourceAttachmentId: attachment.id,
+    }).returning();
+  });
   if (!doc) throw new Error('Failed to create doc');
 
   await withTenant(workspaceId, (tx) =>

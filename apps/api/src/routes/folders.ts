@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import { docs, folders } from '../db/schema.js';
+import { docs, embeddings, folders } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -174,6 +174,13 @@ export const foldersRoutes: FastifyPluginAsync = async (app) => {
         .set({ projectId, updatedAt: new Date() })
         .where(and(eq(folders.id, id), eq(folders.workspaceId, req.auth!.tenant_id)))
         .returning();
+      // Cascade the project to the docs directly in this folder + their embeddings, so
+      // project-scoped search/graph stay correct. (Subfolders carry their own projectId.)
+      await tx.update(docs).set({ projectId }).where(eq(docs.folderId, id));
+      await tx
+        .update(embeddings)
+        .set({ projectId })
+        .where(sql`${embeddings.docId} IN (SELECT id FROM docs WHERE folder_id = ${id})`);
       return rows[0];
     });
 
@@ -188,6 +195,13 @@ export const foldersRoutes: FastifyPluginAsync = async (app) => {
     if (!isUuid(id)) return reply.code(400).send({ error: 'bad_id' });
 
     await withTenant(req.auth.tenant_id, async (tx) => {
+      // Docs directly in this folder become unfiled (FK set-null) → clear their
+      // denormalized project too so scoped search doesn't keep stale rows.
+      await tx
+        .update(embeddings)
+        .set({ projectId: null })
+        .where(sql`${embeddings.docId} IN (SELECT id FROM docs WHERE folder_id = ${id})`);
+      await tx.update(docs).set({ projectId: null }).where(eq(docs.folderId, id));
       await tx.delete(folders).where(eq(folders.id, id));
     });
 
@@ -206,11 +220,23 @@ export const foldersRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const updated = await withTenant(req.auth.tenant_id, async (tx) => {
+      // Hierarchy: the doc inherits the destination folder's project (null if unfiled).
+      let projectId: string | null = null;
+      if (parsed.data.folder_id) {
+        const f = await tx
+          .select({ projectId: folders.projectId })
+          .from(folders)
+          .where(eq(folders.id, parsed.data.folder_id))
+          .limit(1);
+        projectId = f[0]?.projectId ?? null;
+      }
       const rows = await tx
         .update(docs)
-        .set({ folderId: parsed.data.folder_id })
+        .set({ folderId: parsed.data.folder_id, projectId })
         .where(and(eq(docs.id, id), isNull(docs.deletedAt)))
         .returning({ id: docs.id, folderId: docs.folderId });
+      // Keep embeddings' denormalized project in sync for scoped search.
+      await tx.update(embeddings).set({ projectId }).where(eq(embeddings.docId, id));
       return rows[0];
     });
 

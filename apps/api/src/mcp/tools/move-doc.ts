@@ -13,7 +13,7 @@
 
 import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
-import { docs, folders, workspaceMembers } from '../../db/schema.js';
+import { docs, embeddings, folders, workspaceMembers } from '../../db/schema.js';
 import { withSystemPrivilege } from '../../db/with-system-privilege.js';
 import { withTenant } from '../../db/with-tenant.js';
 import type { McpAuthContext } from '../auth.js';
@@ -192,11 +192,13 @@ export async function moveDoc(
         };
       }
 
-      // 6. Validate target folder if non-null (must be in same workspace, not trashed).
+      // 6. Validate target folder if non-null (must be in same workspace, not trashed),
+      //    and capture its project so the doc inherits it.
+      let targetProjectId: string | null = null;
       if (args.target_folder_id !== null) {
         const folderRows = await withTenant(ctx.tenant_id, (tx) =>
           tx
-            .select({ id: folders.id })
+            .select({ id: folders.id, projectId: folders.projectId })
             .from(folders)
             .where(
               and(eq(folders.id, args.target_folder_id!), isNull(folders.deletedAt)),
@@ -209,15 +211,17 @@ export async function moveDoc(
             message: `Folder ${args.target_folder_id} not found in this workspace.`,
           };
         }
+        targetProjectId = folderRows[0]!.projectId ?? null;
       }
 
-      // 7. Update docs.folder_id (only this column — never markdown or yjs_state).
-      await withTenant(ctx.tenant_id, (tx) =>
-        tx
+      // 7. Update docs.folder_id + project_id (hierarchy), and keep embeddings in sync.
+      await withTenant(ctx.tenant_id, async (tx) => {
+        await tx
           .update(docs)
-          .set({ folderId: args.target_folder_id })
-          .where(and(eq(docs.id, args.doc_id), isNull(docs.deletedAt))),
-      );
+          .set({ folderId: args.target_folder_id, projectId: targetProjectId })
+          .where(and(eq(docs.id, args.doc_id), isNull(docs.deletedAt)));
+        await tx.update(embeddings).set({ projectId: targetProjectId }).where(eq(embeddings.docId, args.doc_id));
+      });
 
       // 8. Record idempotency key on success.
       recordIdempotencyKey(iKey);

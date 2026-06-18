@@ -17,7 +17,7 @@ import { and, eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { initLiveDoc } from '../../collab/writeback.js';
-import { docs, workspaceMembers } from '../../db/schema.js';
+import { docs, folders, workspaceMembers } from '../../db/schema.js';
 import { withSystemPrivilege } from '../../db/with-system-privilege.js';
 import { withTenant } from '../../db/with-tenant.js';
 import { contentHash, emptyYjsState } from '../../lib/yjs.js';
@@ -226,11 +226,22 @@ export async function createDoc(
       const markdown = args.markdown ?? '';
 
       const created = await withTenant(ctx.tenant_id, async (tx) => {
+        // Hierarchy: inherit the target folder's project (null if unfiled).
+        let projectId: string | null = null;
+        if (args.folder_id) {
+          const f = await tx
+            .select({ projectId: folders.projectId })
+            .from(folders)
+            .where(eq(folders.id, args.folder_id))
+            .limit(1);
+          projectId = f[0]?.projectId ?? null;
+        }
         const inserted = await tx
           .insert(docs)
           .values({
             workspaceId: ctx.tenant_id,
             folderId: args.folder_id ?? null,
+            projectId,
             path,
             title: args.title,
             type: args.type,

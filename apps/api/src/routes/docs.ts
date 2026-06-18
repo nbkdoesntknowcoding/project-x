@@ -152,11 +152,22 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
     const path = `${nanoid(10)}.md`;
 
     const created = await withTenant(auth.tenant_id, async (tx) => {
+      // Hierarchy: a doc inherits its folder's project (null if unfiled).
+      let projectId: string | null = null;
+      if (parsed.data.folder_id) {
+        const f = await tx
+          .select({ projectId: folders.projectId })
+          .from(folders)
+          .where(eq(folders.id, parsed.data.folder_id))
+          .limit(1);
+        projectId = f[0]?.projectId ?? null;
+      }
       const inserted = await tx
         .insert(docs)
         .values({
           workspaceId: auth.tenant_id,
           folderId: parsed.data.folder_id ?? null,
+          projectId,
           path,
           title: parsed.data.title,
           type: parsed.data.type,

@@ -25,6 +25,7 @@ async function upsertNode(
   entityId: string,
   label: string,
   summary?: string,
+  projectId: string | null = null,
 ) {
   const existing = await tx
     .select({ id: graphNodes.id })
@@ -41,14 +42,14 @@ async function upsertNode(
   if (existing.length > 0) {
     await tx
       .update(graphNodes)
-      .set({ label, summary, updatedAt: new Date() })
+      .set({ label, summary, projectId, updatedAt: new Date() })
       .where(eq(graphNodes.id, existing[0]!.id));
     return existing[0]!.id;
   }
 
   const rows = await tx
     .insert(graphNodes)
-    .values({ workspaceId, entityType, entityId, label, summary, extractionPass: 'structural' })
+    .values({ workspaceId, entityType, entityId, label, summary, projectId, extractionPass: 'structural' })
     .returning({ id: graphNodes.id });
   return rows[0]!.id;
 }
@@ -92,7 +93,7 @@ export async function extractStructural(
 
   const projectNodeMap = new Map<string, string>(); // projectId → nodeId
   for (const p of projectRows) {
-    const nodeId = await upsertNode(db, workspaceId, 'project', p.id, p.name, p.description ?? undefined);
+    const nodeId = await upsertNode(db, workspaceId, 'project', p.id, p.name, p.description ?? undefined, p.id);
     projectNodeMap.set(p.id, nodeId);
     nodeCount++;
   }
@@ -103,13 +104,14 @@ export async function extractStructural(
       id: docs.id,
       title: docs.title,
       folderId: docs.folderId,
+      projectId: docs.projectId,
     })
     .from(docs)
     .where(and(eq(docs.workspaceId, workspaceId), isNull(docs.deletedAt)));
 
   const docNodeMap = new Map<string, string>(); // docId → nodeId
   for (const d of docRows) {
-    const nodeId = await upsertNode(db, workspaceId, 'doc', d.id, d.title || 'Untitled');
+    const nodeId = await upsertNode(db, workspaceId, 'doc', d.id, d.title || 'Untitled', undefined, d.projectId ?? null);
     docNodeMap.set(d.id, nodeId);
     nodeCount++;
   }
@@ -249,7 +251,7 @@ export async function extractStructural(
     .where(eq(tasks.workspaceId, workspaceId));
 
   for (const t of taskRows) {
-    const nodeId = await upsertNode(db, workspaceId, 'task', t.id, t.title);
+    const nodeId = await upsertNode(db, workspaceId, 'task', t.id, t.title, undefined, t.projectId ?? null);
     nodeCount++;
 
     // implements: task → doc, weight=1.5 (cross-type)

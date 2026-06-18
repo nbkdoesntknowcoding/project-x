@@ -44,12 +44,12 @@ export async function processEmbeddingJob(
 
   type Stage1 =
     | { skip: true; reason: 'doc_not_found' | 'stale_job' | 'already_embedded' }
-    | { skip: false; markdown: string };
+    | { skip: false; markdown: string; projectId: string | null };
 
   // Stage 1: read + idempotency check.
   const work: Stage1 = await withTenant(tenant_id, async (tx): Promise<Stage1> => {
     const docRows = await tx
-      .select({ markdown: docs.markdown, contentHash: docs.contentHash })
+      .select({ markdown: docs.markdown, contentHash: docs.contentHash, projectId: docs.projectId })
       .from(docs)
       .where(eq(docs.id, doc_id))
       .limit(1);
@@ -76,7 +76,7 @@ export async function processEmbeddingJob(
       return { skip: true, reason: 'already_embedded' };
     }
 
-    return { skip: false, markdown: doc.markdown ?? '' };
+    return { skip: false, markdown: doc.markdown ?? '', projectId: doc.projectId ?? null };
   });
 
   if (work.skip) {
@@ -119,6 +119,7 @@ export async function processEmbeddingJob(
         slice.map(({ chunk, vector }) => ({
           workspaceId: tenant_id,
           docId: doc_id,
+          projectId: work.projectId,
           chunkIndex: chunk.index,
           chunkText: chunk.text,
           tokenCount: chunk.tokenCount,
