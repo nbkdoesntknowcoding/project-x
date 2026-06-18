@@ -36,6 +36,8 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 
+from meeting_persona import SILENT_TOKEN
+
 logger = logging.getLogger("pipecat-meeting.recall")
 
 RECALL_REGION = os.environ.get("RECALL_REGION", "ap-northeast-1")
@@ -148,6 +150,9 @@ class RecallSpeaker(FrameProcessor):
             self._capturing = False
             text = "".join(self._buf).strip()
             self._buf = []
+            # Persona emits the SILENT_TOKEN sentinel when it shouldn't speak —
+            # strip it; if nothing real remains, stay quiet.
+            text = text.replace(SILENT_TOKEN, "").strip()
             if text:
                 # Fire-and-forget so we don't block the pipeline; Pipecat manages
                 # the task lifecycle via create_task().

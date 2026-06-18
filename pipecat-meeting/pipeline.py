@@ -36,6 +36,8 @@ from pipecat.transports.websocket.fastapi import (
 )
 from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
 from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
+from pipecat.frames.frames import Frame, TranscriptionFrame
 
 from meeting_persona import build_meeting_persona
 from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS
@@ -60,6 +62,23 @@ def _mnema_tools_schema() -> ToolsSchema:
     return ToolsSchema(standard_tools=fns)
 
 
+class NoiseGate(FrameProcessor):
+    """Drop final TranscriptionFrames that are too short to be real speech (STT noise
+    like a stray 'a' or punctuation on silence). Keeps junk out of the LLM context.
+    Interim frames and all non-transcription frames pass through untouched."""
+
+    MIN_CHARS = 3
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, TranscriptionFrame):
+            text = (frame.text or "").strip()
+            # Require at least one letter/digit and a minimum length.
+            if len(text) < self.MIN_CHARS or not any(c.isalnum() for c in text):
+                return  # swallow — do not push downstream
+        await self.push_frame(frame, direction)
+
+
 async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: str) -> None:
     """One meeting = one pipeline run. Audio in from Recall, replies out via Output Audio."""
     state = BotState()
@@ -81,7 +100,9 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         api_key=os.environ["DEEPGRAM_API_KEY"],
         live_options=LiveOptions(
             model="nova-3",
-            language="multi",
+            # English by default — "multi" made Deepgram hallucinate foreign words on
+            # silence/noise (e.g. "Sí, mi mamá"). Override via MEETING_STT_LANGUAGE.
+            language=os.environ.get("MEETING_STT_LANGUAGE", "en"),
             encoding="linear16",
             sample_rate=RECALL_INPUT_SAMPLE_RATE,
             channels=1,
@@ -110,6 +131,7 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     pipeline = Pipeline([
         transport.input(),
         stt,
+        NoiseGate(),         # drop sub-3-char STT noise before it reaches the LLM
         aggregators.user(),
         llm,
         speaker,             # capture assistant text → speak via Recall Output Audio
