@@ -1,11 +1,10 @@
 """
 meeting_persona.py — system prompt for the meeting bot.
 
-Tightened behaviour (Stage 1): the bot defaults to SILENT. It only speaks when it
-is directly addressed as "Mnema", or to confirm an action it just took. When it
-should not speak, it must output the exact sentinel `[SILENT]` and nothing else —
-the output stage (RecallSpeaker / WebOutputProcessor) suppresses that, so the bot
-stays quiet instead of greeting on every utterance.
+Tightened behaviour: the bot defaults to SILENT. It only speaks when it is directly
+addressed as "Mnema", or to confirm an action it just took. When it should not speak,
+it must output the exact sentinel `[SILENT]` and nothing else — pipeline.SilentGate
+drops that before TTS, so the bot stays quiet instead of greeting on every utterance.
 """
 from typing import Optional
 
