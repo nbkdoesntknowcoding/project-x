@@ -44,6 +44,8 @@ from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.turns.user_turn_strategies import UserTurnStrategies
+from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.frames.frames import (
     Frame,
@@ -269,12 +271,18 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         messages=[{"role": "system", "content": system_prompt}],
         tools=_mnema_tools_schema(),
     )
-    # VAD on the user aggregator → emits UserStartedSpeakingFrame so the pipeline can
-    # interrupt the bot mid-utterance (allow_interruptions below). Silero runs at 16 kHz.
+    # VAD on the user aggregator → emits UserStartedSpeakingFrame for barge-in.
+    # IMPORTANT: override the default turn-STOP strategy. Pipecat 1.2.1 defaults to
+    # SmartTurn v3 (TurnAnalyzer), which on continuous meeting audio keeps deciding the
+    # turn isn't over and delays the LLM by tens of seconds. Use plain VAD-silence
+    # endpointing (0.6s after the user stops) like the VAP — fast and deterministic.
     aggregators = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
             vad_analyzer=SileroVADAnalyzer(sample_rate=RECALL_INPUT_SAMPLE_RATE),
+            user_turn_strategies=UserTurnStrategies(
+                stop=[SpeechTimeoutUserTurnStopStrategy()],
+            ),
         ),
     )
 
