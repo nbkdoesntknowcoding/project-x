@@ -6,11 +6,12 @@ public WebSocket (Caddy: meet-ws.theboringpeople.in → here:8765). The audio is
 mono 16-bit LE PCM @ 16 kHz wrapped in `audio_mixed_raw.data` JSON messages
 (see recall_io.RecallSerializer). The pipeline runs:
 
-    Deepgram STT → GPT-4o-mini (+ Mnema tools) → [assistant text]
+    Deepgram STT → GPT-4o-mini (+ Mnema tools) → ElevenLabs TTS (streaming PCM)
 
-and speaks each reply back into the meeting via Recall's Output Audio endpoint
-(ElevenLabs cloned voice → mp3 → POST), handled by recall_io.RecallSpeaker.
-Recall's realtime WS is input-only, so we do NOT send audio back over it.
+and streams each reply to the bot's Output Media webpage (recall_io.WebOutputProcessor
+→ /output WS → the page plays PCM via Web Audio). SileroVAD on the user aggregator +
+allow_interruptions give true barge-in: when someone talks over the bot, the page is
+told to flush. Recall's realtime WS is input-only, so we never send audio over it.
 
 Pipecat 1.2.1 (pinned). Imports verified against the installed package.
 """
@@ -28,7 +29,10 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
+from pipecat.processors.aggregators.llm_response_universal import (
+    LLMContextAggregatorPair,
+    LLMUserAggregatorParams,
+)
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.transports.websocket.fastapi import (
@@ -37,14 +41,30 @@ from pipecat.transports.websocket.fastapi import (
 )
 from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
 from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
-from pipecat.frames.frames import Frame, TranscriptionFrame
+from pipecat.frames.frames import (
+    Frame,
+    TranscriptionFrame,
+    LLMTextFrame,
+    LLMFullResponseStartFrame,
+    LLMFullResponseEndFrame,
+)
 
-from meeting_persona import build_meeting_persona
+from meeting_persona import build_meeting_persona, SILENT_TOKEN
 from output_page import output_page_html
 from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS
 from mnema_client import register_mnema_tools, MnemaMCP
-from recall_io import BotState, RecallSerializer, RecallSpeaker, RECALL_INPUT_SAMPLE_RATE
+from recall_io import (
+    BotState,
+    RecallSerializer,
+    WebOutputProcessor,
+    register_output_ws,
+    unregister_output_ws,
+    RECALL_INPUT_SAMPLE_RATE,
+    OUTPUT_SAMPLE_RATE,
+)
 
 MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
 
@@ -78,6 +98,55 @@ class NoiseGate(FrameProcessor):
             # Require at least one letter/digit and a minimum length.
             if len(text) < self.MIN_CHARS or not any(c.isalnum() for c in text):
                 return  # swallow — do not push downstream
+        await self.push_frame(frame, direction)
+
+
+class SilentGate(FrameProcessor):
+    """Suppress the persona's [SILENT] sentinel before it reaches TTS, so the bot
+    actually stays quiet when not addressed (rather than synthesizing "[SILENT]").
+
+    Decides per LLM response from the first non-whitespace content: if it starts the
+    sentinel ("[SILENT…"), drop the whole response; otherwise flush what was buffered
+    and pass the rest through token-by-token (preserves streaming for real replies).
+    Only LLMTextFrames are gated — tool-call frames and everything else pass through.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._buf = ""
+        self._decided: bool | None = None  # None=undecided, True=silent, False=speak
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+
+        if isinstance(frame, LLMFullResponseStartFrame):
+            self._buf = ""
+            self._decided = None
+            await self.push_frame(frame, direction)
+            return
+
+        if isinstance(frame, LLMTextFrame):
+            if self._decided is True:
+                return  # silent — drop
+            if self._decided is False:
+                await self.push_frame(frame, direction)
+                return
+            # Undecided: accumulate until we can tell.
+            self._buf += frame.text
+            stripped = self._buf.lstrip()
+            if not stripped:
+                return  # whitespace only so far — wait
+            if stripped[0] == "[":
+                if stripped.startswith(SILENT_TOKEN):
+                    self._decided = True
+                    return
+                if SILENT_TOKEN.startswith(stripped):
+                    return  # still could become the sentinel — wait for more
+            # Real speech — emit what we buffered, then stream the rest.
+            self._decided = False
+            await self.push_frame(LLMTextFrame(self._buf), direction)
+            return
+
         await self.push_frame(frame, direction)
 
 
@@ -121,24 +190,41 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     mnema = MnemaMCP()
     register_mnema_tools(llm, mnema)
 
-    # ── Speak replies into the meeting (ElevenLabs mp3 → Recall Output Audio) ──
-    speaker = RecallSpeaker(state)
+    # ── TTS — ElevenLabs cloned voice, streaming PCM for the Output Media webpage ──
+    tts = ElevenLabsTTSService(
+        api_key=os.environ["ELEVENLABS_API_KEY"],
+        voice_id=os.environ["ELEVENLABS_VOICE_ID"],
+        model=os.environ.get("ELEVENLABS_MODEL", "eleven_flash_v2_5"),
+        sample_rate=OUTPUT_SAMPLE_RATE,  # → pcm_24000; the page plays PCM16 @ this rate
+    )
+
+    # Stream TTS audio to the bot's Output Media webpage + signal barge-in.
+    web_out = WebOutputProcessor(state)
 
     context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
         tools=_mnema_tools_schema(),
     )
-    aggregators = LLMContextAggregatorPair(context)
+    # VAD on the user aggregator → emits UserStartedSpeakingFrame so the pipeline can
+    # interrupt the bot mid-utterance (allow_interruptions below). Silero runs at 16 kHz.
+    aggregators = LLMContextAggregatorPair(
+        context,
+        user_params=LLMUserAggregatorParams(
+            vad_analyzer=SileroVADAnalyzer(sample_rate=RECALL_INPUT_SAMPLE_RATE),
+        ),
+    )
 
     pipeline = Pipeline([
         transport.input(),
         stt,
-        NoiseGate(),         # drop sub-3-char STT noise before it reaches the LLM
-        aggregators.user(),
+        NoiseGate(),          # drop sub-3-char STT noise before it reaches the LLM
+        aggregators.user(),   # VAD here → barge-in detection
         llm,
-        speaker,             # capture assistant text → speak via Recall Output Audio
+        SilentGate(),         # suppress the [SILENT] sentinel before TTS
+        tts,
+        web_out,              # stream PCM to the Output Media page; interrupt on barge-in
         aggregators.assistant(),
-        transport.output(),  # control-frame sink (no audio leaves over Recall's WS)
+        transport.output(),   # control-frame sink (no audio leaves over Recall's WS)
     ])
 
     task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
@@ -164,6 +250,26 @@ async def health():
 async def output_page():
     # The webpage Recall loads as the bot's camera for Output Media (Stage 2).
     return HTMLResponse(output_page_html())
+
+
+@app.websocket("/output/{secret}")
+async def output_ws(websocket: WebSocket, secret: str):
+    # The bot's Output Media page connects here to receive streamed TTS audio.
+    cid = websocket.query_params.get("cid")
+    if not MEETING_WS_SECRET or secret != MEETING_WS_SECRET or not cid:
+        await websocket.close(code=4403)
+        return
+    await websocket.accept()
+    register_output_ws(cid, websocket)
+    try:
+        # The page rarely sends anything; this loop just keeps the socket open and
+        # detects disconnect (raises when the page closes).
+        while True:
+            await websocket.receive_text()
+    except Exception:  # noqa: BLE001
+        pass
+    finally:
+        unregister_output_ws(cid)
 
 
 @app.websocket("/{secret}")
