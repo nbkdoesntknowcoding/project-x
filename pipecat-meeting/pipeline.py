@@ -71,6 +71,14 @@ from recall_io import (
 
 MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
 
+# "Mnema" + common speech-to-text mishearings — used to decide when the bot is addressed.
+_WAKE_WORDS = ("mnema", "nima", "neema", "nema", "nemo", "nimo", "mneme", "menma", "namo", "amnema")
+
+
+def _addressed(text: str) -> bool:
+    low = text.lower()
+    return any(w in low for w in _WAKE_WORDS)
+
 
 def _mnema_tools_schema() -> ToolsSchema:
     """Convert the OpenAI-format Mnema tool dicts to Pipecat 1.2.1 FunctionSchemas."""
@@ -168,7 +176,7 @@ class RAGContext(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, TranscriptionFrame):
             text = (frame.text or "").strip()
-            if text and "mnema" in text.lower():
+            if text and _addressed(text):
                 await self._inject(text, direction)
         await self.push_frame(frame, direction)
 
