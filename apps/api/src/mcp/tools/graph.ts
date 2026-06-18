@@ -194,6 +194,7 @@ export const GET_GOD_NODES_TOOL_SPEC = {
     type: 'object' as const,
     properties: {
       limit: { type: 'number', description: 'Max results (default 10)' },
+      project_id: { type: 'string', description: 'Optional project UUID — restrict to that project.' },
     },
   },
   annotations: { readOnlyHint: true, title: 'Get the most critical nodes in the knowledge graph' },
@@ -205,10 +206,15 @@ export async function getGodNodes(
 ): Promise<{ content: string; structuredContent: Record<string, unknown> }> {
   const limit = Math.min(Number(args.limit ?? 10), 20);
   const workspaceId = ctx.tenant_id;
+  const projectId = typeof args.project_id === 'string' ? args.project_id : undefined;
 
   const nodes = await withTenant(workspaceId, tx =>
     tx.select().from(graphNodes)
-      .where(and(eq(graphNodes.workspaceId, workspaceId), eq(graphNodes.isGodNode, true)))
+      .where(and(
+        eq(graphNodes.workspaceId, workspaceId),
+        eq(graphNodes.isGodNode, true),
+        projectId ? eq(graphNodes.projectId, projectId) : undefined,
+      ))
       .orderBy(desc(graphNodes.betweennessCentrality))
       .limit(limit));
 

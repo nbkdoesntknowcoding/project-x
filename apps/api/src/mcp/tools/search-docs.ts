@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { withTenant } from '../../db/with-tenant.js';
 import type { McpAuthContext } from '../auth.js';
@@ -71,6 +71,14 @@ export const SEARCH_DOCS_TOOL = {
         maximum: 20,
         description: 'Maximum results to return. Defaults to 10.',
       },
+      project_id: {
+        type: 'string',
+        description: 'Optional project UUID — restrict results to docs in that project.',
+      },
+      folder_id: {
+        type: 'string',
+        description: 'Optional folder UUID — restrict results to docs in that folder.',
+      },
     },
     required: ['query'],
     additionalProperties: false,
@@ -87,7 +95,17 @@ const argsSchema = z.object({
     }),
   mode: z.enum(['hybrid', 'keyword', 'semantic']).optional().default('hybrid'),
   limit: z.number().int().min(1).max(20).optional().default(10),
+  project_id: z.string().uuid().optional(),
+  folder_id: z.string().uuid().optional(),
 });
+
+/** Build an extra WHERE fragment scoping by project/folder (on the docs alias `d`). */
+function scopeClause(projectId?: string, folderId?: string): SQL {
+  const parts: SQL[] = [];
+  if (projectId) parts.push(sql`AND d.project_id = ${projectId}::uuid`);
+  if (folderId) parts.push(sql`AND d.folder_id = ${folderId}::uuid`);
+  return parts.length ? sql.join(parts, sql` `) : sql``;
+}
 
 export type Mode = 'hybrid' | 'keyword' | 'semantic';
 
@@ -121,13 +139,14 @@ export async function searchDocs(
     ctx,
     { tool_name: SEARCH_DOCS_TOOL.name, args: args as Record<string, unknown> },
     async () => {
+      const scope = scopeClause(args.project_id, args.folder_id);
       switch (args.mode) {
         case 'keyword':
-          return await runKeyword(ctx, args.query, args.limit);
+          return await runKeyword(ctx, args.query, args.limit, scope);
         case 'semantic':
-          return await runSemantic(ctx, args.query, args.limit);
+          return await runSemantic(ctx, args.query, args.limit, scope);
         case 'hybrid':
-          return await runHybrid(ctx, args.query, args.limit);
+          return await runHybrid(ctx, args.query, args.limit, scope);
       }
     },
     (result) => ({ mode: result.mode, result_count: result.results.length }),
@@ -155,6 +174,7 @@ async function runKeyword(
   ctx: McpAuthContext,
   query: string,
   limit: number,
+  scope: SQL,
 ): Promise<SearchResult> {
   const result = await withTenant(ctx.tenant_id, async (tx) =>
     tx.execute<KeywordRow>(sql`
@@ -168,7 +188,7 @@ async function runKeyword(
         (to_tsvector('english', coalesce(d.title, '')) @@ q.tsquery) AS title_match,
         (to_tsvector('english', coalesce(d.markdown, '')) @@ q.tsquery) AS body_match
       FROM docs d, q
-      WHERE d.tsv @@ q.tsquery AND d.deleted_at IS NULL
+      WHERE d.tsv @@ q.tsquery AND d.deleted_at IS NULL ${scope}
       ORDER BY rank DESC
       LIMIT ${limit}
     `),
@@ -216,6 +236,7 @@ async function runSemantic(
   ctx: McpAuthContext,
   query: string,
   limit: number,
+  scope: SQL,
 ): Promise<SearchResult> {
   const vector = await embedQuery(ctx.tenant_id, query);
   const vectorLiteral = formatVectorLiteral(vector);
@@ -230,7 +251,7 @@ async function runSemantic(
           (e.embedding <=> ${vectorLiteral}::vector) AS distance
         FROM embeddings e
         JOIN docs d ON d.id = e.doc_id
-        WHERE d.deleted_at IS NULL
+        WHERE d.deleted_at IS NULL ${scope}
         ORDER BY e.embedding <=> ${vectorLiteral}::vector
         LIMIT 50
       )
@@ -287,6 +308,7 @@ async function runHybrid(
   ctx: McpAuthContext,
   query: string,
   limit: number,
+  scope: SQL,
 ): Promise<SearchResult> {
   const vector = await embedQuery(ctx.tenant_id, query);
   const vectorLiteral = formatVectorLiteral(vector);
@@ -303,7 +325,7 @@ async function runHybrid(
               'StartSel=<mark>, StopSel=</mark>, MaxFragments=2, MaxWords=15, MinWords=5'
             ) AS snippet
           FROM docs d, q
-          WHERE d.tsv @@ q.tsquery AND d.deleted_at IS NULL
+          WHERE d.tsv @@ q.tsquery AND d.deleted_at IS NULL ${scope}
           LIMIT 50
         ),
         semantic_results AS (
@@ -314,7 +336,7 @@ async function runHybrid(
             (e.embedding <=> ${vectorLiteral}::vector) AS distance
           FROM embeddings e
           JOIN docs d ON d.id = e.doc_id
-          WHERE d.deleted_at IS NULL
+          WHERE d.deleted_at IS NULL ${scope}
           ORDER BY e.embedding <=> ${vectorLiteral}::vector
           LIMIT 50
         ),

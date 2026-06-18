@@ -47,6 +47,10 @@ export const LIST_FOLDERS_TOOL = {
         description:
           'When true, returns every non-trashed folder in the workspace regardless of nesting. Overrides parent_folder_id.',
       },
+      project_id: {
+        type: 'string',
+        description: 'Optional project UUID — restrict to folders in that project.',
+      },
     },
     additionalProperties: false,
   },
@@ -59,6 +63,7 @@ export const LIST_FOLDERS_TOOL = {
 const argsSchema = z.object({
   parent_folder_id: z.string().uuid().optional(),
   include_all: z.boolean().optional(),
+  project_id: z.string().uuid().optional(),
 });
 
 export interface ListFoldersResult {
@@ -93,6 +98,9 @@ export async function listFolders(
           : args.parent_folder_id !== undefined
             ? eq(folders.parentFolderId, args.parent_folder_id)
             : isNull(folders.parentFolderId);
+        const projectClause = args.project_id
+          ? eq(folders.projectId, args.project_id)
+          : undefined;
 
         const rows = await tx
           .select({
@@ -111,7 +119,7 @@ export async function listFolders(
             )`,
           })
           .from(folders)
-          .where(parentClause ? and(isNull(folders.deletedAt), parentClause) : isNull(folders.deletedAt))
+          .where(and(isNull(folders.deletedAt), parentClause, projectClause))
           .orderBy(folders.name);
 
         return {

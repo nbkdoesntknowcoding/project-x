@@ -49,6 +49,10 @@ export const LIST_DOCS_TOOL = {
         type: 'string',
         description: 'Optional folder UUID. If supplied, returns only docs inside that folder.',
       },
+      project_id: {
+        type: 'string',
+        description: 'Optional project UUID. If supplied, returns only docs in that project. Results are newest-first.',
+      },
     },
     additionalProperties: false,
   },
@@ -59,6 +63,7 @@ const argsSchema = z.object({
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(50).optional(),
   folder_id: z.string().uuid().optional(),
+  project_id: z.string().uuid().optional(),
 });
 
 export interface ListDocsResult {
@@ -109,6 +114,9 @@ export async function listDocs(
         const folderClause = args.folder_id
           ? eq(docs.folderId, args.folder_id)
           : undefined;
+        const projectClause = args.project_id
+          ? eq(docs.projectId, args.project_id)
+          : undefined;
 
         const rows = await tx
           .select({
@@ -122,7 +130,7 @@ export async function listDocs(
             updatedAtText: sql<string>`${docs.updatedAt}::text`,
           })
           .from(docs)
-          .where(and(isNull(docs.deletedAt), folderClause, cursorClause))
+          .where(and(isNull(docs.deletedAt), folderClause, projectClause, cursorClause))
           .orderBy(desc(docs.updatedAt), desc(docs.id))
           .limit(limit + 1);
 
