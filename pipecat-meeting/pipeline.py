@@ -39,7 +39,7 @@ from pipecat.services.openai.llm import OpenAILLMService
 
 from meeting_persona import build_meeting_persona
 from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS
-from mnema_client import register_mnema_tools
+from mnema_client import register_mnema_tools, MnemaMCP
 from recall_io import BotState, RecallSerializer, RecallSpeaker, RECALL_INPUT_SAMPLE_RATE
 
 MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
@@ -94,7 +94,9 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         api_key=os.environ["OPENAI_API_KEY"],
         model=os.environ.get("OPENAI_LLM_MODEL", "gpt-4o-mini"),
     )
-    register_mnema_tools(llm)
+    # One persistent Mnema MCP session per meeting (low latency for per-turn search).
+    mnema = MnemaMCP()
+    register_mnema_tools(llm, mnema)
 
     # ── Speak replies into the meeting (ElevenLabs mp3 → Recall Output Audio) ──
     speaker = RecallSpeaker(state)
@@ -118,7 +120,10 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
     logger.info("[meeting-pipeline] starting")
     runner = PipelineRunner(handle_sigint=False)
-    await runner.run(task)
+    try:
+        await runner.run(task)
+    finally:
+        await mnema.aclose()
     logger.info("[meeting-pipeline] finished")
 
 

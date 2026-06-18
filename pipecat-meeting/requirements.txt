@@ -20,6 +20,10 @@ pipecat-ai[silero,openai,deepgram,elevenlabs,websocket]==1.2.1
 
 numpy>=1.26.0
 
-# Direct REST calls: ElevenLabs mp3 synthesis (output), Recall Output Audio POST,
-# and the Mnema tool API. (openai already pulls httpx, but pin it explicitly.)
+# Direct REST calls: ElevenLabs mp3 synthesis (output) + Recall Output Audio POST.
+# (openai already pulls httpx, but pin it explicitly.)
 httpx>=0.27.0
+
+# Mnema tool access goes through the MCP endpoint (POST /mcp) with the API key —
+# the official MCP SDK handles the stateless Streamable HTTP handshake.
+mcp>=1.2.0
