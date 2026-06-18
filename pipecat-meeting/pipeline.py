@@ -53,6 +53,7 @@ from pipecat.frames.frames import (
 )
 
 from meeting_persona import build_meeting_persona, SILENT_TOKEN
+from latency import TurnMetrics, TurnMetricsEarly, TurnMetricsLate
 from output_page import output_page_html
 from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS
 from mnema_client import register_mnema_tools, MnemaMCP
@@ -214,17 +215,21 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         ),
     )
 
+    metrics = TurnMetrics()
+
     pipeline = Pipeline([
         transport.input(),
         stt,
-        NoiseGate(),          # drop sub-3-char STT noise before it reaches the LLM
-        aggregators.user(),   # VAD here → barge-in detection
+        NoiseGate(),            # drop sub-3-char STT noise before it reaches the LLM
+        TurnMetricsEarly(metrics),  # stamp end-of-user-speech
+        aggregators.user(),     # VAD here → barge-in detection
         llm,
-        SilentGate(),         # suppress the [SILENT] sentinel before TTS
+        SilentGate(),           # suppress the [SILENT] sentinel before TTS
         tts,
-        web_out,              # stream PCM to the Output Media page; interrupt on barge-in
+        TurnMetricsLate(metrics),   # stamp LLM/TTS milestones → log p50/p95
+        web_out,                # stream PCM to the Output Media page; interrupt on barge-in
         aggregators.assistant(),
-        transport.output(),   # control-frame sink (no audio leaves over Recall's WS)
+        transport.output(),     # control-frame sink (no audio leaves over Recall's WS)
     ])
 
     task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
