@@ -16,6 +16,7 @@ told to flush. Recall's realtime WS is input-only, so we never send audio over i
 Pipecat 1.2.1 (pinned). Imports verified against the installed package.
 """
 import os
+import asyncio
 import logging
 
 from fastapi import FastAPI, WebSocket
@@ -50,6 +51,7 @@ from pipecat.frames.frames import (
     LLMTextFrame,
     LLMFullResponseStartFrame,
     LLMFullResponseEndFrame,
+    LLMMessagesAppendFrame,
 )
 
 from meeting_persona import build_meeting_persona, SILENT_TOKEN
@@ -151,6 +153,56 @@ class SilentGate(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
+class RAGContext(FrameProcessor):
+    """Ground answers in the knowledge graph. When the bot is addressed ("Mnema, …"),
+    retrieve top-k from Mnema search_docs and inject it as system context *before* the
+    LLM runs, so replies are grounded without needing an explicit search tool call.
+    Only fires when addressed (cheap + matches the silent-unless-addressed persona) and
+    graceful-degrades on any error/timeout. Requires a live MNEMA_API_KEY."""
+
+    def __init__(self, mnema: MnemaMCP) -> None:
+        super().__init__()
+        self._mnema = mnema
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, TranscriptionFrame):
+            text = (frame.text or "").strip()
+            if text and "mnema" in text.lower():
+                await self._inject(text, direction)
+        await self.push_frame(frame, direction)
+
+    async def _inject(self, query: str, direction: FrameDirection) -> None:
+        try:
+            res = await asyncio.wait_for(
+                self._mnema.call("search_docs", {"query": query, "mode": "hybrid", "limit": 5}),
+                timeout=2.5,
+            )
+        except Exception as e:  # noqa: BLE001 — never block the conversation on retrieval
+            logger.warning("[rag] retrieval skipped: %s", e)
+            return
+        hits = (res or {}).get("results") or []
+        if not hits:
+            return
+        blocks = []
+        for h in hits[:5]:
+            head = h.get("title") or ""
+            if h.get("heading_path"):
+                head = f"{head} › {h['heading_path']}"
+            blocks.append(f"[{head}]\n{(h.get('snippet') or '').strip()}")
+        content = (
+            "[Context from the Mnema knowledge base — use naturally if relevant; "
+            "do not mention you looked it up]\n\n" + "\n\n---\n\n".join(blocks)
+        )
+        await self.push_frame(
+            LLMMessagesAppendFrame(
+                messages=[{"role": "system", "content": content}], run_llm=False
+            ),
+            direction,
+        )
+        logger.info("[rag] injected %d hits for: %s", len(hits), query[:60])
+
+
 async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: str) -> None:
     """One meeting = one pipeline run. Audio in from Recall, replies out via Output Audio."""
     state = BotState()
@@ -222,6 +274,7 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         stt,
         NoiseGate(),            # drop sub-3-char STT noise before it reaches the LLM
         TurnMetricsEarly(metrics),  # stamp end-of-user-speech
+        RAGContext(mnema),      # when addressed, inject knowledge-graph context
         aggregators.user(),     # VAD here → barge-in detection
         llm,
         SilentGate(),           # suppress the [SILENT] sentinel before TTS
