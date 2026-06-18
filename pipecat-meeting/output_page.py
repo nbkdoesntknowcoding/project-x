@@ -59,8 +59,13 @@ _HTML = r"""<!doctype html>
   var ac = null, nextTime = 0, sources = [], speakingTimer = null;
 
   function ctx() {
-    if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
-    if (ac.state === 'suspended') ac.resume();
+    if (!ac) {
+      ac = new (window.AudioContext || window.webkitAudioContext)();
+      // Recall's browser can start the context suspended; keep nudging it to run so
+      // audio plays in real time instead of queuing up and playing a minute late.
+      setInterval(function () { if (ac && ac.state !== 'running') { try { ac.resume(); } catch (e) {} } }, 300);
+    }
+    if (ac.state !== 'running') { try { ac.resume(); } catch (e) {} }
     return ac;
   }
   function markSpeaking() {
@@ -70,6 +75,9 @@ _HTML = r"""<!doctype html>
   }
   function play(arrayBuf) {
     var c = ctx();
+    // If the context isn't actually running yet, DROP this chunk rather than queue it —
+    // queuing while suspended is what causes the 1-minute-late, garbled playback.
+    if (c.state !== 'running') { return; }
     var i16 = new Int16Array(arrayBuf);
     if (!i16.length) return;
     var f32 = new Float32Array(i16.length);
@@ -79,7 +87,8 @@ _HTML = r"""<!doctype html>
     var src = c.createBufferSource();
     src.buffer = buf; src.connect(c.destination);
     var now = c.currentTime;
-    if (nextTime < now + 0.02) nextTime = now + 0.02;  // tiny lead to avoid underrun
+    // Resync if we've drifted: behind real time (underrun) or absurdly far ahead (backlog).
+    if (nextTime < now + 0.08 || nextTime > now + 4) nextTime = now + 0.08;
     src.start(nextTime);
     nextTime += buf.duration;
     sources.push(src);
@@ -97,7 +106,7 @@ _HTML = r"""<!doctype html>
     var ws;
     try { ws = new WebSocket(wsUrl); } catch (e) { setTimeout(connect, 1000); return; }
     ws.binaryType = 'arraybuffer';
-    ws.onopen = function () { statusEl.textContent = 'live'; };
+    ws.onopen = function () { statusEl.textContent = 'live'; ctx(); };
     ws.onmessage = function (ev) {
       if (typeof ev.data === 'string') {
         try {
@@ -112,6 +121,7 @@ _HTML = r"""<!doctype html>
     ws.onerror = function () { try { ws.close(); } catch (e) {} };
     ws.onclose = function () { statusEl.textContent = 'reconnecting…'; setTimeout(connect, 1000); };
   }
+  ctx();      // create + start resuming the audio context immediately
   connect();
 })();
 </script>
