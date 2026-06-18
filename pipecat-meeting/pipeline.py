@@ -18,6 +18,7 @@ import os
 import logging
 
 from fastapi import FastAPI, WebSocket
+from fastapi.responses import HTMLResponse
 import uvicorn
 
 logger = logging.getLogger("pipecat-meeting")
@@ -40,6 +41,7 @@ from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.frames.frames import Frame, TranscriptionFrame
 
 from meeting_persona import build_meeting_persona
+from output_page import output_page_html
 from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS
 from mnema_client import register_mnema_tools, MnemaMCP
 from recall_io import BotState, RecallSerializer, RecallSpeaker, RECALL_INPUT_SAMPLE_RATE
@@ -156,6 +158,12 @@ app = FastAPI()
 @app.get("/health")
 async def health():
     return {"status": "ok", "backend": "recall"}
+
+
+@app.get("/output-page")
+async def output_page():
+    # The webpage Recall loads as the bot's camera for Output Media (Stage 2).
+    return HTMLResponse(output_page_html())
 
 
 @app.websocket("/{secret}")
