@@ -26,6 +26,31 @@ MNEMA_TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "list_recent_docs",
+            "description": "List the project's most recently updated docs (newest first). Use for 'latest', 'recent', or 'what's new' questions instead of search.",
+            "parameters": {
+                "type": "object",
+                "properties": {"limit": {"type": "integer", "description": "How many (default 10)"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_project_tasks",
+            "description": "List the project's live task board (what's in progress, in review, done, etc.). Use for questions about tasks, status, the latest build, or what moved — this reflects today's board, not docs.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string", "description": "Optional: backlog | in_progress | review | audit_fix | done"},
+                    "limit": {"type": "integer", "description": "How many (default 20)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_doc",
             "description": "Fetch the full markdown of a single doc by id (from search_knowledge) or by path. Use when you need complete content to answer.",
             "parameters": {

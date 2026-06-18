@@ -135,11 +135,37 @@ async def create_doc(mcp: MnemaMCP, args: dict) -> dict:
 
 
 async def search_knowledge(mcp: MnemaMCP, args: dict) -> dict:
-    return await mcp.call("search_docs", {
+    payload: dict = {
         "query": args["query"],
         "mode": args.get("mode", "hybrid"),
         "limit": int(args.get("limit", 5)),
-    })
+    }
+    # Bound retrieval to the meeting's project so the bot can't answer from other
+    # projects (fixes cross-project bleed). The LLM never needs to pass this.
+    pid = args.get("project_id") or MNEMA_PROJECT_ID
+    if pid:
+        payload["project_id"] = pid
+    return await mcp.call("search_docs", payload)
+
+
+async def list_recent_docs(mcp: MnemaMCP, args: dict) -> dict:
+    """Newest-first docs in the project — for 'latest / recent docs' questions."""
+    payload: dict = {"limit": int(args.get("limit", 10))}
+    pid = args.get("project_id") or MNEMA_PROJECT_ID
+    if pid:
+        payload["project_id"] = pid
+    return await mcp.call("list_docs", payload)
+
+
+async def list_project_tasks(mcp: MnemaMCP, args: dict) -> dict:
+    """The live task board for the project — for 'what's in progress / moved' questions."""
+    payload: dict = {"limit": int(args.get("limit", 20))}
+    if args.get("status"):
+        payload["status"] = args["status"]
+    pid = args.get("project_id") or MNEMA_PROJECT_ID
+    if pid:
+        payload["project"] = pid
+    return await mcp.call("list_project_tasks", payload)
 
 
 async def get_doc(mcp: MnemaMCP, args: dict) -> dict:
@@ -164,7 +190,10 @@ async def traverse_graph(mcp: MnemaMCP, args: dict) -> dict:
 
 
 async def get_god_nodes(mcp: MnemaMCP, args: dict) -> dict:
-    return await mcp.call("get_god_nodes", {k: v for k, v in (args or {}).items() if v})
+    payload = {k: v for k, v in (args or {}).items() if v}
+    if MNEMA_PROJECT_ID and "project_id" not in payload:
+        payload["project_id"] = MNEMA_PROJECT_ID
+    return await mcp.call("get_god_nodes", payload)
 
 
 async def get_graph_report(mcp: MnemaMCP, args: dict) -> dict:
@@ -175,6 +204,8 @@ _TOOLS = {
     "create_task": create_task,
     "create_doc": create_doc,
     "search_knowledge": search_knowledge,
+    "list_recent_docs": list_recent_docs,
+    "list_project_tasks": list_project_tasks,
     "get_doc": get_doc,
     "get_doc_section": get_doc_section,
     "get_project": get_project,

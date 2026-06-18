@@ -186,9 +186,13 @@ class RAGContext(FrameProcessor):
         await self.push_frame(frame, direction)
 
     async def _inject(self, query: str, direction: FrameDirection) -> None:
+        search_args = {"query": query, "mode": "hybrid", "limit": 5}
+        # Scope the per-turn retrieval to the meeting's project (no cross-project bleed).
+        if os.environ.get("MNEMA_PROJECT_ID"):
+            search_args["project_id"] = os.environ["MNEMA_PROJECT_ID"]
         try:
             res = await asyncio.wait_for(
-                self._mnema.call("search_docs", {"query": query, "mode": "hybrid", "limit": 5}),
+                self._mnema.call("search_docs", search_args),
                 timeout=2.5,
             )
         except Exception as e:  # noqa: BLE001 — never block the conversation on retrieval
