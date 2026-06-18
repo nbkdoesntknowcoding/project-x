@@ -47,14 +47,14 @@ _HTML = r"""<!doctype html>
 <script>
 (function () {
   var qs = new URLSearchParams(location.search);
-  var bot = qs.get('bot') || '';
+  var cid = qs.get('cid') || '';
   var secret = qs.get('secret') || '';
   var sampleRate = parseInt(qs.get('rate') || '24000', 10) || 24000;
   var statusEl = document.getElementById('status');
   var brandEl = document.getElementById('brand');
   var wsUrl = (location.protocol === 'https:' ? 'wss://' : 'ws://') +
     location.host + '/output/' + encodeURIComponent(secret) +
-    '?bot=' + encodeURIComponent(bot);
+    '?cid=' + encodeURIComponent(cid);
 
   var ac = null, nextTime = 0, sources = [], speakingTimer = null;
 
