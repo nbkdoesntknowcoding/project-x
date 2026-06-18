@@ -176,6 +176,13 @@
       "when": 1781187719341,
       "tag": "0024_knowledge_graph_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781280000000,
+      "tag": "0025_project_scoping",
+      "breakpoints": true
     }
   ]
 }

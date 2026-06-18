@@ -222,6 +222,10 @@ export const docs = pgTable(
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     // Phase 6.4: nullable FK → folders. Null = unfiled (top-level).
     folderId: uuid('folder_id').references(() => folders.id, { onDelete: 'set null' }),
+    // Hierarchy (Workspace→Project→Folder→Doc): denormalized project link; source of
+    // truth is the doc's folder.projectId. Null = unfiled / workspace-wide. Kept in sync
+    // on doc create/move and folder↔project changes; powers project-scoped search + RLS.
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
     path: text('path').notNull(),
     title: text('title').notNull(),
     // Phase 5: content type. 'doc' is freeform markdown (existing
@@ -253,6 +257,7 @@ export const docs = pgTable(
       table.updatedAt.desc(),
     ),
     folderIdx: index('docs_folder_idx').on(table.folderId),
+    projectIdx: index('docs_project_idx').on(table.projectId),
   }),
 );
 
@@ -402,6 +407,8 @@ export const embeddings = pgTable(
     docId: uuid('doc_id')
       .notNull()
       .references(() => docs.id, { onDelete: 'cascade' }),
+    // Denormalized from the doc for project-scoped semantic search. Null = workspace-wide.
+    projectId: uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
     chunkIndex: integer('chunk_index').notNull(),
     chunkText: text('chunk_text').notNull(),
     tokenCount: integer('token_count'),
@@ -415,6 +422,7 @@ export const embeddings = pgTable(
     chunkUnique: unique().on(table.docId, table.chunkIndex, table.model),
     docIdx: index('embeddings_doc_idx').on(table.docId),
     workspaceIdx: index('embeddings_workspace_idx').on(table.workspaceId),
+    projectIdx: index('embeddings_project_idx').on(table.projectId),
   }),
 );
 
@@ -1104,6 +1112,9 @@ export const graphNodes = pgTable(
     // 'doc'|'flow'|'flow_step'|'task'|'session'|'concept'|'decision'|'project'|'rationale'
     entityType:  text('entity_type').notNull(),
     entityId:    uuid('entity_id').notNull(),
+    // Denormalized project scope (from the referenced entity's doc/task project) for
+    // project-filtered graph queries. Null = workspace-wide. Set by the graph builder.
+    projectId:   uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
     label:       text('label').notNull(),
     summary:     text('summary'),
     degree:                integer('degree').notNull().default(0),
@@ -1122,6 +1133,7 @@ export const graphNodes = pgTable(
     workspaceIdx:  index('graph_nodes_workspace_idx').on(table.workspaceId),
     godNodeIdx:    index('graph_nodes_god_node_idx').on(table.isGodNode),
     communityIdx:  index('graph_nodes_community_idx').on(table.communityId),
+    projectIdx:    index('graph_nodes_project_idx').on(table.projectId),
   }),
 );
 
