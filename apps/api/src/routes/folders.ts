@@ -33,44 +33,29 @@ export const foldersRoutes: FastifyPluginAsync = async (app) => {
 
     const q = (req.query as Record<string, unknown>) ?? {};
     const rawParent = q.parent_id as string | undefined;
+    // Hierarchy: optional ?project_id= to scope the folder list to one project.
+    const rawProject = q.project_id as string | undefined;
+    const projClause =
+      rawProject && UUID_RE.test(rawProject) ? sql`AND f.project_id = ${rawProject}::uuid` : sql``;
 
     const rows = await withTenant(req.auth.tenant_id, async (tx) => {
-      if (rawParent === 'null') {
-        return await tx.execute(
-          sql`SELECT f.id, f.name, f.parent_id, f.created_at, f.updated_at,
-                     COUNT(d.id)::int AS doc_count,
-                     COUNT(cf.id)::int AS subfolder_count
-              FROM folders f
-              LEFT JOIN docs d ON d.folder_id = f.id AND d.deleted_at IS NULL
-              LEFT JOIN folders cf ON cf.parent_id = f.id
-              WHERE f.parent_id IS NULL
-              GROUP BY f.id, f.name, f.parent_id, f.created_at, f.updated_at
-              ORDER BY f.name ASC`,
-        );
-      } else if (rawParent && UUID_RE.test(rawParent)) {
-        return await tx.execute(
-          sql`SELECT f.id, f.name, f.parent_id, f.created_at, f.updated_at,
-                     COUNT(d.id)::int AS doc_count,
-                     COUNT(cf.id)::int AS subfolder_count
-              FROM folders f
-              LEFT JOIN docs d ON d.folder_id = f.id AND d.deleted_at IS NULL
-              LEFT JOIN folders cf ON cf.parent_id = f.id
-              WHERE f.parent_id = ${rawParent}::uuid
-              GROUP BY f.id, f.name, f.parent_id, f.created_at, f.updated_at
-              ORDER BY f.name ASC`,
-        );
-      } else {
-        return await tx.execute(
-          sql`SELECT f.id, f.name, f.parent_id, f.created_at, f.updated_at,
-                     COUNT(d.id)::int AS doc_count,
-                     COUNT(cf.id)::int AS subfolder_count
-              FROM folders f
-              LEFT JOIN docs d ON d.folder_id = f.id AND d.deleted_at IS NULL
-              LEFT JOIN folders cf ON cf.parent_id = f.id
-              GROUP BY f.id, f.name, f.parent_id, f.created_at, f.updated_at
-              ORDER BY f.name ASC`,
-        );
-      }
+      const parentWhere =
+        rawParent === 'null'
+          ? sql`f.parent_id IS NULL`
+          : rawParent && UUID_RE.test(rawParent)
+            ? sql`f.parent_id = ${rawParent}::uuid`
+            : sql`TRUE`;
+      return await tx.execute(
+        sql`SELECT f.id, f.name, f.parent_id, f.created_at, f.updated_at,
+                   COUNT(d.id)::int AS doc_count,
+                   COUNT(cf.id)::int AS subfolder_count
+            FROM folders f
+            LEFT JOIN docs d ON d.folder_id = f.id AND d.deleted_at IS NULL
+            LEFT JOIN folders cf ON cf.parent_id = f.id
+            WHERE ${parentWhere} ${projClause}
+            GROUP BY f.id, f.name, f.parent_id, f.created_at, f.updated_at
+            ORDER BY f.name ASC`,
+      );
     });
 
     return {

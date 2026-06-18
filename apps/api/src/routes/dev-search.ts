@@ -46,6 +46,12 @@ export const devSearchRoutes: FastifyPluginAsync = async (app) => {
     const types = (q.types ?? 'tasks,sessions').split(',').map((t) => t.trim());
     const limit = Math.min(Number(q.limit ?? 20), 100);
     const wid = req.auth.tenant_id;
+    // Hierarchy: optional ?project_id= to scope task search to one project.
+    const rawProject = q.project_id;
+    const projClause =
+      rawProject && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawProject)
+        ? sql`AND project_id = ${rawProject}::uuid`
+        : sql``;
 
     const results: SearchResult[] = [];
 
@@ -67,6 +73,7 @@ export const devSearchRoutes: FastifyPluginAsync = async (app) => {
           FROM tasks
           WHERE workspace_id = ${wid}
             AND fts_vector @@ websearch_to_tsquery('english', ${query})
+            ${projClause}
           ORDER BY score DESC
           LIMIT ${limit}
         `),

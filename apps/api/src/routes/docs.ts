@@ -87,11 +87,20 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
       rawFolder && UUID_RE_DOCS.test(rawFolder) ? rawFolder :
       undefined;
 
+    // Hierarchy: optional ?project_id= filter. 'null' string → unfiled/workspace docs.
+    const rawProject = q.project_id as string | undefined;
+    const projectFilter =
+      rawProject === 'null' ? 'null' :
+      rawProject && UUID_RE_DOCS.test(rawProject) ? rawProject :
+      undefined;
+
     const rows = await withTenant(req.auth.tenant_id, async (tx) => {
       const conditions = [isNull(docs.deletedAt)];
       if (typeFilter.success) conditions.push(eq(docs.type, typeFilter.data));
       if (folderFilter === 'null') conditions.push(isNull(docs.folderId));
       else if (folderFilter) conditions.push(eq(docs.folderId, folderFilter));
+      if (projectFilter === 'null') conditions.push(isNull(docs.projectId));
+      else if (projectFilter) conditions.push(eq(docs.projectId, projectFilter));
       return await tx
         .select({
           id: docs.id,
