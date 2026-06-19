@@ -1,10 +1,77 @@
 ---
 /**
- * IsoFigures — a Mnema translation of Raycast's exploded isometric "blue box"
- * element diagrams (imgs 3–4): real Mnema UI surfaces blown apart into layered
- * plates on a dotted ground plane, with FIG_0x mono labels + annotations.
- * Pure CSS 3D transforms (no JS). Indigo technical-diagram accent + amber.
+ * IsoFigures — Mnema's take on Raycast's exploded isometric "blue box" element
+ * diagrams. Built as SVG (not CSS-3D) so labels connect to plates with real
+ * leader lines and all text stays crisp. Indigo technical-diagram accent + amber.
  */
+
+// ── Isometric projection (2:1 dimetric) ─────────────────────────────────────
+const C = 0.866;
+const S = 0.5;
+const iso = (x: number, y: number, z: number, ox: number, oy: number): [number, number] => [
+  (x - y) * C + ox,
+  (x + y) * S - z + oy,
+];
+
+// Corners of a w×d plate centered at (0,0) raised to height z.
+function plateCorners(z: number, w: number, d: number, ox: number, oy: number) {
+  return {
+    tl: iso(-w / 2, -d / 2, z, ox, oy),
+    tr: iso(w / 2, -d / 2, z, ox, oy),
+    br: iso(w / 2, d / 2, z, ox, oy),
+    bl: iso(-w / 2, d / 2, z, ox, oy),
+  };
+}
+const poly = (c: ReturnType<typeof plateCorners>) =>
+  `${c.tl[0].toFixed(1)},${c.tl[1].toFixed(1)} ${c.tr[0].toFixed(1)},${c.tr[1].toFixed(1)} ${c.br[0].toFixed(1)},${c.br[1].toFixed(1)} ${c.bl[0].toFixed(1)},${c.bl[1].toFixed(1)}`;
+
+// ── FIG_01 — the workspace, exploded into 4 layers ──────────────────────────
+const OX = 280;
+const OY = 196;
+const W = 150;
+const D = 100;
+const F1 = [
+  { z: 156, label: 'COMMAND', side: 'r', bar: true },
+  { z: 104, label: 'EDITOR', side: 'r' },
+  { z: 52, label: 'DOC LIST', side: 'l' },
+  { z: 0, label: 'GRAPH', side: 'l', dots: true },
+].map((l) => {
+  const c = plateCorners(l.z, W, D, OX, OY);
+  const cy = OY - l.z; // screen-y of the plate center
+  // leader: from a label out to the plate's near corner
+  const anchor = l.side === 'r' ? c.tr : c.bl;
+  const labelX = l.side === 'r' ? 512 : 70;
+  return { ...l, poly: poly(c), corners: c, cy, anchor, labelX };
+});
+// highlighted command bar (small inset plate on the top layer)
+const cmdBar = poly(plateCorners(156, 112, 18, OX, OY));
+
+// ── FIG_02 — sequenced flow plates ──────────────────────────────────────────
+const F2 = [0, 26, 52].map((z, i) => ({
+  i,
+  num: i + 1,
+  poly: poly(plateCorners(z, 70, 50, 100, 96)),
+  center: iso(0, 0, z, 100, 96),
+  next: iso(0, 0, z + 26, 100, 96),
+}));
+
+// ── FIG_03 — knowledge-graph nodes ──────────────────────────────────────────
+const F3nodes = [
+  { x: -26, y: -10, z: 26, c: '#a78bfa', r: 5 },
+  { x: 22, y: -18, z: 44, c: '#60a5fa', r: 4 },
+  { x: 30, y: 14, z: 32, c: '#FFB370', r: 4 },
+  { x: -12, y: 24, z: 18, c: '#6BE39B', r: 3.5 },
+  { x: 2, y: 0, z: 58, c: '#e879f9', r: 6 },
+].map((n) => ({ ...n, p: iso(n.x, n.y, n.z, 100, 86), base: iso(n.x, n.y, 0, 100, 86) }));
+const F3edges: [number, number][] = [[0, 4], [1, 4], [2, 4], [3, 0], [1, 2]];
+
+// ── FIG_04 — MCP read (request → response) ──────────────────────────────────
+const f4req = poly(plateCorners(0, 78, 56, 100, 92));
+const f4res = poly(plateCorners(54, 78, 56, 100, 92));
+const f4lineA = iso(0, 0, 4, 100, 92);
+const f4lineB = iso(0, 0, 50, 100, 92);
+const f4token = iso(0, 0, 28, 100, 92);
+const f4check = iso(0, 0, 54, 100, 92);
 ---
 
 <div class="iso-root">
@@ -13,344 +80,149 @@
     <span class="iso-eyebrow">Composable down to the element</span>
     <h2 class="iso-title">Every surface is just<br />docs, wired together.</h2>
     <p class="iso-desc">
-      The workspace, the editor, the MCP panel, the graph — each is the same
-      content, addressed and composed. Pull any layer through MCP; edit one and
-      the rest update live.
+      The command bar, the editor, the doc list, the graph — each is a view onto
+      the same content. Pull any layer through MCP; edit one and the rest update live.
     </p>
     <a class="iso-link" href="/docs">Read the docs <span aria-hidden="true">→</span></a>
   </div>
 
-  <!-- big figure: the workspace, exploded -->
-  <div class="iso-wrap" aria-hidden="true">
-    <span class="iso-fig-label">FIG_01 — workspace</span>
+  <!-- FIG_01 -->
+  <div class="iso-fig-wrap" aria-hidden="true">
+    <svg viewBox="0 0 560 430" width="100%" role="img" aria-label="Exploded workspace diagram">
+      <defs>
+        <pattern id="isoDots" width="22" height="22" patternUnits="userSpaceOnUse">
+          <circle cx="1.1" cy="1.1" r="1.1" fill="rgba(124,156,255,0.16)" />
+        </pattern>
+        <linearGradient id="isoPlate" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="rgba(124,156,255,0.16)" />
+          <stop offset="1" stop-color="rgba(124,156,255,0.03)" />
+        </linearGradient>
+      </defs>
 
-    <div class="iso-stage">
-      <!-- dotted ground plane -->
-      <div class="iso-ground"></div>
+      <rect x="40" y="20" width="420" height="390" fill="url(#isoDots)"
+        style="mask: radial-gradient(ellipse 60% 60% at 46% 46%, #000 35%, transparent 85%); -webkit-mask: radial-gradient(ellipse 60% 60% at 46% 46%, #000 35%, transparent 85%);" />
 
-      <!-- plate 1: doc list -->
-      <div class="iso-plate" style="transform: translate3d(-46px, 54px, 26px);">
-        <div class="iso-plate-head">DOC LIST</div>
-        <div class="iso-rows">
-          <span class="iso-drow on"></span>
-          <span class="iso-drow"></span>
-          <span class="iso-drow"></span>
-          <span class="iso-drow"></span>
-        </div>
-      </div>
+      <text x="20" y="26" class="iso-tag">FIG_01 — WORKSPACE</text>
 
-      <!-- plate 2: editor -->
-      <div class="iso-plate wide" style="transform: translate3d(2px, 4px, 96px);">
-        <div class="iso-plate-head">EDITOR</div>
-        <span class="iso-bar" style="width:70%"></span>
-        <span class="iso-bar" style="width:52%"></span>
-        <span class="iso-bar" style="width:62%"></span>
-        <span class="iso-bar amber" style="width:38%"></span>
-      </div>
+      {F1.map((l) => (
+        <g>
+          <polygon points={l.poly} fill="url(#isoPlate)" stroke="rgba(124,156,255,0.6)" stroke-width="1.2" stroke-linejoin="round" />
+          {l.bar && <polygon points={cmdBar} fill="rgba(255,179,112,0.5)" stroke="rgba(255,179,112,0.85)" stroke-width="1" />}
+          {l.dots && (
+            <g>
+              <circle cx={l.corners.tl[0] + (l.corners.br[0] - l.corners.tl[0]) * 0.42} cy={l.corners.tl[1] + (l.corners.br[1] - l.corners.tl[1]) * 0.42} r="3.4" fill="#a78bfa" />
+              <circle cx={l.corners.tl[0] + (l.corners.br[0] - l.corners.tl[0]) * 0.6} cy={l.corners.tl[1] + (l.corners.br[1] - l.corners.tl[1]) * 0.55} r="3" fill="#60a5fa" />
+              <circle cx={l.corners.tl[0] + (l.corners.br[0] - l.corners.tl[0]) * 0.5} cy={l.corners.tl[1] + (l.corners.br[1] - l.corners.tl[1]) * 0.7} r="2.6" fill="#6BE39B" />
+            </g>
+          )}
+          {/* leader line: label → plate corner */}
+          <polyline
+            points={`${l.labelX + (l.side === 'r' ? -6 : 6)},${l.cy} ${l.side === 'r' ? l.anchor[0] + 8 : l.anchor[0] - 8},${l.cy} ${l.anchor[0].toFixed(1)},${l.anchor[1].toFixed(1)}`}
+            fill="none" stroke="rgba(124,156,255,0.5)" stroke-width="1" />
+          <circle cx={l.anchor[0]} cy={l.anchor[1]} r="2" fill="#7C9CFF" />
+          <text x={l.labelX} y={l.cy + 3.5} class="iso-anno" text-anchor={l.side === 'r' ? 'start' : 'end'}>{l.label}</text>
+        </g>
+      ))}
+    </svg>
+  </div>
+</div>
 
-      <!-- plate 3: mcp panel -->
-      <div class="iso-plate" style="transform: translate3d(54px, -44px, 168px);">
-        <div class="iso-plate-head"><span class="dot"></span>MCP PANEL</div>
-        <span class="iso-bar" style="width:80%"></span>
-        <span class="iso-bar" style="width:60%"></span>
-        <div class="iso-chip">get_flow()</div>
-      </div>
-    </div>
+<!-- secondary figures — distinct iso objects, editorial layout (no cards) -->
+<div class="iso-strip" aria-hidden="true">
+  <!-- FIG_02 — sequenced flow -->
+  <div class="iso-cell">
+    <svg viewBox="0 0 200 150" width="100%" role="img">
+      <text x="6" y="14" class="iso-tag">FIG_02</text>
+      {F2.map((p) => (
+        <g>
+          {p.i < 2 && <line x1={p.center[0]} y1={p.center[1]} x2={p.next[0]} y2={p.next[1]} stroke="rgba(255,179,112,0.5)" stroke-width="1" />}
+          <polygon points={p.poly} fill="url(#isoPlate)" stroke="rgba(124,156,255,0.6)" stroke-width="1.1" stroke-linejoin="round" />
+          <text x={p.center[0]} y={p.center[1] + 3} class="iso-num" text-anchor="middle">{p.num}</text>
+        </g>
+      ))}
+    </svg>
+    <h3 class="iso-cell-title">Sequenced into flows.</h3>
+    <p class="iso-cell-desc">Each step is one doc plus your instruction — read in order, not dumped.</p>
+  </div>
 
-    <!-- annotations (screen space) -->
-    <span class="iso-anno a1">SEARCH · ADDRESSABLE</span>
-    <span class="iso-anno a2">LIVE · 38ms</span>
-    <span class="iso-anno a3">READ VIA MCP</span>
+  <!-- FIG_03 — knowledge graph -->
+  <div class="iso-cell">
+    <svg viewBox="0 0 200 150" width="100%" role="img">
+      <text x="6" y="14" class="iso-tag">FIG_03</text>
+      <polygon points={poly(plateCorners(0, 110, 80, 100, 86))} fill="rgba(124,156,255,0.04)" stroke="rgba(124,156,255,0.18)" stroke-width="1" />
+      {F3nodes.map((n) => <line x1={n.base[0]} y1={n.base[1]} x2={n.p[0]} y2={n.p[1]} stroke="rgba(124,156,255,0.25)" stroke-width="0.8" />)}
+      {F3edges.map(([a, b]) => <line x1={F3nodes[a]!.p[0]} y1={F3nodes[a]!.p[1]} x2={F3nodes[b]!.p[0]} y2={F3nodes[b]!.p[1]} stroke="rgba(124,156,255,0.4)" stroke-width="0.9" />)}
+      {F3nodes.map((n) => (
+        <g>
+          <circle cx={n.p[0]} cy={n.p[1]} r={n.r * 2.2} fill={n.c} opacity="0.16" />
+          <circle cx={n.p[0]} cy={n.p[1]} r={n.r} fill={n.c} />
+        </g>
+      ))}
+    </svg>
+    <h3 class="iso-cell-title">A graph above the docs.</h3>
+    <p class="iso-cell-desc">Connections lift off the page — links agents can traverse.</p>
+  </div>
+
+  <!-- FIG_04 — read via MCP -->
+  <div class="iso-cell">
+    <svg viewBox="0 0 200 150" width="100%" role="img">
+      <text x="6" y="14" class="iso-tag">FIG_04</text>
+      <polygon points={f4req} fill="url(#isoPlate)" stroke="rgba(124,156,255,0.6)" stroke-width="1.1" stroke-linejoin="round" />
+      <polygon points={f4res} fill="rgba(107,227,155,0.08)" stroke="rgba(107,227,155,0.6)" stroke-width="1.1" stroke-linejoin="round" />
+      <line x1={f4lineA[0]} y1={f4lineA[1]} x2={f4lineB[0]} y2={f4lineB[1]} stroke="rgba(255,179,112,0.55)" stroke-width="1" />
+      <circle cx={f4token[0]} cy={f4token[1]} r="3.5" fill="#FFB370" />
+      <text x={f4check[0]} y={f4check[1] + 3} class="iso-num" text-anchor="middle" style="fill:#6BE39B;">✓</text>
+    </svg>
+    <h3 class="iso-cell-title">Read live via MCP.</h3>
+    <p class="iso-cell-desc">An agent calls a tool; Mnema returns the exact context, fast.</p>
   </div>
 </div>
 
 <style>
   .iso-root {
     display: grid;
-    grid-template-columns: 0.85fr 1.15fr;
-    gap: 48px;
+    grid-template-columns: 0.82fr 1.18fr;
+    gap: 40px;
     align-items: center;
   }
-  @media (max-width: 860px) {
-    .iso-root { grid-template-columns: 1fr; gap: 24px; }
-  }
+  @media (max-width: 860px) { .iso-root { grid-template-columns: 1fr; gap: 16px; } }
 
-  /* heading */
   .iso-eyebrow {
-    display: block;
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-    margin-bottom: 14px;
+    display: block; font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 14px;
   }
   .iso-title {
-    font-family: var(--sans);
-    font-weight: 500;
-    font-size: 32px;
-    line-height: 1.14;
-    letter-spacing: -0.02em;
-    color: var(--text-primary);
-    margin: 0 0 16px;
+    font-family: var(--sans); font-weight: 500; font-size: 32px; line-height: 1.14;
+    letter-spacing: -0.02em; color: var(--text-primary); margin: 0 0 16px;
   }
-  .iso-desc {
-    font-size: 15px;
-    line-height: 1.6;
-    color: var(--text-secondary);
-    max-width: 30rem;
-    margin: 0 0 22px;
-  }
+  .iso-desc { font-size: 15px; line-height: 1.6; color: var(--text-secondary); max-width: 30rem; margin: 0 0 22px; }
   .iso-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--mono);
-    font-size: 12px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--text-primary);
-    text-decoration: none;
-    border-bottom: 1px solid var(--border-default);
-    padding-bottom: 3px;
-    transition: border-color 160ms;
+    display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
+    font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-primary);
+    text-decoration: none; border-bottom: 1px solid var(--border-default); padding-bottom: 3px; transition: border-color 160ms;
   }
   .iso-link:hover { border-color: #7C9CFF; }
 
-  /* figure stage */
-  .iso-wrap {
-    position: relative;
-    height: 460px;
-    perspective: 1300px;
-    overflow: hidden;
-  }
-  .iso-fig-label {
-    position: absolute;
-    top: 6px;
-    left: 8px;
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-quaternary);
-    z-index: 4;
-  }
-  .iso-stage {
-    position: absolute;
-    inset: 0;
-    transform-style: preserve-3d;
-    transform: rotateX(56deg) rotateZ(-46deg) scale(0.94);
-  }
-  .iso-ground {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 460px;
-    height: 380px;
-    margin: -190px 0 0 -230px;
-    background-image: radial-gradient(rgba(124, 156, 255, 0.22) 1.2px, transparent 1.2px);
-    background-size: 26px 26px;
-    border: 1px solid rgba(124, 156, 255, 0.12);
-    border-radius: 6px;
-    -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, #000 40%, transparent 90%);
-    mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, #000 40%, transparent 90%);
-  }
-  .iso-plate {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 250px;
-    height: 150px;
-    margin: -75px 0 0 -125px;
-    padding: 12px 14px;
-    border-radius: 11px;
-    border: 1px solid rgba(124, 156, 255, 0.5);
-    background:
-      linear-gradient(155deg, rgba(124, 156, 255, 0.13), rgba(8, 9, 12, 0.92));
-    box-shadow:
-      0 0 0 1px rgba(124, 156, 255, 0.08),
-      0 40px 50px -24px rgba(0, 0, 0, 0.85),
-      inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  }
-  .iso-plate.wide { width: 290px; margin-left: -145px; }
-  .iso-plate-head {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-family: var(--mono);
-    font-size: 9.5px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #9db0e8;
-    margin-bottom: 12px;
-  }
-  .iso-plate-head .dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--status-sync);
-    box-shadow: 0 0 8px rgba(107, 227, 155, 0.7);
-  }
-  .iso-rows { display: flex; flex-direction: column; gap: 8px; }
-  .iso-drow {
-    height: 12px;
-    border-radius: 4px;
-    background: rgba(124, 156, 255, 0.12);
-    border: 1px solid rgba(124, 156, 255, 0.2);
-  }
-  .iso-drow.on {
-    background: rgba(124, 156, 255, 0.26);
-    border-color: rgba(124, 156, 255, 0.5);
-  }
-  .iso-bar {
-    display: block;
-    height: 9px;
-    border-radius: 4px;
-    background: rgba(124, 156, 255, 0.22);
-    margin-bottom: 9px;
-  }
-  .iso-bar.amber { background: rgba(255, 179, 112, 0.5); }
-  .iso-chip {
-    display: inline-block;
-    margin-top: 4px;
-    font-family: var(--mono);
-    font-size: 9px;
-    color: #FFB370;
-    background: rgba(255, 179, 112, 0.12);
-    border: 1px solid rgba(255, 179, 112, 0.32);
-    border-radius: 5px;
-    padding: 2px 6px;
-  }
+  .iso-fig-wrap { position: relative; }
 
-  /* annotations */
-  .iso-anno {
-    position: absolute;
-    font-family: var(--mono);
-    font-size: 9.5px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-    padding-left: 14px;
-    z-index: 4;
-  }
-  .iso-anno::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 50%;
-    width: 9px;
-    height: 1px;
-    background: rgba(124, 156, 255, 0.55);
-  }
-  .iso-anno.a1 { left: 6%; top: 66%; }
-  .iso-anno.a2 { right: 8%; top: 50%; }
-  .iso-anno.a3 { right: 10%; top: 24%; }
+  /* SVG text classes (crisp + visible) */
+  :global(.iso-tag) { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; fill: var(--text-quaternary); }
+  :global(.iso-anno) { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; fill: var(--text-secondary); }
+  :global(.iso-num) { font-family: var(--mono); font-size: 12px; fill: #9db0e8; }
 
-  @media (prefers-reduced-motion: reduce) {
-    .iso-stage { transform: rotateX(56deg) rotateZ(-46deg) scale(0.94); }
-  }
-
-  /* secondary figure row */
-  .iso-row {
-    display: flex;
-    gap: 20px;
-    margin-top: 56px;
-    padding-top: 48px;
+  /* secondary strip — editorial, no card borders, thin dividers */
+  .iso-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin-top: 48px;
+    padding-top: 40px;
     border-top: 1px solid var(--border-subtle);
   }
-  .iso-row > .iso-mini { flex: 1 1 0; min-width: 0; }
-  @media (max-width: 860px) {
-    .iso-row { flex-direction: column; }
-  }
-  .iso-mini {
-    position: relative;
-    min-height: 296px;
-    border: 1px solid var(--border-subtle);
-    border-radius: 16px;
-    background: var(--surface-overlay);
-    padding: 0 20px 22px;
-    overflow: hidden;
-  }
-  .iso-mini-fig {
-    position: absolute;
-    top: 12px;
-    left: 16px;
-    font-family: var(--mono);
-    font-size: 9.5px;
-    letter-spacing: 0.1em;
-    color: var(--text-quaternary);
-    z-index: 3;
-  }
-  .iso-mini-stage {
-    position: relative;
-    height: 184px;
-    perspective: 760px;
-  }
-  .iso-mini-3d {
-    position: absolute;
-    inset: 0;
-    transform-style: preserve-3d;
-    transform: rotateX(56deg) rotateZ(-46deg) scale(0.7);
-  }
-  .iso-mground {
-    position: absolute;
-    left: 50%; top: 50%;
-    width: 230px; height: 190px;
-    margin: -95px 0 0 -115px;
-    border: 1px solid rgba(124, 156, 255, 0.12);
-    border-radius: 6px;
-    -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, #000 35%, transparent 88%);
-    mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, #000 35%, transparent 88%);
-  }
-  .iso-mground.dots {
-    background-image: radial-gradient(rgba(124, 156, 255, 0.26) 1.1px, transparent 1.1px);
-    background-size: 22px 22px;
-  }
-  .iso-mplate {
-    position: absolute;
-    left: 50%; top: 50%;
-    width: 120px; height: 80px;
-    margin: -40px 0 0 -60px;
-    border-radius: 10px;
-    border: 1px solid rgba(124, 156, 255, 0.5);
-    background: linear-gradient(155deg, rgba(124, 156, 255, 0.14), rgba(8, 9, 12, 0.92));
-    box-shadow: 0 26px 32px -18px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .iso-mplate.wide { width: 150px; margin-left: -75px; }
-  .iso-mplate .n {
-    font-family: var(--mono);
-    font-size: 18px;
-    color: #9db0e8;
-  }
-  .iso-mplate .code {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: #FFB370;
-  }
-  .iso-mplate .code.ok { color: var(--status-sync); }
-  .iso-gnode {
-    position: absolute;
-    left: 50%; top: 50%;
-    width: 16px; height: 16px;
-    margin: -8px 0 0 -8px;
-    border-radius: 5px;
-    background: var(--c);
-    box-shadow: 0 0 16px 2px color-mix(in oklab, var(--c) 60%, transparent), 0 18px 22px -10px rgba(0,0,0,0.8);
-  }
-  .iso-gnode.big { width: 24px; height: 24px; margin: -12px 0 0 -12px; border-radius: 7px; }
-
-  .iso-mini-title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 4px 0 6px;
-    letter-spacing: -0.01em;
-  }
-  .iso-mini-desc {
-    font-size: 13px;
-    line-height: 1.5;
-    color: var(--text-tertiary);
-    margin: 0;
-  }
+  @media (max-width: 860px) { .iso-strip { grid-template-columns: 1fr; gap: 32px; } }
+  .iso-cell { padding: 0 26px; position: relative; }
+  .iso-cell + .iso-cell { border-left: 1px solid var(--border-subtle); }
+  @media (max-width: 860px) { .iso-cell + .iso-cell { border-left: none; } }
+  .iso-cell svg { display: block; height: 150px; margin-bottom: 14px; }
+  .iso-cell-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 6px; letter-spacing: -0.01em; }
+  .iso-cell-desc { font-size: 13px; line-height: 1.5; color: var(--text-tertiary); margin: 0; }
 </style>
