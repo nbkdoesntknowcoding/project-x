@@ -1,0 +1,101 @@
+---
+/**
+ * KeyboardCTA — Raycast-style final CTA: a faded keyboard emerging from the dark
+ * with the ⌘ + space keys glowing (amber), and the waitlist call-to-action below.
+ */
+const rows = [
+  ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+  ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+  ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+  ['Z', 'X', 'C', 'V', 'B', 'N', 'M'],
+];
+---
+
+<div class="kb-cta">
+  <div class="kb" aria-hidden="true">
+    {rows.map((r) => (
+      <div class="kb-row">
+        {r.map((k) => <span class="kb-key">{k}</span>)}
+      </div>
+    ))}
+    <div class="kb-row kb-row-bottom">
+      <span class="kb-key kb-mod">fn</span>
+      <span class="kb-key kb-mod">⌃</span>
+      <span class="kb-key kb-mod">⌥</span>
+      <span class="kb-key kb-mod kb-glow">⌘</span>
+      <span class="kb-key kb-space kb-glow"></span>
+      <span class="kb-key kb-mod">⌘</span>
+      <span class="kb-key kb-mod">⌥</span>
+    </div>
+  </div>
+
+  <div class="kb-text">
+    <h2 class="kb-title">Be first in line.</h2>
+    <p class="kb-sub">Mnema is opening up gradually ahead of launch. Join the waitlist and we’ll reach out with an invite.</p>
+    <a href="/waitlist" class="kb-btn">Join the waitlist</a>
+  </div>
+</div>
+
+<style>
+  .kb-cta { position: relative; }
+  .kb {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    max-width: 920px;
+    margin: 0 auto;
+    padding-top: 20px;
+    /* emerge from the dark, like Raycast */
+    -webkit-mask: linear-gradient(to bottom, transparent 0%, #000 55%, #000 100%);
+    mask: linear-gradient(to bottom, transparent 0%, #000 55%, #000 100%);
+  }
+  .kb-row { display: flex; gap: 8px; }
+  .kb-key {
+    width: 54px;
+    height: 54px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 15px;
+    color: rgba(255, 255, 255, 0.45);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    flex-shrink: 0;
+  }
+  .kb-mod { width: 64px; font-size: 13px; }
+  .kb-space { width: 300px; }
+  .kb-glow {
+    color: #FFB370;
+    background: linear-gradient(180deg, rgba(255, 179, 112, 0.22), rgba(255, 179, 112, 0.08));
+    border-color: rgba(255, 179, 112, 0.55);
+    box-shadow:
+      0 0 24px 4px rgba(255, 179, 112, 0.35),
+      0 0 60px 12px rgba(255, 179, 112, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .kb-text { text-align: center; margin-top: 26px; position: relative; z-index: 2; }
+  .kb-title { font-family: var(--sans); font-weight: 500; font-size: var(--display-sm, 40px); line-height: 1.1; letter-spacing: -0.02em; color: var(--text-primary); margin: 0 0 14px; }
+  .kb-sub { font-size: 15px; line-height: 1.6; color: var(--text-secondary); max-width: 30rem; margin: 0 auto 24px; }
+  .kb-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 42px; padding: 0 22px;
+    font-size: 14px; font-weight: 500;
+    background: var(--interactive-primary); color: var(--interactive-primary-fg);
+    border-radius: var(--radius-md); text-decoration: none;
+    transition: background 160ms;
+  }
+  .kb-btn:hover { background: var(--interactive-primary-hover); }
+
+  @media (max-width: 760px) {
+    .kb-key { width: 38px; height: 38px; font-size: 12px; }
+    .kb-mod { width: 44px; font-size: 10px; }
+    .kb-space { width: 150px; }
+    .kb-row { gap: 5px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .kb-glow { box-shadow: 0 0 18px 3px rgba(255,179,112,0.3); } }
+</style>

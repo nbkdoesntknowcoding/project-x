@@ -10,6 +10,7 @@ import LiveStats from '../components/landing/LiveStats.tsx';
 import FeatureCards from '../components/landing/FeatureCards.tsx';
 import IsoFigures from '../components/landing/IsoFigures.astro';
 import Integrations from '../components/landing/Integrations.astro';
+import KeyboardCTA from '../components/landing/KeyboardCTA.astro';
 
 const auth = Astro.locals.auth;
 
@@ -332,34 +333,10 @@ const heroEdges = ([[0, 1], [1, 2], [2, 3], [0, 4], [4, 5], [5, 1], [5, 3], [4, 
     </div>
   </section>
 
-  <!-- ===== CTA STRIP ===== -->
-  <section class="relative py-32" style="background: var(--surface-base);">
-    <RadialGlow cx={50} cy={50} radius={45} tone="warm" intensity={0.8} />
-    <div
-      class="relative max-w-2xl mx-auto px-6 text-center"
-      style="z-index: 2;"
-    >
-      <h2
-        class="font-sans font-medium"
-        style="font-size: var(--display-sm); line-height: 1.1; letter-spacing: -0.02em; color: var(--text-primary); margin-bottom: 16px;"
-      >
-        Be first in line.
-      </h2>
-      <p
-        class="mb-8"
-        style="font-size: 15px; color: var(--text-secondary);"
-      >
-        Mnema is opening up gradually ahead of launch. Join the waitlist and we'll reach out with an invite.
-      </p>
-      <a
-        href="/waitlist"
-        class="inline-flex items-center justify-center h-10 px-5 font-medium transition-[background] rounded select-none"
-        style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border-radius: var(--radius-md);"
-        onmouseover="this.style.background='var(--interactive-primary-hover)'"
-        onmouseout="this.style.background='var(--interactive-primary)'"
-      >
-        Join the waitlist
-      </a>
+  <!-- ===== CTA STRIP (Raycast-style keyboard) ===== -->
+  <section class="relative pt-16 pb-28 overflow-hidden" style="background: var(--surface-base);">
+    <div class="max-w-6xl mx-auto px-6">
+      <KeyboardCTA />
     </div>
   </section>
 
