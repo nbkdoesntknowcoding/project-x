@@ -3,6 +3,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import type { JwtClaims } from '@boppl/shared';
 import { verifyJwt } from '../lib/jwt.js';
+import { tenantScopeStore } from '../db/with-tenant.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -61,6 +62,13 @@ export const authPlugin: FastifyPluginAsync = fp(async (app) => {
     try {
       const claims = await verifyJwt(token);
       req.auth = claims;
+      // Stage B: set the request-scoped user id so withTenant() inside REST
+      // handlers inherits app.user_id → per-user project-membership RLS, the same
+      // boundary the MCP path enforces. enterWith (not run) because a preHandler
+      // returns before the route handler; it persists for the rest of this
+      // request's async context. REST callers are never project-scoped keys, so
+      // projectScope stays null. No-op for unfiled docs / workspace admins.
+      tenantScopeStore.enterWith({ userId: claims.sub });
     } catch {
       return reply.code(401).send({ error: 'unauthorized', reason: 'invalid_token' });
     }

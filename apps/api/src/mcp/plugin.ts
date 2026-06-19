@@ -155,20 +155,19 @@ async function handleMcpRequest(req: FastifyRequest, reply: FastifyReply): Promi
   // Stage B activation: set the request-scoped tenant scope ONCE here so every
   // withTenant() inside any tool handler inherits the project-aware RLS predicate
   // without touching the 29 call sites.
+  //   • userId       (= app.user_id)       → per-user project-membership RLS.
+  //   • projectScope (= app.project_scope) → set ONLY for a project-scoped API key
+  //                  (the meeting bot); when present it short-circuits the predicate
+  //                  to that one project, ignoring userId — the "don't blabber" bound.
   //
-  // We set projectScope (= app.project_scope) but deliberately leave userId UNSET
-  // for now. projectScope is null for every normal token and is populated ONLY for
-  // a project-scoped API key (the meeting bot) — so the only behavior change today
-  // is that the bot is hard-bounded to its one project (the "don't blabber"
-  // guarantee), while every human OAuth/legacy/personal-key session keeps today's
-  // workspace-wide behavior (app.user_id unset → app_can_see_project() returns true).
-  //
-  // Per-user membership RLS (passing userId) activates in B5, together with the
-  // project_members data + Members UI that populates it; flipping it on before that
-  // would lock real members out of any doc filed into a project. See [[Stage B plan]].
+  // Safe by construction: unfiled docs (project_id NULL) stay visible to every
+  // workspace member, and workspace owners/editors are admins (app_is_workspace_admin)
+  // who see all projects. Only docs explicitly FILED into a project are restricted
+  // to that project's members — which is exactly the authorization B5 adds, with the
+  // Members UI to grant it.
   try {
     await tenantScopeStore.run(
-      { projectScope: oauthCtx.projectId },
+      { userId: oauthCtx.userId, projectScope: oauthCtx.projectId },
       () => handleStreamableHttp(req, reply, server),
     );
   } catch (err) {

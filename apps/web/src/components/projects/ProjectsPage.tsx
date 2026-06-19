@@ -317,7 +317,7 @@ function DeleteConfirm({ project, onClose, onDone }: { project: Project; onClose
 
 // ── Card 3-dot menu ───────────────────────────────────────────────────────────
 
-function CardMenu({ onEdit, onDuplicate, onDelete }: { onEdit: () => void; onDuplicate: () => void; onDelete: () => void }) {
+function CardMenu({ onEdit, onDuplicate, onManageAccess, onDelete }: { onEdit: () => void; onDuplicate: () => void; onManageAccess: () => void; onDelete: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -357,6 +357,12 @@ function CardMenu({ onEdit, onDuplicate, onDelete }: { onEdit: () => void; onDup
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
             Duplicate
           </button>
+          <button style={item} onClick={() => { setOpen(false); onManageAccess(); }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = T.surface3)}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Manage access
+          </button>
           <div style={{ height: '0.5px', background: T.glassBorder, margin: '2px 0' }} />
           <button style={{ ...item, color: T.red }} onClick={() => { setOpen(false); onDelete(); }}
             onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(248,113,113,0.08)')}
@@ -370,6 +376,159 @@ function CardMenu({ onEdit, onDuplicate, onDelete }: { onEdit: () => void; onDup
   );
 }
 
+// ── Members / access modal (Stage B5) ──────────────────────────────────────────
+
+type ProjectRole = 'viewer' | 'editor' | 'admin';
+interface ProjectMember {
+  userId: string;
+  role: ProjectRole;
+  email: string;
+  displayName: string | null;
+  joinedAt: string;
+}
+
+function MembersModal({ project, onClose }: { project: Project; onClose: () => void }) {
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<ProjectRole>('viewer');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await apiFetch<{ members: ProjectMember[] }>(`/api/projects/${project.id}/members`);
+      setMembers(res.members);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed_to_load');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [project.id]);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setBusy(true); setError(null);
+    try {
+      await apiFetch(`/api/projects/${project.id}/members`, {
+        method: 'POST',
+        body: JSON.stringify({ email: email.trim(), role }),
+      });
+      setEmail('');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed_to_add');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changeRole(userId: string, newRole: ProjectRole) {
+    try {
+      await apiFetch(`/api/projects/${project.id}/members/${userId}`, {
+        method: 'PATCH', body: JSON.stringify({ role: newRole }),
+      });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed_to_update');
+    }
+  }
+
+  async function remove(userId: string) {
+    try {
+      await apiFetch(`/api/projects/${project.id}/members/${userId}`, { method: 'DELETE' });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed_to_remove');
+    }
+  }
+
+  const labelStyle: React.CSSProperties = { fontSize: 11, color: T.textMuted, fontFamily: T.fontUI };
+  const inputStyle: React.CSSProperties = {
+    flex: 1, padding: '7px 11px', borderRadius: 7, border: `0.5px solid ${T.glassBorder}`,
+    background: T.surface3, color: T.textPrimary, fontSize: 13, fontFamily: T.fontUI, outline: 'none',
+  };
+  const selectStyle: React.CSSProperties = {
+    padding: '7px 9px', borderRadius: 7, border: `0.5px solid ${T.glassBorder}`,
+    background: T.surface3, color: T.textPrimary, fontSize: 12.5, fontFamily: T.fontUI, cursor: 'pointer',
+  };
+
+  return (
+    <Modal onClose={onClose}>
+      <h2 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: T.textPrimary, fontFamily: T.fontUI }}>
+        Access · {project.name}
+      </h2>
+      <p style={{ margin: '0 0 16px', fontSize: 12, color: T.textMuted, fontFamily: T.fontUI, lineHeight: 1.5 }}>
+        Members listed here can see this project's docs and tasks. Workspace owners and editors
+        always have access. People must already be in the workspace to be added.
+      </p>
+
+      {/* Add member */}
+      <form onSubmit={(e) => { void add(e); }} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <input type="email" placeholder="member@email.com" value={email}
+          onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
+        <select value={role} onChange={(e) => setRole(e.target.value as ProjectRole)} style={selectStyle}>
+          <option value="viewer">Viewer</option>
+          <option value="editor">Editor</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button type="submit" disabled={busy || !email.trim()}
+          style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: T.accent, color: '#0A0B0D', fontSize: 13, fontWeight: 600, cursor: busy ? 'default' : 'pointer', opacity: busy || !email.trim() ? 0.55 : 1, fontFamily: T.fontUI }}>
+          {busy ? 'Adding…' : 'Add'}
+        </button>
+      </form>
+
+      {error && (
+        <p style={{ margin: '0 0 12px', fontSize: 12, color: T.red, fontFamily: T.fontUI }}>{error.replace(/_/g, ' ')}</p>
+      )}
+
+      {/* Member list */}
+      {loading ? (
+        <p style={{ color: T.textMuted, fontSize: 13, fontFamily: T.fontUI }}>Loading…</p>
+      ) : members.length === 0 ? (
+        <p style={{ color: T.textMuted, fontSize: 13, fontFamily: T.fontUI }}>
+          No explicit members yet. Only workspace owners/editors can see this project.
+        </p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={labelStyle}>{members.length} member{members.length !== 1 ? 's' : ''}</span>
+          {members.map((m) => (
+            <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: T.surface3, border: `0.5px solid ${T.glassBorder}` }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: T.textPrimary, fontFamily: T.fontUI, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.displayName ?? m.email}</div>
+                {m.displayName && <div style={{ fontSize: 11, color: T.textMuted, fontFamily: T.fontMono }}>{m.email}</div>}
+              </div>
+              <select value={m.role} onChange={(e) => { void changeRole(m.userId, e.target.value as ProjectRole); }} style={{ ...selectStyle, padding: '5px 8px', fontSize: 12 }}>
+                <option value="viewer">Viewer</option>
+                <option value="editor">Editor</option>
+                <option value="admin">Admin</option>
+              </select>
+              <button onClick={() => { void remove(m.userId); }} title="Remove"
+                style={{ width: 28, height: 28, borderRadius: 6, border: `0.5px solid ${T.glassBorder}`, background: 'transparent', color: T.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = T.red; e.currentTarget.style.background = 'rgba(248,113,113,0.08)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = T.textMuted; e.currentTarget.style.background = 'transparent'; }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
+        <button onClick={onClose}
+          style={{ padding: '7px 16px', borderRadius: 7, border: `0.5px solid ${T.glassBorder}`, background: 'transparent', color: T.textSecondary, fontSize: 13, cursor: 'pointer', fontFamily: T.fontUI }}>
+          Done
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function ProjectsPage(): JSX.Element {
@@ -378,6 +537,7 @@ export function ProjectsPage(): JSX.Element {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
+  const [managing, setManaging] = useState<Project | null>(null);
 
   async function load() {
     try {
@@ -504,6 +664,7 @@ export function ProjectsPage(): JSX.Element {
                   <CardMenu
                     onEdit={() => setEditing(p)}
                     onDuplicate={() => { void handleDuplicate(p); }}
+                    onManageAccess={() => setManaging(p)}
                     onDelete={() => setDeleting(p)}
                   />
                 </div>
@@ -581,6 +742,11 @@ export function ProjectsPage(): JSX.Element {
       {/* Archive confirm */}
       {deleting && (
         <DeleteConfirm project={deleting} onClose={() => setDeleting(null)} onDone={() => { void load(); }} />
+      )}
+
+      {/* Members / access modal */}
+      {managing && (
+        <MembersModal project={managing} onClose={() => setManaging(null)} />
       )}
     </div>
   );

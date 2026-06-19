@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
 import { db } from '../db/index.js';
-import { workspaceMembers } from '../db/schema.js';
+import { projectMembers, workspaceMembers } from '../db/schema.js';
 
 /**
  * Application-layer role enforcement for `/api/*` route handlers.
@@ -68,6 +68,74 @@ export async function requireRole(
   if (!role) throw new RoleError('not_a_member', 403);
   if (ROLE_RANK[role] < ROLE_RANK[minimumRole]) {
     throw new RoleError(`requires_${minimumRole}`, 403);
+  }
+  return role;
+}
+
+// ── Stage B5: per-project roles ────────────────────────────────────────────
+//
+// Mirrors the workspace helpers above but for `project_members`. The effective
+// model matches the RLS predicate `app_can_see_project` (migration 0028):
+//   • workspace owner/editor (and the reserved 'admin') are workspace admins →
+//     they implicitly have the highest project role on EVERY project, even
+//     without a project_members row. This is the intentional admin bypass.
+//   • otherwise the role comes from the user's project_members row (if any).
+// Project roles are a 3-rung ladder: viewer < editor < admin.
+
+export type ProjectRole = 'viewer' | 'editor' | 'admin';
+
+const PROJECT_ROLE_RANK: Record<ProjectRole, number> = { viewer: 0, editor: 1, admin: 2 };
+
+/** True for workspace roles that see/manage every project (the RLS admin bypass). */
+function isWorkspaceAdminRole(role: Role | null): boolean {
+  return role === 'owner' || role === 'editor';
+}
+
+/**
+ * The user's effective role on a project, or null if they can't access it.
+ * Workspace admins resolve to 'admin' on any project in their workspace.
+ */
+export async function getProjectRole(
+  userId: string,
+  workspaceId: string,
+  projectId: string,
+): Promise<ProjectRole | null> {
+  // Workspace-level admins bypass project membership entirely.
+  const wsRole = await getUserRole(userId, workspaceId);
+  if (isWorkspaceAdminRole(wsRole)) return 'admin';
+
+  const rows = await db
+    .select({ role: projectMembers.role })
+    .from(projectMembers)
+    .where(
+      and(
+        eq(projectMembers.userId, userId),
+        eq(projectMembers.projectId, projectId),
+        eq(projectMembers.workspaceId, workspaceId),
+      ),
+    )
+    .limit(1);
+  const r = rows[0]?.role;
+  if (r === 'admin' || r === 'editor' || r === 'viewer') return r;
+  // 'owner' isn't a valid project role; treat anything else as no access.
+  return null;
+}
+
+/**
+ * Throws RoleError if the request is unauthenticated, the user can't access
+ * `projectId` in the active tenant, or their effective project role is below
+ * `minimumRole`. Returns the effective role on success.
+ */
+export async function requireProjectRole(
+  req: FastifyRequest,
+  projectId: string,
+  minimumRole: ProjectRole,
+): Promise<ProjectRole> {
+  if (!req.auth) throw new RoleError('not_authenticated', 401);
+  const role = await getProjectRole(req.auth.sub, req.auth.tenant_id, projectId);
+  if (!role) throw new RoleError('not_a_project_member', 403);
+  if (PROJECT_ROLE_RANK[role] < PROJECT_ROLE_RANK[minimumRole]) {
+    throw new RoleError(`requires_project_${minimumRole}`, 403);
   }
   return role;
 }

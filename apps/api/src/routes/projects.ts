@@ -18,8 +18,9 @@ import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/index.js';
-import { folders, projects, tasks, workspaces } from '../db/schema.js';
+import { folders, projectMembers, projects, tasks, users, workspaceMembers, workspaces } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
+import { requireProjectRole, RoleError } from '../lib/role.js';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,15 @@ const createProjectSchema = z.object({
   icon:          z.string().max(50).optional(),
   githubRepoUrl: z.string().url().nullable().optional().or(z.literal('')),
 }).passthrough(); // folderIds and other extra fields are handled separately
+
+const addMemberSchema = z.object({
+  email: z.string().email(),
+  role:  z.enum(['viewer', 'editor', 'admin']).default('viewer'),
+});
+
+const updateMemberSchema = z.object({
+  role: z.enum(['viewer', 'editor', 'admin']),
+});
 
 const updateProjectSchema = z.object({
   name:          z.string().min(1).max(200).optional(),
@@ -326,5 +336,187 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return reply.send({ tasks: rows, total: rows.length });
+  });
+
+  // ── Stage B5: project membership / access control ──────────────────────────
+  // Helper: confirm the project exists in the tenant (else 404, no leak).
+  async function projectExists(tenantId: string, projectId: string): Promise<boolean> {
+    const p = await db.query.projects.findFirst({
+      where: and(eq(projects.id, projectId), eq(projects.workspaceId, tenantId)),
+    });
+    return !!p;
+  }
+
+  function handleRoleError(err: unknown, reply: import('fastify').FastifyReply): boolean {
+    if (err instanceof RoleError) {
+      reply.code(err.status).send({ error: err.reason });
+      return true;
+    }
+    return false;
+  }
+
+  // ── GET /api/projects/:id/members — list explicit project members ──────────
+  // Any project member (viewer+) — and, via the admin bypass, any workspace
+  // owner/editor — can see who has been granted access.
+  app.get('/api/projects/:id/members', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params as { id: string };
+    if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
+    if (!(await projectExists(req.auth.tenant_id, id))) {
+      return reply.code(404).send({ error: 'not_found' });
+    }
+    try {
+      await requireProjectRole(req, id, 'viewer');
+    } catch (err) {
+      if (handleRoleError(err, reply)) return;
+      throw err;
+    }
+
+    const rows = await withTenant(req.auth.tenant_id, async (tx) =>
+      tx
+        .select({
+          userId:      projectMembers.userId,
+          role:        projectMembers.role,
+          email:       users.email,
+          displayName: users.displayName,
+          joinedAt:    projectMembers.joinedAt,
+        })
+        .from(projectMembers)
+        .innerJoin(users, eq(users.id, projectMembers.userId))
+        .where(eq(projectMembers.projectId, id))
+        .orderBy(projectMembers.joinedAt),
+    );
+    return reply.send({ members: rows });
+  });
+
+  // ── POST /api/projects/:id/members — grant access by email. Admin-only. ────
+  // The target MUST already be a workspace member; project access is a
+  // narrowing of workspace access, never a way to add outsiders.
+  app.post('/api/projects/:id/members', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params as { id: string };
+    if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
+    if (!(await projectExists(req.auth.tenant_id, id))) {
+      return reply.code(404).send({ error: 'not_found' });
+    }
+    try {
+      await requireProjectRole(req, id, 'admin');
+    } catch (err) {
+      if (handleRoleError(err, reply)) return;
+      throw err;
+    }
+
+    const parsed = addMemberSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'validation', issues: parsed.error.issues });
+    }
+    const { email, role } = parsed.data;
+
+    // Resolve the email to a user who is a member of THIS workspace.
+    const target = await db
+      .select({ userId: users.id })
+      .from(users)
+      .innerJoin(
+        workspaceMembers,
+        and(
+          eq(workspaceMembers.userId, users.id),
+          eq(workspaceMembers.workspaceId, req.auth.tenant_id),
+        ),
+      )
+      .where(eq(users.email, email))
+      .limit(1);
+
+    const targetUserId = target[0]?.userId;
+    if (!targetUserId) {
+      return reply.code(400).send({ error: 'not_a_workspace_member' });
+    }
+
+    const [member] = await withTenant(req.auth.tenant_id, async (tx) =>
+      tx
+        .insert(projectMembers)
+        .values({
+          projectId:   id,
+          userId:      targetUserId,
+          workspaceId: req.auth!.tenant_id,
+          role,
+        })
+        .onConflictDoUpdate({
+          target: [projectMembers.projectId, projectMembers.userId],
+          set:    { role },
+        })
+        .returning(),
+    );
+
+    return reply.code(201).send({ member });
+  });
+
+  // ── PATCH /api/projects/:id/members/:userId — change role. Admin-only. ─────
+  app.patch('/api/projects/:id/members/:userId', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id, userId } = req.params as { id: string; userId: string };
+    if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
+    if (!(await projectExists(req.auth.tenant_id, id))) {
+      return reply.code(404).send({ error: 'not_found' });
+    }
+    try {
+      await requireProjectRole(req, id, 'admin');
+    } catch (err) {
+      if (handleRoleError(err, reply)) return;
+      throw err;
+    }
+
+    const parsed = updateMemberSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'validation', issues: parsed.error.issues });
+    }
+
+    const updated = await withTenant(req.auth.tenant_id, async (tx) =>
+      tx
+        .update(projectMembers)
+        .set({ role: parsed.data.role })
+        .where(
+          and(
+            eq(projectMembers.projectId, id),
+            eq(projectMembers.userId, userId),
+            eq(projectMembers.workspaceId, req.auth!.tenant_id),
+          ),
+        )
+        .returning(),
+    );
+
+    if (updated.length === 0) return reply.code(404).send({ error: 'not_a_project_member' });
+    return reply.send({ member: updated[0] });
+  });
+
+  // ── DELETE /api/projects/:id/members/:userId — revoke access. Admin-only. ──
+  app.delete('/api/projects/:id/members/:userId', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id, userId } = req.params as { id: string; userId: string };
+    if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
+    if (!(await projectExists(req.auth.tenant_id, id))) {
+      return reply.code(404).send({ error: 'not_found' });
+    }
+    try {
+      await requireProjectRole(req, id, 'admin');
+    } catch (err) {
+      if (handleRoleError(err, reply)) return;
+      throw err;
+    }
+
+    const removed = await withTenant(req.auth.tenant_id, async (tx) =>
+      tx
+        .delete(projectMembers)
+        .where(
+          and(
+            eq(projectMembers.projectId, id),
+            eq(projectMembers.userId, userId),
+            eq(projectMembers.workspaceId, req.auth!.tenant_id),
+          ),
+        )
+        .returning(),
+    );
+
+    if (removed.length === 0) return reply.code(404).send({ error: 'not_a_project_member' });
+    return reply.send({ removed: true });
   });
 };

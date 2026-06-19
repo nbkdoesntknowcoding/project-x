@@ -151,6 +151,17 @@ export interface MemberRow {
   joinedAt: string;
 }
 
+// Stage B5 — per-project access control.
+export type ProjectRole = 'viewer' | 'editor' | 'admin';
+
+export interface ProjectMemberRow {
+  userId: string;
+  role: ProjectRole;
+  email: string;
+  displayName: string | null;
+  joinedAt: string;
+}
+
 export const api = {
   listDocs: (): Promise<{ docs: DocSummary[] }> => apiFetch('/api/docs'),
   createDoc: (body: DocCreatePayload): Promise<{ doc: DocFull }> =>
@@ -198,6 +209,23 @@ export const api = {
     apiFetch(`/api/members/${userId}/role`, { method: 'PATCH', body: { role } }),
   removeMember: (userId: string): Promise<{ removed: true }> =>
     apiFetch(`/api/members/${userId}`, { method: 'DELETE' }),
+
+  // Stage B5 — project members / access
+  listProjectMembers: (projectId: string): Promise<{ members: ProjectMemberRow[] }> =>
+    apiFetch(`/api/projects/${projectId}/members`),
+  addProjectMember: (
+    projectId: string,
+    body: { email: string; role: ProjectRole },
+  ): Promise<{ member: ProjectMemberRow }> =>
+    apiFetch(`/api/projects/${projectId}/members`, { method: 'POST', body }),
+  updateProjectMemberRole: (
+    projectId: string,
+    userId: string,
+    role: ProjectRole,
+  ): Promise<{ member: ProjectMemberRow }> =>
+    apiFetch(`/api/projects/${projectId}/members/${userId}`, { method: 'PATCH', body: { role } }),
+  removeProjectMember: (projectId: string, userId: string): Promise<{ removed: true }> =>
+    apiFetch(`/api/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
 
   getCurrentWorkspace: (): Promise<{
     workspace: { id: string; slug: string; name: string; plan: string; createdAt: string };
