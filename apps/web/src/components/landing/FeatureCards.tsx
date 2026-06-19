@@ -134,10 +134,10 @@ function FeatureCard({ card }: { card: Card }) {
     <div
       className="group relative overflow-hidden h-full flex flex-col transition-colors"
       style={{
-        background: `radial-gradient(ellipse 130% 64% at 50% 122%, ${hexA(card.accent, 0.18)}, transparent 60%), var(--surface-overlay)`,
+        background: `radial-gradient(ellipse 130% 60% at 50% 118%, ${hexA(card.accent, 0.2)}, transparent 58%), var(--surface-overlay)`,
         border: '1px solid var(--border-subtle)',
         borderRadius: '18px',
-        minHeight: '436px',
+        minHeight: '452px',
       }}
     >
       {/* header */}
@@ -158,8 +158,8 @@ function FeatureCard({ card }: { card: Card }) {
       </div>
       <p className="px-6 pb-5" style={{ fontSize: '14px', lineHeight: 1.55, color: 'var(--text-secondary)', maxWidth: '94%' }}>{card.desc}</p>
 
-      {/* bespoke inner mockup, bleeding to the bottom edge */}
-      <div className="mt-auto relative" style={{ height: '224px' }}>
+      {/* bespoke inner mockup — fills the bottom and bleeds off the edges */}
+      <div className="mt-auto relative" style={{ flex: '1 1 auto', minHeight: '252px' }}>
         <Mock kind={card.mock} accent={card.accent} />
       </div>
     </div>
@@ -192,42 +192,57 @@ function Mock({ kind, accent }: { kind: MockKind; accent: string }) {
       return (
         <Panel>
           <MockHead accent={accent}>live transcript</MockHead>
-          {[
-            ['Nischay', 'Let’s ship the waitlist before the launch.'],
-            ['Priya', 'Agreed — I’ll wire the confirmation email.'],
-            ['Nischay', 'And scope the bot to the right project.'],
-          ].map(([who, line], i) => (
-            <div key={i} className="flex gap-2.5 mb-2.5">
-              <span style={{ fontSize: '11px', fontFamily: 'var(--mono)', color: accent, width: '52px', flexShrink: 0 }}>{who}</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>{line}</span>
-            </div>
-          ))}
+          <Body gap="9px">
+            {([
+              { initial: 'N', col: accent, who: 'Nischay', line: 'Let’s ship the waitlist before the launch.' },
+              { initial: 'P', col: PINK, who: 'Priya', line: 'Agreed — I’ll wire the confirmation email.' },
+              { initial: 'N', col: accent, who: 'Nischay', line: 'And scope the bot to the right project.' },
+            ] as const).map((m, i) => (
+              <div key={i} className="flex gap-2.5 items-start">
+                <span style={{ width: '24px', height: '24px', borderRadius: '50%', flexShrink: 0, background: hexA(m.col, 0.18), border: `1px solid ${hexA(m.col, 0.45)}`, color: m.col, fontSize: '10px', fontFamily: 'var(--mono)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{m.initial}</span>
+                <div style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border-subtle)', borderRadius: '4px 10px 10px 10px', padding: '7px 11px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                  <span style={{ display: 'block', fontSize: '9px', fontFamily: 'var(--mono)', color: m.col, marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{m.who}</span>
+                  {m.line}
+                </div>
+              </div>
+            ))}
+          </Body>
           <Chip accent={accent}>✓ captured · 1 decision · 2 action items</Chip>
         </Panel>
       );
     case 'editor':
       return (
         <Panel>
-          <MockHead accent={accent}>Architecture.md</MockHead>
-          <Line w="88%" /><Line w="72%" /><Line w="80%" />
-          <div className="flex items-center gap-1 my-2">
-            <Line w="46%" inline />
-            <span style={{ width: '2px', height: '13px', background: accent, display: 'inline-block', animation: 'mnemaBlink 1s steps(2) infinite' }} />
-          </div>
-          <Line w="64%" /><Line w="78%" />
+          <MockHead accent={accent}>Architecture.md · 2 editing</MockHead>
+          <Body gap="11px" justify="flex-start">
+            <Line w="88%" />
+            <div className="flex items-center gap-2">
+              <Line w="40%" inline />
+              <Caret color={accent} name="Priya" />
+            </div>
+            <Line w="74%" />
+            <Line w="60%" />
+            <div className="flex items-center gap-2">
+              <Line w="28%" inline />
+              <Caret color={PINK} name="Sam" />
+              <Line w="20%" inline />
+            </div>
+            <Line w="68%" />
+          </Body>
           <Chip accent={GREEN_OK}>synced to 3 flows · 38ms</Chip>
         </Panel>
       );
     case 'recall':
       return (
         <Panel>
-          <div className="flex items-center gap-2 mb-4">
+          <MockHead accent={accent}>meeting · recording</MockHead>
+          <div className="flex items-center gap-2 mb-1">
             {['N', 'P', 'M'].map((a, i) => (
               <span key={i} style={{ width: '28px', height: '28px', borderRadius: '50%', background: hexA(i === 2 ? accent : '#94a3b8', 0.18), border: `1px solid ${hexA(i === 2 ? accent : '#94a3b8', 0.45)}`, fontSize: '11px', color: i === 2 ? accent : '#cbd5e1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: i ? '-9px' : 0 }}>{a}</span>
             ))}
-            <span style={{ fontSize: '11px', fontFamily: 'var(--mono)', color: 'var(--text-tertiary)', marginLeft: '8px' }}>Mnema joined · recording</span>
+            <span style={{ fontSize: '11px', fontFamily: 'var(--mono)', color: 'var(--text-tertiary)', marginLeft: '8px' }}>Mnema joined</span>
           </div>
-          <Wave accent={accent} />
+          <Body justify="center"><Wave accent={accent} /></Body>
           <Chip accent={accent}>Meet · Zoom · Teams</Chip>
         </Panel>
       );
@@ -235,68 +250,75 @@ function Mock({ kind, accent }: { kind: MockKind; accent: string }) {
       return (
         <Panel>
           <MockHead accent={accent}>onboarding flow</MockHead>
-          {['Architecture', 'MCP read path', 'Pricing'].map((s, i) => (
-            <div key={s}>
-              <div
-                className="flex items-center gap-2.5 px-2.5 py-2 mb-0"
-                style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border-subtle)', borderRadius: '8px' }}
-              >
-                <span style={{ width: '18px', height: '18px', borderRadius: '5px', background: hexA(accent, 0.16), border: `1px solid ${hexA(accent, 0.4)}`, color: accent, fontSize: '9.5px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--mono)' }}>{i + 1}</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{s}</span>
-                <span style={{ marginLeft: 'auto', fontSize: '9px', fontFamily: 'var(--mono)', color: 'var(--text-quaternary)', textTransform: 'uppercase' }}>doc</span>
+          <Body gap="0" justify="center">
+            {['Architecture', 'MCP read path', 'Pricing'].map((s, i) => (
+              <div key={s}>
+                <div className="flex items-center gap-2.5 px-3 py-2.5" style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border-subtle)', borderRadius: '9px' }}>
+                  <span style={{ width: '20px', height: '20px', borderRadius: '6px', background: hexA(accent, 0.16), border: `1px solid ${hexA(accent, 0.4)}`, color: accent, fontSize: '10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--mono)' }}>{i + 1}</span>
+                  <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{s}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: '9px', fontFamily: 'var(--mono)', color: 'var(--text-quaternary)', textTransform: 'uppercase' }}>doc</span>
+                </div>
+                {i < 2 && <div style={{ width: '1px', height: '14px', background: hexA(accent, 0.4), margin: '0 0 0 14px' }} />}
               </div>
-              {i < 2 && <div style={{ width: '1px', height: '10px', background: hexA(accent, 0.4), margin: '0 0 0 13px' }} />}
-            </div>
-          ))}
+            ))}
+          </Body>
         </Panel>
       );
     case 'doclist':
       return (
         <Panel>
           <MockHead accent={accent}>workspace · 5 docs</MockHead>
-          {['Architecture', 'Pricing strategy', 'Onboarding flow', 'Q3 planning', 'Release notes'].map((d, i) => (
-            <div key={d} className="flex items-center gap-2.5 py-1.5" style={{ opacity: i === 0 ? 1 : 0.75 }}>
-              <span style={{ width: '7px', height: '7px', borderRadius: '2px', background: i === 0 ? accent : 'var(--text-quaternary)' }} />
-              <span style={{ fontSize: '12px', color: i === 0 ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{d}</span>
-              {i === 0 && <span style={{ marginLeft: 'auto', fontSize: '9px', fontFamily: 'var(--mono)', color: accent }}>OPEN</span>}
-            </div>
-          ))}
+          <Body gap="2px" justify="center">
+            {['Architecture', 'Pricing strategy', 'Onboarding flow', 'Q3 planning', 'Release notes'].map((d, i) => (
+              <div key={d} className="flex items-center gap-2.5 px-2 py-2" style={{ opacity: i === 0 ? 1 : 0.72, background: i === 0 ? hexA(accent, 0.08) : 'transparent', border: i === 0 ? `1px solid ${hexA(accent, 0.25)}` : '1px solid transparent', borderRadius: '7px' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '2px', background: i === 0 ? accent : 'var(--text-quaternary)' }} />
+                <span style={{ fontSize: '12.5px', color: i === 0 ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>{d}</span>
+                {i === 0 && <span style={{ marginLeft: 'auto', fontSize: '9px', fontFamily: 'var(--mono)', color: accent }}>OPEN</span>}
+              </div>
+            ))}
+          </Body>
         </Panel>
       );
     case 'instruction':
       return (
         <Panel>
           <MockHead accent={accent}>step instruction</MockHead>
-          <div style={{ borderLeft: `2px solid ${accent}`, paddingLeft: '10px', marginBottom: '12px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-primary)', fontStyle: 'italic', lineHeight: 1.5 }}>“Read this before the spec — it sets the constraints the agent must honor.”</span>
-          </div>
-          <Line w="82%" /><Line w="64%" /><Line w="74%" />
+          <Body justify="center" gap="14px">
+            <div style={{ borderLeft: `2px solid ${accent}`, paddingLeft: '12px' }}>
+              <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontStyle: 'italic', lineHeight: 1.55 }}>“Read this before the spec — it sets the constraints the agent must honor.”</span>
+            </div>
+            <div><Line w="84%" /><Line w="66%" /><Line w="76%" /></div>
+          </Body>
         </Panel>
       );
     case 'code':
       return (
         <Panel mono>
           <MockHead accent={accent}>mcp client</MockHead>
-          <div style={{ color: 'var(--text-tertiary)' }}>$ claude --mcp mnema</div>
-          <div style={{ marginTop: '2px' }}><span style={{ color: accent }}>→</span> <span style={{ color: 'var(--text-secondary)' }}>get_flow(</span><span style={{ color: AMBER }}>"onboarding"</span><span style={{ color: 'var(--text-secondary)' }}>)</span></div>
-          <div><span style={{ color: accent }}>→</span> <span style={{ color: 'var(--text-secondary)' }}>search_docs(</span><span style={{ color: AMBER }}>"pricing"</span><span style={{ color: 'var(--text-secondary)' }}>)</span></div>
-          <div style={{ color: GREEN_OK, marginTop: '4px' }}>✓ 4 sources · 182ms</div>
+          <Body justify="center" gap="3px">
+            <div style={{ color: 'var(--text-tertiary)' }}>$ claude --mcp mnema</div>
+            <div><span style={{ color: accent }}>→</span> <span style={{ color: 'var(--text-secondary)' }}>get_flow(</span><span style={{ color: AMBER }}>"onboarding"</span><span style={{ color: 'var(--text-secondary)' }}>)</span></div>
+            <div><span style={{ color: accent }}>→</span> <span style={{ color: 'var(--text-secondary)' }}>search_docs(</span><span style={{ color: AMBER }}>"pricing"</span><span style={{ color: 'var(--text-secondary)' }}>)</span></div>
+            <div style={{ color: GREEN_OK, marginTop: '4px' }}>✓ 4 sources · 182ms</div>
+          </Body>
         </Panel>
       );
     case 'graph':
       return (
         <Panel>
           <MockHead accent={accent}>knowledge graph</MockHead>
-          <MiniGraph accent={accent} />
+          <Body justify="center"><MiniGraph accent={accent} /></Body>
         </Panel>
       );
     case 'agent':
       return (
         <Panel mono>
           <MockHead accent={accent}>scoped agent</MockHead>
-          <div style={{ color: 'var(--text-tertiary)' }}>scope = project:voice-clone</div>
-          <div style={{ marginTop: '3px' }}><span style={{ color: accent }}>ask</span> <span style={{ color: 'var(--text-secondary)' }}>“what’s the status?”</span></div>
-          <div style={{ color: 'var(--text-secondary)', marginTop: '3px' }}>answers from 1 project</div>
+          <Body justify="center" gap="4px">
+            <div style={{ color: 'var(--text-tertiary)' }}>scope = project:voice-clone</div>
+            <div><span style={{ color: accent }}>ask</span> <span style={{ color: 'var(--text-secondary)' }}>“what’s the status?”</span></div>
+            <div style={{ color: 'var(--text-secondary)' }}>answers from 1 project</div>
+          </Body>
           <Chip accent={GREEN_OK}>0 cross-project leaks</Chip>
         </Panel>
       );
@@ -305,24 +327,32 @@ function Mock({ kind, accent }: { kind: MockKind; accent: string }) {
   }
 }
 
+function Body({ children, justify = 'center', gap = '8px' }: { children: React.ReactNode; justify?: string; gap?: string }) {
+  return (
+    <div style={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column', justifyContent: justify, gap, padding: '4px 0' }}>
+      {children}
+    </div>
+  );
+}
+
 const GREEN_OK = '#6BE39B';
 
 function Panel({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
   return (
     <div
-      className="absolute left-6 right-6 bottom-0 p-4"
+      className="absolute left-5 right-5 bottom-0 top-0 flex flex-col"
       style={{
-        top: 0,
-        background: 'rgba(8,9,12,0.6)',
+        padding: '15px 16px 15px',
+        background: 'rgba(8,9,12,0.55)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',
         border: '1px solid var(--border-subtle)',
         borderBottom: 'none',
-        borderTopLeftRadius: '12px',
-        borderTopRightRadius: '12px',
+        borderTopLeftRadius: '13px',
+        borderTopRightRadius: '13px',
         fontFamily: mono ? 'var(--mono)' : 'var(--sans)',
-        fontSize: mono ? '11px' : undefined,
-        lineHeight: mono ? 1.7 : undefined,
+        fontSize: mono ? '11.5px' : undefined,
+        lineHeight: mono ? 1.8 : undefined,
         overflow: 'hidden',
       }}
     >
@@ -347,6 +377,15 @@ function Line({ w, inline }: { w: string; inline?: boolean }) {
   return <div style={{ height: '8px', width: w, borderRadius: '3px', background: 'var(--surface-elevated)', margin: inline ? 0 : '7px 0', display: inline ? 'inline-block' : 'block' }} />;
 }
 
+function Caret({ color, name }: { color: string; name: string }) {
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>
+      <span style={{ width: '2px', height: '15px', background: color, display: 'inline-block', animation: 'mnemaBlink 1s steps(2) infinite' }} />
+      <span style={{ position: 'absolute', left: '2px', top: '-13px', fontFamily: 'var(--mono)', fontSize: '8.5px', color: '#0A0B0D', background: color, borderRadius: '3px', padding: '1px 4px', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{name}</span>
+    </span>
+  );
+}
+
 function Chip({ children, accent }: { children: React.ReactNode; accent: string }) {
   return (
     <div
@@ -359,11 +398,11 @@ function Chip({ children, accent }: { children: React.ReactNode; accent: string 
 }
 
 function Wave({ accent }: { accent: string }) {
-  const bars = [10, 22, 14, 30, 18, 38, 16, 26, 12, 34, 20, 28, 14, 24, 11, 32, 18, 26, 13, 20, 9, 22];
+  const bars = [12, 28, 18, 40, 22, 52, 20, 34, 14, 46, 26, 36, 18, 32, 14, 44, 24, 34, 16, 26, 11, 30, 18, 38, 14, 24];
   return (
-    <div className="flex items-center gap-1" style={{ height: '44px' }}>
+    <div className="flex items-center justify-between" style={{ height: '64px', width: '100%' }}>
       {bars.map((h, i) => (
-        <span key={i} style={{ width: '3px', height: `${h}px`, borderRadius: '2px', background: hexA(accent, 0.5 + (h / 38) * 0.4) }} />
+        <span key={i} style={{ width: '3px', height: `${h}px`, borderRadius: '2px', background: hexA(accent, 0.45 + (h / 52) * 0.45) }} />
       ))}
     </div>
   );
