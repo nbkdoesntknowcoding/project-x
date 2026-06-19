@@ -9,6 +9,7 @@ import CommandPalette from '../components/landing/CommandPalette.tsx';
 import LiveStats from '../components/landing/LiveStats.tsx';
 import FeatureCards from '../components/landing/FeatureCards.tsx';
 import IsoFigures from '../components/landing/IsoFigures.astro';
+import Integrations from '../components/landing/Integrations.astro';
 
 const auth = Astro.locals.auth;
 
@@ -321,6 +322,13 @@ const heroEdges = ([[0, 1], [1, 2], [2, 3], [0, 4], [4, 5], [5, 1], [5, 3], [4, 
   <section class="py-24" style="background: var(--surface-base); border-top: 1px solid var(--border-subtle);">
     <div class="max-w-6xl mx-auto px-6">
       <IsoFigures />
+    </div>
+  </section>
+
+  <!-- ===== INTEGRATIONS (dub.co-style logo grid) ===== -->
+  <section class="py-24" style="background: var(--surface-base); border-top: 1px solid var(--border-subtle);">
+    <div class="max-w-6xl mx-auto px-6">
+      <Integrations />
     </div>
   </section>
 
