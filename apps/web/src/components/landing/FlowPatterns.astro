@@ -1,0 +1,107 @@
+---
+/**
+ * FlowPatterns — Trigger.dev-style DAG diagrams that explain how a Mnema flow
+ * runs: monospace node boxes connected by arrows. Static SVG.
+ */
+const KIND: Record<string, string> = {
+  doc: '#7C9CFF',
+  note: '#FFB370',
+  agent: '#6BE39B',
+  decision: '#e879f9',
+  graph: '#a78bfa',
+  meeting: '#60a5fa',
+};
+const W = 74;
+const H = 26;
+
+type Node = { id: string; label: string; x: number; y: number; kind: keyof typeof KIND };
+function build(nodes: Node[], edges: [string, string][]) {
+  const by: Record<string, Node> = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const arrows = edges.map(([a, b]) => {
+    const na = by[a]!;
+    const nb = by[b]!;
+    return { x1: na.x + W, y1: na.y + H / 2, x2: nb.x, y2: nb.y + H / 2 };
+  });
+  return { nodes, arrows };
+}
+
+const patterns = [
+  {
+    title: 'Read in sequence',
+    desc: 'Docs and your instructions, pulled one step at a time — never one giant dump.',
+    g: build(
+      [
+        { id: 'a', label: 'Doc', x: 6, y: 47, kind: 'doc' },
+        { id: 'b', label: '+ note', x: 92, y: 47, kind: 'note' },
+        { id: 'c', label: 'Doc', x: 178, y: 47, kind: 'doc' },
+        { id: 'd', label: 'Agent', x: 264, y: 47, kind: 'agent' },
+      ],
+      [['a', 'b'], ['b', 'c'], ['c', 'd']],
+    ),
+  },
+  {
+    title: 'Branch on a decision',
+    desc: 'Steer the flow down different paths based on what the agent finds.',
+    g: build(
+      [
+        { id: 'a', label: 'Doc', x: 6, y: 47, kind: 'doc' },
+        { id: 'b', label: 'Decide', x: 100, y: 47, kind: 'decision' },
+        { id: 'c', label: 'Path A', x: 250, y: 14, kind: 'doc' },
+        { id: 'd', label: 'Path B', x: 250, y: 80, kind: 'doc' },
+      ],
+      [['a', 'b'], ['b', 'c'], ['b', 'd']],
+    ),
+  },
+  {
+    title: 'Capture from meetings',
+    desc: 'A call becomes structured notes that flow straight into the graph.',
+    g: build(
+      [
+        { id: 'a', label: 'Meeting', x: 6, y: 47, kind: 'meeting' },
+        { id: 'b', label: 'Capture', x: 110, y: 47, kind: 'note' },
+        { id: 'c', label: 'Graph', x: 244, y: 47, kind: 'graph' },
+      ],
+      [['a', 'b'], ['b', 'c']],
+    ),
+  },
+];
+---
+
+<div class="fp-grid">
+  {patterns.map((p) => (
+    <div class="fp-card">
+      <svg viewBox="0 0 340 120" width="100%" class="fp-svg" aria-hidden="true">
+        {p.g.arrows.map((ar) => (
+          <g>
+            <line x1={ar.x1} y1={ar.y1} x2={ar.x2 - 7} y2={ar.y2} stroke="rgba(184,188,196,0.4)" stroke-width="1.3" stroke-dasharray="3 3" />
+            <polygon points={`${ar.x2},${ar.y2} ${ar.x2 - 7},${ar.y2 - 4} ${ar.x2 - 7},${ar.y2 + 4}`} fill="rgba(184,188,196,0.65)" />
+          </g>
+        ))}
+        {p.g.nodes.map((n) => (
+          <g>
+            <rect x={n.x} y={n.y} width={W} height={H} rx="6"
+              fill={`${KIND[n.kind]}1f`} stroke={KIND[n.kind]} stroke-width="1.2" />
+            <text x={n.x + W / 2} y={n.y + H / 2 + 3.5} text-anchor="middle" class="fp-node-text" style={`fill:${KIND[n.kind]};`}>{n.label}</text>
+          </g>
+        ))}
+      </svg>
+      <h3 class="fp-title">{p.title}</h3>
+      <p class="fp-desc">{p.desc}</p>
+    </div>
+  ))}
+</div>
+
+<style>
+  .fp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 860px) { .fp-grid { grid-template-columns: 1fr; } }
+  .fp-card {
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    padding: 18px 20px 20px;
+  }
+  .fp-svg { display: block; margin-bottom: 14px; }
+  :global(.fp-node-text) { font-family: var(--mono); font-size: 11px; letter-spacing: -0.01em; }
+  .fp-title { font-size: 15px; font-weight: 600; color: var(--text-primary); margin: 0 0 6px; letter-spacing: -0.01em; }
+  .fp-desc { font-size: 13px; line-height: 1.5; color: var(--text-tertiary); margin: 0; }
+</style>

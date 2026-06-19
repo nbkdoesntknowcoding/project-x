@@ -158,8 +158,6 @@ const F4lines = [
 
       <rect x="46" y="24" width="410" height="392" fill="url(#isoDots)"
         style="mask: radial-gradient(ellipse 58% 58% at 46% 46%, #000 35%, transparent 85%); -webkit-mask: radial-gradient(ellipse 58% 58% at 46% 46%, #000 35%, transparent 85%);" />
-      <text x="20" y="26" class="iso-tag">FIG_01 — WORKSPACE</text>
-
       {f1defs.map((l) => (
         <g>
           {/* solid box: sides first (depth), then top */}
@@ -186,7 +184,6 @@ const F4lines = [
   <!-- FIG_02 — flow of doc boxes -->
   <div class="iso-cell">
     <svg viewBox="0 0 200 165" width="100%" role="img">
-      <text x="6" y="14" class="iso-tag">FIG_02</text>
       {F2.map((p) => (
         <g>
           {p.i < 2 && <line x1={p.center[0]} y1={p.center[1]} x2={p.next[0]} y2={p.next[1]} stroke="rgba(255,179,112,0.55)" stroke-width="1.2" />}
@@ -205,7 +202,6 @@ const F4lines = [
   <!-- FIG_03 — graph network -->
   <div class="iso-cell">
     <svg viewBox="0 0 200 165" width="100%" role="img">
-      <text x="6" y="14" class="iso-tag">FIG_03</text>
       <polygon points={F3plane.left} fill="rgba(10,12,20,0.7)" stroke="rgba(124,156,255,0.2)" stroke-width="0.8" />
       <polygon points={F3plane.right} fill="rgba(40,52,92,0.35)" stroke="rgba(124,156,255,0.22)" stroke-width="0.8" />
       <polygon points={F3plane.top} fill="rgba(124,156,255,0.05)" stroke="rgba(124,156,255,0.28)" stroke-width="0.9" />
@@ -220,7 +216,6 @@ const F4lines = [
   <!-- FIG_04 — MCP terminal -->
   <div class="iso-cell">
     <svg viewBox="0 0 200 165" width="100%" role="img">
-      <text x="6" y="14" class="iso-tag">FIG_04</text>
       <polygon points={F4.left} fill="rgba(10,12,20,0.85)" stroke="rgba(124,156,255,0.4)" stroke-width="1" stroke-linejoin="round" />
       <polygon points={F4.right} fill="rgba(40,52,92,0.5)" stroke="rgba(124,156,255,0.45)" stroke-width="1" stroke-linejoin="round" />
       <polygon points={F4.top} fill="url(#isoTop)" stroke="rgba(124,156,255,0.65)" stroke-width="1.1" stroke-linejoin="round" />

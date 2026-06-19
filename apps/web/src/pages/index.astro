@@ -3,6 +3,7 @@ import PublicLayout from '../layouts/PublicLayout.astro';
 import { RadialGlow } from '../components/ui/RadialGlow';
 import { NoiseOverlay } from '../components/ui/NoiseOverlay';
 import FlowMockup from '../components/landing/FlowMockup.astro';
+import FlowPatterns from '../components/landing/FlowPatterns.astro';
 import HeroGraph from '../components/landing/HeroGraph.tsx';
 import CommandPalette from '../components/landing/CommandPalette.tsx';
 import LiveStats from '../components/landing/LiveStats.tsx';
@@ -252,6 +253,19 @@ const auth = Astro.locals.auth;
             </p>
           </div>
         </div>
+      </div>
+
+      <!-- flow patterns (trigger.dev-style DAGs) -->
+      <div class="mt-20">
+        <div class="text-center mb-10">
+          <span class="font-mono uppercase block mb-3" style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);">
+            How a flow runs
+          </span>
+          <h2 class="font-sans font-medium max-w-2xl mx-auto" style="font-size: 24px; line-height: 1.2; letter-spacing: -0.02em; color: var(--text-primary);">
+            Compose any path through your context.
+          </h2>
+        </div>
+        <FlowPatterns />
       </div>
     </div>
   </section>
