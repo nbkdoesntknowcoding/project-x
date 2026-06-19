@@ -186,10 +186,10 @@ class RAGContext(FrameProcessor):
         await self.push_frame(frame, direction)
 
     async def _inject(self, query: str, direction: FrameDirection) -> None:
+        # Search across everything the bot can access; results are project-labelled, so
+        # the LLM grounds on the right one. (Explicit per-project scoping happens when the
+        # LLM calls search_knowledge with a resolved project_id.)
         search_args = {"query": query, "mode": "hybrid", "limit": 5}
-        # Scope the per-turn retrieval to the meeting's project (no cross-project bleed).
-        if os.environ.get("MNEMA_PROJECT_ID"):
-            search_args["project_id"] = os.environ["MNEMA_PROJECT_ID"]
         try:
             res = await asyncio.wait_for(
                 self._mnema.call("search_docs", search_args),
@@ -203,13 +203,16 @@ class RAGContext(FrameProcessor):
             return
         blocks = []
         for h in hits[:5]:
+            proj = h.get("project_name") or "Unfiled"
             head = h.get("title") or ""
             if h.get("heading_path"):
                 head = f"{head} › {h['heading_path']}"
-            blocks.append(f"[{head}]\n{(h.get('snippet') or '').strip()}")
+            # Prefix each snippet with its project so the model never mixes projects.
+            blocks.append(f"[project: {proj} | {head}]\n{(h.get('snippet') or '').strip()}")
         content = (
-            "[Context from the Mnema knowledge base — use naturally if relevant; "
-            "do not mention you looked it up]\n\n" + "\n\n---\n\n".join(blocks)
+            "[Context from the knowledge base — each item is labelled with its project; "
+            "only use items from the project being asked about; use naturally, don't mention "
+            "you looked it up]\n\n" + "\n\n---\n\n".join(blocks)
         )
         await self.push_frame(
             LLMMessagesAppendFrame(

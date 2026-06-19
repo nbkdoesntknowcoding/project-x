@@ -140,31 +140,36 @@ async def search_knowledge(mcp: MnemaMCP, args: dict) -> dict:
         "mode": args.get("mode", "hybrid"),
         "limit": int(args.get("limit", 5)),
     }
-    # Bound retrieval to the meeting's project so the bot can't answer from other
-    # projects (fixes cross-project bleed). The LLM never needs to pass this.
-    pid = args.get("project_id") or MNEMA_PROJECT_ID
-    if pid:
-        payload["project_id"] = pid
+    # Scope only when the LLM names a project (resolved via list_projects); otherwise
+    # search across everything the bot can access — each result is labelled with its
+    # project, so the LLM can answer about the right one without mixing them.
+    if args.get("project_id"):
+        payload["project_id"] = args["project_id"]
     return await mcp.call("search_docs", payload)
 
 
+async def list_projects(mcp: MnemaMCP, args: dict) -> dict:
+    """List the projects the bot can see — use to resolve a project name → id before
+    scoping a search/list to it."""
+    return await mcp.call("list_projects", {})
+
+
 async def list_recent_docs(mcp: MnemaMCP, args: dict) -> dict:
-    """Newest-first docs in the project — for 'latest / recent docs' questions."""
+    """Newest-first docs — for 'latest / recent docs' questions. Pass project_id to scope."""
     payload: dict = {"limit": int(args.get("limit", 10))}
-    pid = args.get("project_id") or MNEMA_PROJECT_ID
-    if pid:
-        payload["project_id"] = pid
+    if args.get("project_id"):
+        payload["project_id"] = args["project_id"]
     return await mcp.call("list_docs", payload)
 
 
 async def list_project_tasks(mcp: MnemaMCP, args: dict) -> dict:
-    """The live task board for the project — for 'what's in progress / moved' questions."""
+    """The live task board — for 'what's in progress / moved / latest build' questions.
+    Pass project (id or slug) to scope to one project."""
     payload: dict = {"limit": int(args.get("limit", 20))}
     if args.get("status"):
         payload["status"] = args["status"]
-    pid = args.get("project_id") or MNEMA_PROJECT_ID
-    if pid:
-        payload["project"] = pid
+    if args.get("project"):
+        payload["project"] = args["project"]
     return await mcp.call("list_project_tasks", payload)
 
 
@@ -190,10 +195,7 @@ async def traverse_graph(mcp: MnemaMCP, args: dict) -> dict:
 
 
 async def get_god_nodes(mcp: MnemaMCP, args: dict) -> dict:
-    payload = {k: v for k, v in (args or {}).items() if v}
-    if MNEMA_PROJECT_ID and "project_id" not in payload:
-        payload["project_id"] = MNEMA_PROJECT_ID
-    return await mcp.call("get_god_nodes", payload)
+    return await mcp.call("get_god_nodes", {k: v for k, v in (args or {}).items() if v})
 
 
 async def get_graph_report(mcp: MnemaMCP, args: dict) -> dict:
@@ -204,6 +206,7 @@ _TOOLS = {
     "create_task": create_task,
     "create_doc": create_doc,
     "search_knowledge": search_knowledge,
+    "list_projects": list_projects,
     "list_recent_docs": list_recent_docs,
     "list_project_tasks": list_project_tasks,
     "get_doc": get_doc,

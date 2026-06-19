@@ -12,12 +12,13 @@ MNEMA_TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "search_knowledge",
-            "description": "Search the Mnema knowledge base (hybrid keyword + semantic) to answer questions from meeting context. Returns ranked doc snippets with ids you can pass to get_doc.",
+            "description": "Search the knowledge base (hybrid keyword + semantic). Each result is labelled with its project (project_name) — use that to answer about the RIGHT project and never mix projects. If the question is about a specific project, pass project_id (resolve it with list_projects first) to search only that project.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "What to look up"},
                     "mode": {"type": "string", "enum": ["hybrid", "keyword", "semantic"], "description": "Defaults to hybrid"},
+                    "project_id": {"type": "string", "description": "Optional: restrict to this project (from list_projects)"},
                 },
                 "required": ["query"],
             },
@@ -26,11 +27,22 @@ MNEMA_TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "list_projects",
+            "description": "List the projects you can access (id, name, slug). Call this first to resolve a project the user named (e.g. 'the voice clone project') into a project_id before searching/listing within it.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_recent_docs",
-            "description": "List the project's most recently updated docs (newest first). Use for 'latest', 'recent', or 'what's new' questions instead of search.",
+            "description": "List the most recently updated docs (newest first). Use for 'latest', 'recent', or 'what's new' questions instead of search. Pass project_id to scope to one project.",
             "parameters": {
                 "type": "object",
-                "properties": {"limit": {"type": "integer", "description": "How many (default 10)"}},
+                "properties": {
+                    "limit": {"type": "integer", "description": "How many (default 10)"},
+                    "project_id": {"type": "string", "description": "Optional: restrict to this project"},
+                },
             },
         },
     },
@@ -38,11 +50,12 @@ MNEMA_TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "list_project_tasks",
-            "description": "List the project's live task board (what's in progress, in review, done, etc.). Use for questions about tasks, status, the latest build, or what moved — this reflects today's board, not docs.",
+            "description": "List a live task board (what's in progress, in review, done, etc.). Use for questions about tasks, status, the latest build, or what moved — this reflects today's board, not docs. Pass project (id or slug, from list_projects) to scope to one project.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "status": {"type": "string", "description": "Optional: backlog | in_progress | review | audit_fix | done"},
+                    "project": {"type": "string", "description": "Optional: project id or slug to scope to"},
                     "limit": {"type": "integer", "description": "How many (default 20)"},
                 },
             },

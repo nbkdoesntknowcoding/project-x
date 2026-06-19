@@ -118,6 +118,34 @@ export interface SearchHit {
   match_type: 'title' | 'body' | 'both' | 'chunk';
   snippet: string;
   heading_path?: string;
+  // Which project this doc belongs to (null = unfiled/workspace-wide). Lets the caller
+  // distinguish results across projects and answer about the right one.
+  project_id?: string | null;
+  project_name?: string | null;
+}
+
+/** Attach each hit's project (id + name) in one lookup, so results are never mixed up
+ *  across projects. Mutates the result in place. */
+async function attachProjects(ctx: McpAuthContext, result: SearchResult): Promise<void> {
+  const ids = [...new Set(result.results.map((h) => h.id))];
+  if (ids.length === 0) return;
+  const rows = await withTenant(ctx.tenant_id, (tx) =>
+    tx.execute<{ id: string; project_id: string | null; project_name: string | null }>(sql`
+      SELECT d.id, d.project_id, p.name AS project_name
+      FROM docs d
+      LEFT JOIN projects p ON p.id = d.project_id
+      WHERE d.id IN (${sql.join(ids.map((i) => sql`${i}::uuid`), sql`, `)})
+    `),
+  );
+  const map = new Map<string, { project_id: string | null; project_name: string | null }>();
+  for (const r of rows as unknown as Array<{ id: string; project_id: string | null; project_name: string | null }>) {
+    map.set(r.id, { project_id: r.project_id, project_name: r.project_name });
+  }
+  for (const h of result.results) {
+    const m = map.get(h.id);
+    h.project_id = m?.project_id ?? null;
+    h.project_name = m?.project_name ?? null;
+  }
 }
 
 export interface SearchResult {
@@ -140,14 +168,20 @@ export async function searchDocs(
     { tool_name: SEARCH_DOCS_TOOL.name, args: args as Record<string, unknown> },
     async () => {
       const scope = scopeClause(args.project_id, args.folder_id);
+      let result: SearchResult;
       switch (args.mode) {
         case 'keyword':
-          return await runKeyword(ctx, args.query, args.limit, scope);
+          result = await runKeyword(ctx, args.query, args.limit, scope);
+          break;
         case 'semantic':
-          return await runSemantic(ctx, args.query, args.limit, scope);
-        case 'hybrid':
-          return await runHybrid(ctx, args.query, args.limit, scope);
+          result = await runSemantic(ctx, args.query, args.limit, scope);
+          break;
+        default:
+          result = await runHybrid(ctx, args.query, args.limit, scope);
       }
+      // Label every hit with its project so the caller never mixes projects.
+      await attachProjects(ctx, result);
+      return result;
     },
     (result) => ({ mode: result.mode, result_count: result.results.length }),
   );
