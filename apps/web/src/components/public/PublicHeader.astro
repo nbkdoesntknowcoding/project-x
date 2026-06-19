@@ -15,9 +15,16 @@ const navLinks = [
   <div class="max-w-[1100px] mx-auto px-6 w-full flex items-center justify-between">
     <a
       href="/"
-      style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em; color: var(--text-primary);"
+      class="inline-flex items-center gap-2.5 select-none"
+      style="color: var(--text-primary);"
     >
-      Mnema
+      <span
+        class="inline-flex flex-shrink-0 overflow-hidden"
+        style="width: 26px; height: 26px; border-radius: 7px;"
+      >
+        <img src="/logo.svg" width="26" height="26" alt="Mnema" draggable="false" />
+      </span>
+      <span style="font-size: 17px; font-weight: 500; letter-spacing: -0.01em;">Mnema</span>
     </a>
 
     <!-- Nav with pill active state -->

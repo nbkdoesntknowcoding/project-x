@@ -2,8 +2,11 @@
 import PublicLayout from '../layouts/PublicLayout.astro';
 import { RadialGlow } from '../components/ui/RadialGlow';
 import { NoiseOverlay } from '../components/ui/NoiseOverlay';
-import ProductMockup from '../components/landing/ProductMockup.astro';
 import FlowMockup from '../components/landing/FlowMockup.astro';
+import HeroGraph from '../components/landing/HeroGraph.tsx';
+import CommandPalette from '../components/landing/CommandPalette.tsx';
+import LiveStats from '../components/landing/LiveStats.tsx';
+import FeatureCards from '../components/landing/FeatureCards.tsx';
 
 const auth = Astro.locals.auth;
 ---
@@ -15,12 +18,12 @@ const auth = Astro.locals.auth;
 >
 
   <!-- ===== HERO ===== -->
-  <section class="relative overflow-hidden pt-32 pb-16" style="background: var(--surface-base);">
-    <RadialGlow cx={50} cy={35} radius={50} tone="warm" intensity={1} />
+  <section class="relative overflow-hidden pt-24 pb-16" style="background: var(--surface-base);">
+    <RadialGlow cx={50} cy={28} radius={50} tone="warm" intensity={1} />
     <NoiseOverlay opacity={0.04} />
 
     <div
-      class="relative max-w-3xl mx-auto px-6 text-center mb-20"
+      class="relative max-w-3xl mx-auto px-6 text-center mb-12"
       style="z-index: 2;"
     >
       <span
@@ -93,17 +96,104 @@ const auth = Astro.locals.auth;
       </p>
     </div>
 
-    <!-- ProductMockup — anchored to "how it looks today" -->
-    <div class="relative max-w-6xl mx-auto px-6 mb-4 text-center" style="z-index: 2;">
-      <span
-        class="font-mono uppercase"
-        style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+    <!-- ===== Raycast-style desktop frame: the graph IS the workspace, the
+         palette is the MCP agent reading it ===== -->
+    <div class="relative max-w-6xl mx-auto px-6" style="z-index: 2;">
+      <div
+        class="relative overflow-hidden mnema-window"
+        style="
+          border-radius: 16px;
+          border: 1px solid var(--border-default);
+          background: var(--surface-overlay);
+          box-shadow:
+            0 1px 0 rgba(255,255,255,0.05) inset,
+            0 40px 100px -30px rgba(0,0,0,0.75),
+            0 0 0 1px rgba(255,255,255,0.03),
+            0 0 120px -40px rgba(255,179,112,0.18);
+        "
       >
-        How it looks today
-      </span>
+        <!-- window top bar (app chrome) -->
+        <div
+          class="flex items-center justify-between"
+          style="height: 44px; padding: 0 14px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-base);"
+        >
+          <div class="flex items-center gap-3">
+            <span class="flex gap-1.5" aria-hidden="true">
+              <span style="width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,0.14);"></span>
+              <span style="width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,0.10);"></span>
+              <span style="width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,0.07);"></span>
+            </span>
+            <span class="inline-flex items-center gap-2 ml-1">
+              <span class="inline-flex overflow-hidden" style="width:18px;height:18px;border-radius:5px;">
+                <img src="/logo.svg" width="18" height="18" alt="" draggable="false" />
+              </span>
+              <span style="font-size:13px;font-weight:500;color:var(--text-secondary);">Acme workspace</span>
+            </span>
+            <nav class="hidden sm:flex items-center gap-1 ml-2 font-mono" style="font-size:11px;">
+              <span style="padding:3px 8px;border-radius:6px;background:var(--surface-overlay);color:var(--text-primary);">Graph</span>
+              <span style="padding:3px 8px;color:var(--text-tertiary);">Docs</span>
+              <span style="padding:3px 8px;color:var(--text-tertiary);">Flows</span>
+              <span style="padding:3px 8px;color:var(--text-tertiary);">Tasks</span>
+            </nav>
+          </div>
+          <div class="flex items-center gap-3 font-mono" style="font-size:10px; letter-spacing:0.06em; color:var(--text-tertiary); text-transform:uppercase;">
+            <span class="hidden sm:inline-flex items-center gap-1.5" style="color:#7C9CFF;">
+              <span style="width:6px;height:6px;border-radius:50%;background:#7C9CFF;"></span>MCP
+            </span>
+            <span class="hidden sm:inline-flex items-center gap-1.5">
+              <span style="width:6px;height:6px;border-radius:50%;background:var(--status-sync);box-shadow:0 0 8px rgba(107,227,155,0.6);"></span>Synced
+            </span>
+            <span>9:41</span>
+          </div>
+        </div>
+
+        <!-- window body: real-graph "desktop" (renders on black) + floating palette -->
+        <div
+          class="relative"
+          style="height: clamp(360px, 42vw, 480px); background:
+            radial-gradient(ellipse 70% 70% at 30% 22%, rgba(255,179,112,0.07), transparent 62%),
+            radial-gradient(ellipse 60% 60% at 85% 82%, rgba(124,156,255,0.07), transparent 58%),
+            #050609;"
+        >
+          <HeroGraph client:only="react" />
+
+          <div
+            class="absolute top-3 left-4 font-mono uppercase pointer-events-none"
+            style="font-size: 10px; letter-spacing: 0.08em; color: var(--text-tertiary); z-index: 2;"
+          >
+            Knowledge graph · 2 projects · drag a node
+          </div>
+
+          <!-- floating command palette (the agent reading context) -->
+          <div
+            class="absolute left-1/2 bottom-5 px-4 w-full"
+            style="transform: translateX(-50%); max-width: 520px; z-index: 3;"
+          >
+            <CommandPalette client:visible />
+          </div>
+        </div>
+      </div>
     </div>
-    <div class="relative" style="z-index: 2;">
-      <ProductMockup />
+  </section>
+
+  <!-- ===== LIVE STATS (dub-style counters) ===== -->
+  <section class="py-24" style="background: var(--surface-base);">
+    <div class="max-w-6xl mx-auto px-6">
+      <div class="text-center mb-14">
+        <span
+          class="font-mono uppercase block mb-3"
+          style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
+        >
+          Built to remember
+        </span>
+        <h2
+          class="font-sans font-medium max-w-2xl mx-auto"
+          style="font-size: 28px; line-height: 1.2; letter-spacing: -0.02em; color: var(--text-primary);"
+        >
+          Every doc, flow, and decision — connected and queryable.
+        </h2>
+      </div>
+      <LiveStats client:visible />
     </div>
   </section>
 
@@ -165,69 +255,10 @@ const auth = Astro.locals.auth;
     </div>
   </section>
 
-  <!-- ===== FEATURE BLOCKS — flows-lead, live-bonus ===== -->
+  <!-- ===== FEATURE CARDS (Raycast 'extension cards' translation) ===== -->
   <section class="py-24" style="background: var(--surface-base);">
-    <div class="max-w-6xl mx-auto px-6 grid gap-12 md:grid-cols-2 lg:grid-cols-4">
-      <div>
-        <span
-          class="block mb-3 font-mono uppercase"
-          style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
-        >
-          01
-        </span>
-        <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-          Compose, don't dump.
-        </h3>
-        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
-          A flow is a sequence of content steps with your instructions. Claude reads each step
-          in order — context delivered the way a teammate would brief one.
-        </p>
-      </div>
-      <div>
-        <span
-          class="block mb-3 font-mono uppercase"
-          style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
-        >
-          02
-        </span>
-        <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-          A meeting assistant that knows.
-        </h3>
-        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
-          Mnema joins your calls, transcribes live, and answers from your workspace out loud —
-          scoped to the right project, so it never mixes things up.
-        </p>
-      </div>
-      <div>
-        <span
-          class="block mb-3 font-mono uppercase"
-          style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
-        >
-          03
-        </span>
-        <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-          Native to MCP.
-        </h3>
-        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
-          Flows expose as MCP tools. Claude (or any MCP-capable agent) calls them directly.
-          No uploads, no copy-paste, no stale context.
-        </p>
-      </div>
-      <div>
-        <span
-          class="block mb-3 font-mono uppercase"
-          style="font-size: 11px; letter-spacing: 0.08em; color: var(--text-tertiary);"
-        >
-          04
-        </span>
-        <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-          A graph of everything.
-        </h3>
-        <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
-          Mnema auto-builds a knowledge graph across your docs, projects, and tasks — surfacing
-          connections and letting agents traverse how your context fits together.
-        </p>
-      </div>
+    <div class="max-w-6xl mx-auto px-6">
+      <FeatureCards client:visible />
     </div>
   </section>
 

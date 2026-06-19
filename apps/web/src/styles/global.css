@@ -202,3 +202,18 @@ hr {
 .react-flow__edge-path {
   stroke-linecap: round;
 }
+
+/* ── Landing animations ─────────────────────────────────────────── */
+@keyframes mnemaBlink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+@keyframes mnemaFadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mnema-reveal { animation: none !important; opacity: 1 !important; transform: none !important; }
+}
