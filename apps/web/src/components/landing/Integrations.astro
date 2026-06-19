@@ -19,19 +19,21 @@ const siZoom: Icon = { hex: '0B5CFF', path: 'M5.033 14.649H.743a.74.74 0 0 1-.68
 
 type Tile =
   | { kind: 'icon'; icon: Icon; name: string; x: number; y: number; s: number }
-  | { kind: 'text'; label: string; name: string; x: number; y: number; s: number };
+  // `img` loads a real logo file from /logos/*; the label shows as a fallback
+  // until that file exists (so the section never ships broken images).
+  | { kind: 'img'; src: string; label: string; name: string; x: number; y: number; s: number };
 
 // x/y are % within the field, s = tile size in px. Scattered + varied (dub-style).
 const tiles: Tile[] = [
   { kind: 'icon', icon: siClaude, name: 'Claude', x: 26, y: 8, s: 78 },
   { kind: 'icon', icon: siCursor, name: 'Cursor', x: 4, y: 46, s: 64 },
-  { kind: 'text', label: 'ChatGPT', name: 'ChatGPT', x: 55, y: 4, s: 66 },
+  { kind: 'img', src: '/logos/chatgpt.svg', label: 'ChatGPT', name: 'ChatGPT', x: 55, y: 4, s: 66 },
   { kind: 'icon', icon: siGoogledrive, name: 'Google Drive', x: 60, y: 42, s: 74 },
   { kind: 'icon', icon: siWindsurf, name: 'Windsurf', x: 32, y: 56, s: 60 },
   { kind: 'icon', icon: siGooglemeet, name: 'Google Meet', x: 10, y: 80, s: 62 },
   { kind: 'icon', icon: siZoom, name: 'Zoom', x: 80, y: 70, s: 64 },
-  { kind: 'text', label: 'Antigravity', name: 'Antigravity', x: 84, y: 16, s: 58 },
-  { kind: 'text', label: 'Teams', name: 'Microsoft Teams', x: 40, y: 86, s: 56 },
+  { kind: 'img', src: '/logos/antigravity.svg', label: 'Antigravity', name: 'Antigravity', x: 84, y: 16, s: 58 },
+  { kind: 'img', src: '/logos/teams.svg', label: 'Teams', name: 'Microsoft Teams', x: 40, y: 86, s: 56 },
 ];
 ---
 
@@ -56,7 +58,14 @@ const tiles: Tile[] = [
             <path d={t.icon.path} fill={`#${t.icon.hex}`} />
           </svg>
         ) : (
-          <span class="int-text" style={`font-size:${Math.max(11, Math.round(t.s * 0.18))}px;`}>{t.label}</span>
+          <>
+            <img
+              src={t.src} alt={t.name} width={Math.round(t.s * 0.56)} height={Math.round(t.s * 0.56)}
+              style="object-fit:contain;"
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+            />
+            <span class="int-text" style={`display:none; font-size:${Math.max(11, Math.round(t.s * 0.18))}px;`}>{t.label}</span>
+          </>
         )}
       </div>
     ))}
