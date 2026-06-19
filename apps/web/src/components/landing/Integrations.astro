@@ -1,0 +1,93 @@
+---
+/**
+ * Integrations — dub.co-style: heading on the left, a lively scattered field of
+ * brand-logo tiles (varied sizes) on the right, floating over a faint grid.
+ * Logos are Mnema's ACTUAL connections (from src/pages/app/connections/*):
+ * Claude, ChatGPT, Cursor, Windsurf, Antigravity, Google Drive, and the meeting
+ * platforms the bot joins (Google Meet, Zoom). Logos come from the open-source
+ * `simple-icons` package; brands without an open icon are shown by name.
+ */
+import { siClaude, siCursor, siWindsurf, siGoogledrive, siGooglemeet, siZoom } from 'simple-icons';
+
+type Icon = { path: string; hex: string };
+type Tile =
+  | { kind: 'icon'; icon: Icon; name: string; x: number; y: number; s: number }
+  | { kind: 'text'; label: string; name: string; x: number; y: number; s: number };
+
+// x/y are % within the field, s = tile size in px. Scattered + varied (dub-style).
+const tiles: Tile[] = [
+  { kind: 'icon', icon: siClaude, name: 'Claude', x: 26, y: 8, s: 78 },
+  { kind: 'icon', icon: siCursor, name: 'Cursor', x: 4, y: 46, s: 64 },
+  { kind: 'text', label: 'ChatGPT', name: 'ChatGPT', x: 55, y: 4, s: 66 },
+  { kind: 'icon', icon: siGoogledrive, name: 'Google Drive', x: 60, y: 42, s: 74 },
+  { kind: 'icon', icon: siWindsurf, name: 'Windsurf', x: 32, y: 56, s: 60 },
+  { kind: 'icon', icon: siGooglemeet, name: 'Google Meet', x: 10, y: 80, s: 62 },
+  { kind: 'icon', icon: siZoom, name: 'Zoom', x: 80, y: 70, s: 64 },
+  { kind: 'text', label: 'Antigravity', name: 'Antigravity', x: 84, y: 16, s: 58 },
+  { kind: 'text', label: 'Teams', name: 'Microsoft Teams', x: 40, y: 86, s: 56 },
+];
+---
+
+<div class="int-root">
+  <div class="int-head">
+    <span class="int-eyebrow">Integrations</span>
+    <h2 class="int-title">Connect with your<br />favorite tools.</h2>
+    <p class="int-desc">
+      Mnema speaks MCP, so it plugs into the agents you code with and the calls you
+      take — with new connections added all the time.
+    </p>
+    <a class="int-link" href="/docs/connect">Explore integrations <span aria-hidden="true">→</span></a>
+  </div>
+
+  <div class="int-field" aria-hidden="true">
+    <div class="int-grid-bg"></div>
+    {tiles.map((t) => (
+      <div class="int-tile" title={t.name}
+        style={`left:${t.x}%; top:${t.y}%; width:${t.s}px; height:${t.s}px; border-radius:${Math.round(t.s * 0.24)}px;`}>
+        {t.kind === 'icon' ? (
+          <svg viewBox="0 0 24 24" width={Math.round(t.s * 0.46)} height={Math.round(t.s * 0.46)} role="img" aria-label={t.name}>
+            <path d={t.icon.path} fill={`#${t.icon.hex}`} />
+          </svg>
+        ) : (
+          <span class="int-text" style={`font-size:${Math.max(11, Math.round(t.s * 0.18))}px;`}>{t.label}</span>
+        )}
+      </div>
+    ))}
+  </div>
+</div>
+
+<style>
+  .int-root { display: grid; grid-template-columns: 0.78fr 1.22fr; gap: 48px; align-items: center; }
+  @media (max-width: 860px) { .int-root { grid-template-columns: 1fr; gap: 28px; } }
+
+  .int-eyebrow { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 14px; }
+  .int-title { font-family: var(--sans); font-weight: 500; font-size: 32px; line-height: 1.14; letter-spacing: -0.02em; color: var(--text-primary); margin: 0 0 16px; }
+  .int-desc { font-size: 15px; line-height: 1.6; color: var(--text-secondary); max-width: 27rem; margin: 0 0 22px; }
+  .int-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--text-primary); text-decoration: none; padding: 9px 16px; border: 1px solid var(--border-default); border-radius: var(--radius-md); transition: background 160ms, border-color 160ms; }
+  .int-link:hover { background: var(--surface-overlay); border-color: var(--border-strong); }
+
+  .int-field {
+    position: relative;
+    aspect-ratio: 16 / 11;
+    width: 100%;
+  }
+  .int-grid-bg {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(var(--border-subtle) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
+    background-size: 11% 16.6%;
+    -webkit-mask: radial-gradient(ellipse 70% 70% at 50% 50%, #000 35%, transparent 92%);
+    mask: radial-gradient(ellipse 70% 70% at 50% 50%, #000 35%, transparent 92%);
+  }
+  .int-tile {
+    position: absolute;
+    background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 26px -8px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.1);
+    transition: transform 200ms var(--ease-out);
+    will-change: transform;
+  }
+  .int-tile:hover { transform: translateY(-4px) scale(1.04); }
+  .int-text { font-family: var(--sans); font-weight: 600; color: #1a1a1a; letter-spacing: -0.01em; }
+</style>
