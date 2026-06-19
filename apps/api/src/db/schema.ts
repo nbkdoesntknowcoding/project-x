@@ -211,6 +211,32 @@ export const projects = pgTable(
   }),
 );
 
+/**
+ * Per-project membership (Stage B — project-level authorization).
+ * Accessible projects for a user = projects they're a member of ∪ (all projects,
+ * when they're a workspace owner/admin/editor). `workspace_id` is denormalized so
+ * the RLS tenant-isolation policy matches the convention of the other tables.
+ * role: viewer | editor | admin (reuses the workspace_role enum).
+ */
+export const projectMembers = pgTable(
+  'project_members',
+  {
+    projectId:   uuid('project_id').notNull()
+                 .references(() => projects.id, { onDelete: 'cascade' }),
+    userId:      uuid('user_id').notNull()
+                 .references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').notNull()
+                 .references(() => workspaces.id, { onDelete: 'cascade' }),
+    role:        workspaceRole('role').notNull().default('viewer'),
+    joinedAt:    timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pk:          primaryKey({ columns: [table.projectId, table.userId] }),
+    userIdx:     index('project_members_user_idx').on(table.userId),
+    workspaceIdx: index('project_members_workspace_idx').on(table.workspaceId),
+  }),
+);
+
 export const folders = pgTable(
   'folders',
   {
@@ -986,6 +1012,10 @@ export const apiKeys = pgTable(
                  .references(() => workspaces.id, { onDelete: 'cascade' }),
     createdBy:   uuid('created_by').notNull()
                  .references(() => users.id, { onDelete: 'cascade' }),
+    // Stage B: a project-scoped key restricts its session to exactly this project
+    // (regardless of creator) — this is what hard-bounds the meeting bot. NULL =
+    // workspace-wide key (acts as its creator's access).
+    projectId:   uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
     name:        text('name').notNull(),
     // SHA-256 of plaintext key. Format: mnema_api_ + 48 random hex chars.
     keyHash:     text('key_hash').notNull().unique(),
