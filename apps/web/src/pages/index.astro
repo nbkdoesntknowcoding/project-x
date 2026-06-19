@@ -7,6 +7,7 @@ import HeroGraph from '../components/landing/HeroGraph.tsx';
 import CommandPalette from '../components/landing/CommandPalette.tsx';
 import LiveStats from '../components/landing/LiveStats.tsx';
 import FeatureCards from '../components/landing/FeatureCards.tsx';
+import IsoFigures from '../components/landing/IsoFigures.astro';
 
 const auth = Astro.locals.auth;
 ---
@@ -259,6 +260,13 @@ const auth = Astro.locals.auth;
   <section class="py-24" style="background: var(--surface-base);">
     <div class="max-w-6xl mx-auto px-6">
       <FeatureCards client:visible />
+    </div>
+  </section>
+
+  <!-- ===== ISOMETRIC FIGURES (Raycast exploded 'blue box' translation) ===== -->
+  <section class="py-24" style="background: var(--surface-base); border-top: 1px solid var(--border-subtle);">
+    <div class="max-w-6xl mx-auto px-6">
+      <IsoFigures />
     </div>
   </section>
 
