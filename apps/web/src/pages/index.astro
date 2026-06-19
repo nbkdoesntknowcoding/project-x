@@ -11,6 +11,22 @@ import FeatureCards from '../components/landing/FeatureCards.tsx';
 import IsoFigures from '../components/landing/IsoFigures.astro';
 
 const auth = Astro.locals.auth;
+
+// Hero background plane — a field of connected workspace nodes (trigger.dev-style).
+const heroNodes = [
+  { x: 150, y: 90, label: 'Architecture', c: '#7C9CFF' },
+  { x: 430, y: 70, label: 'MCP read path', c: '#7C9CFF' },
+  { x: 700, y: 120, label: 'Onboarding flow', c: '#FFB370' },
+  { x: 880, y: 220, label: 'Pricing', c: '#7C9CFF' },
+  { x: 300, y: 250, label: 'Voice Clone', c: '#e879f9' },
+  { x: 560, y: 300, label: 'Mnema', c: '#e879f9' },
+  { x: 120, y: 400, label: 'Latest build', c: '#6BE39B' },
+  { x: 470, y: 460, label: 'Knowledge graph', c: '#a78bfa' },
+  { x: 780, y: 420, label: 'Streaming STT', c: '#6BE39B' },
+];
+const heroEdges = ([[0, 1], [1, 2], [2, 3], [0, 4], [4, 5], [5, 1], [5, 3], [4, 6], [5, 7], [8, 5], [7, 5]] as [number, number][]).map(
+  ([a, b]) => ({ x1: heroNodes[a]!.x, y1: heroNodes[a]!.y, x2: heroNodes[b]!.x, y2: heroNodes[b]!.y }),
+);
 ---
 
 <PublicLayout
@@ -21,9 +37,29 @@ const auth = Astro.locals.auth;
 
   <!-- ===== HERO ===== -->
   <section class="relative overflow-hidden pt-24 pb-16" style="background: var(--surface-base);">
-    <!-- trigger.dev-style tilted perspective plane, receding into the distance -->
+    <!-- trigger.dev-style tilted plane of connected workspace nodes, receding back -->
     <div class="hero-plane" aria-hidden="true">
-      <div class="hero-plane-grid"></div>
+      <div class="hero-plane-3d">
+        <svg viewBox="0 0 1000 540" preserveAspectRatio="xMidYMin slice" class="hero-plane-svg">
+          <defs>
+            <pattern id="heroGrid" width="44" height="44" patternUnits="userSpaceOnUse">
+              <path d="M44 0H0V44" fill="none" stroke="rgba(124,156,255,0.10)" stroke-width="1" />
+            </pattern>
+          </defs>
+          <rect x="0" y="0" width="1000" height="540" fill="url(#heroGrid)" />
+          {heroEdges.map((e) => (
+            <line x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2} stroke="rgba(124,156,255,0.22)" stroke-width="1.2" />
+          ))}
+          {heroNodes.map((n) => (
+            <g>
+              <circle cx={n.x} cy={n.y} r="14" fill={n.c} opacity="0.16" />
+              <circle cx={n.x} cy={n.y} r="4.5" fill={n.c} />
+              <circle cx={n.x} cy={n.y} r="1.8" fill="#fff" opacity="0.7" />
+              <text x={n.x + 10} y={n.y + 4} class="hero-plane-label">{n.label}</text>
+            </g>
+          ))}
+        </svg>
+      </div>
     </div>
     <RadialGlow cx={50} cy={28} radius={50} tone="warm" intensity={1} />
     <NoiseOverlay opacity={0.04} />
@@ -322,31 +358,39 @@ const auth = Astro.locals.auth;
 </PublicLayout>
 
 <style>
-  /* trigger.dev-style hero plane — a perspective grid tilting back into depth */
+  /* trigger.dev-style hero plane — a field of nodes tilting back into depth */
   .hero-plane {
     position: absolute;
-    top: 0;
-    left: -10%;
-    right: -10%;
-    height: 460px;
+    top: -70px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 165%;
+    max-width: 1600px;
+    height: 600px;
     z-index: 0;
     pointer-events: none;
-    perspective: 620px;
-    perspective-origin: 50% 0;
+    perspective: 760px;
+    perspective-origin: 50% 0%;
     overflow: hidden;
-    opacity: 0.55;
   }
-  .hero-plane-grid {
+  .hero-plane-3d {
     position: absolute;
-    inset: -20% 0 0 0;
-    transform-origin: 50% 0;
-    transform: rotateX(64deg);
-    background-image:
-      linear-gradient(rgba(124, 156, 255, 0.16) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(124, 156, 255, 0.13) 1px, transparent 1px);
-    background-size: 46px 46px;
-    -webkit-mask: radial-gradient(ellipse 62% 86% at 50% 4%, #000 8%, transparent 64%);
-    mask: radial-gradient(ellipse 62% 86% at 50% 4%, #000 8%, transparent 64%);
+    inset: 0;
+    transform-origin: 50% 0%;
+    transform: rotateX(61deg);
   }
-  @media (prefers-reduced-motion: reduce) { .hero-plane { opacity: 0.4; } }
+  .hero-plane-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    opacity: 0.9;
+    -webkit-mask: linear-gradient(to bottom, transparent 0%, #000 24%, #000 60%, transparent 90%);
+    mask: linear-gradient(to bottom, transparent 0%, #000 24%, #000 60%, transparent 90%);
+  }
+  :global(.hero-plane-label) {
+    font-family: var(--mono);
+    font-size: 13px;
+    fill: var(--text-tertiary);
+    letter-spacing: 0.02em;
+  }
 </style>
