@@ -21,6 +21,10 @@ const auth = Astro.locals.auth;
 
   <!-- ===== HERO ===== -->
   <section class="relative overflow-hidden pt-24 pb-16" style="background: var(--surface-base);">
+    <!-- trigger.dev-style tilted perspective plane, receding into the distance -->
+    <div class="hero-plane" aria-hidden="true">
+      <div class="hero-plane-grid"></div>
+    </div>
     <RadialGlow cx={50} cy={28} radius={50} tone="warm" intensity={1} />
     <NoiseOverlay opacity={0.04} />
 
@@ -316,3 +320,33 @@ const auth = Astro.locals.auth;
   </section>
 
 </PublicLayout>
+
+<style>
+  /* trigger.dev-style hero plane — a perspective grid tilting back into depth */
+  .hero-plane {
+    position: absolute;
+    top: 0;
+    left: -10%;
+    right: -10%;
+    height: 460px;
+    z-index: 0;
+    pointer-events: none;
+    perspective: 620px;
+    perspective-origin: 50% 0;
+    overflow: hidden;
+    opacity: 0.55;
+  }
+  .hero-plane-grid {
+    position: absolute;
+    inset: -20% 0 0 0;
+    transform-origin: 50% 0;
+    transform: rotateX(64deg);
+    background-image:
+      linear-gradient(rgba(124, 156, 255, 0.16) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124, 156, 255, 0.13) 1px, transparent 1px);
+    background-size: 46px 46px;
+    -webkit-mask: radial-gradient(ellipse 62% 86% at 50% 4%, #000 8%, transparent 64%);
+    mask: radial-gradient(ellipse 62% 86% at 50% 4%, #000 8%, transparent 64%);
+  }
+  @media (prefers-reduced-motion: reduce) { .hero-plane { opacity: 0.4; } }
+</style>
