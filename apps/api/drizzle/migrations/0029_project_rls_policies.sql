@@ -9,6 +9,16 @@
 --   • app.user_id is set for a non-admin member (per-user project membership).
 -- Idempotent: DROP POLICY IF EXISTS then CREATE.
 
+-- Defensive: this policy set references project_id on every table below. If the
+-- column-adding migrations (0022/0025) were applied out of order or skipped, the
+-- CREATE POLICY statements would fail AFTER the DROPs ran, leaving a FORCE-RLS
+-- table with no policy (= all access denied). Guarantee the columns exist first.
+ALTER TABLE docs        ADD COLUMN IF NOT EXISTS project_id uuid;
+ALTER TABLE embeddings  ADD COLUMN IF NOT EXISTS project_id uuid;
+ALTER TABLE folders     ADD COLUMN IF NOT EXISTS project_id uuid;
+ALTER TABLE tasks       ADD COLUMN IF NOT EXISTS project_id uuid;
+ALTER TABLE graph_nodes ADD COLUMN IF NOT EXISTS project_id uuid;
+
 -- ── docs (ENABLE + FORCE) ───────────────────────────────────────────────────
 DROP POLICY IF EXISTS docs_tenant_select ON docs;
 DROP POLICY IF EXISTS docs_tenant_insert ON docs;

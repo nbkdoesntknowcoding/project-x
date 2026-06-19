@@ -9,6 +9,7 @@ import { McpForbiddenError } from './scope.js';
 import { createMcpServer } from './server.js';
 import { handleStreamableHttp } from './transport.js';
 import { db } from '../db/index.js';
+import { tenantScopeStore } from '../db/with-tenant.js';
 import { mcpTokens, workspaces } from '../db/schema.js';
 
 declare module 'fastify' {
@@ -144,14 +145,32 @@ async function handleMcpRequest(req: FastifyRequest, reply: FastifyReply): Promi
     scopes: oauthCtx.scope,
     jwt_id: oauthCtx.jti,
     workspaceMode,
+    project_id: oauthCtx.projectId,
   };
 
   // 6. Build per-request server with the verified context captured in
   //    its handler closures. This is the only safe place to bind ctx.
   const server = createMcpServer(authCtx);
 
+  // Stage B activation: set the request-scoped tenant scope ONCE here so every
+  // withTenant() inside any tool handler inherits the project-aware RLS predicate
+  // without touching the 29 call sites.
+  //
+  // We set projectScope (= app.project_scope) but deliberately leave userId UNSET
+  // for now. projectScope is null for every normal token and is populated ONLY for
+  // a project-scoped API key (the meeting bot) — so the only behavior change today
+  // is that the bot is hard-bounded to its one project (the "don't blabber"
+  // guarantee), while every human OAuth/legacy/personal-key session keeps today's
+  // workspace-wide behavior (app.user_id unset → app_can_see_project() returns true).
+  //
+  // Per-user membership RLS (passing userId) activates in B5, together with the
+  // project_members data + Members UI that populates it; flipping it on before that
+  // would lock real members out of any doc filed into a project. See [[Stage B plan]].
   try {
-    await handleStreamableHttp(req, reply, server);
+    await tenantScopeStore.run(
+      { projectScope: oauthCtx.projectId },
+      () => handleStreamableHttp(req, reply, server),
+    );
   } catch (err) {
     if (err instanceof McpForbiddenError) {
       if (!reply.sent && !reply.raw.headersSent) {

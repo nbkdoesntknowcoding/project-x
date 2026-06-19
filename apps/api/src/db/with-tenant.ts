@@ -1,7 +1,17 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { sql } from 'drizzle-orm';
 import { db } from './index.js';
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Per-request scope (set once at the MCP/auth boundary). Any withTenant() call
+ * made inside `tenantScopeStore.run(scope, …)` automatically inherits userId +
+ * projectScope, so we don't have to thread them through every tool. REST routes
+ * that don't establish a scope simply get null → no project restriction (today's
+ * behavior). This is how the meeting bot's project-scoped key bounds every tool.
+ */
+export const tenantScopeStore = new AsyncLocalStorage<TenantScope>();
 
 /**
  * Runs `fn` inside a transaction with:
@@ -38,14 +48,19 @@ export async function withTenantScoped<T>(
   scope: TenantScope,
   fn: (tx: Tx) => Promise<T>,
 ): Promise<T> {
+  // Explicit scope wins; otherwise inherit the request-scoped store (set at the
+  // MCP/auth boundary). Plain withTenant() passes {} so it picks up the store.
+  const ambient = tenantScopeStore.getStore();
+  const userId = scope.userId ?? ambient?.userId ?? null;
+  const projectScope = scope.projectScope ?? ambient?.projectScope ?? null;
   return await db.transaction(async (tx) => {
     await tx.execute(sql`SET LOCAL ROLE app_user`);
     await tx.execute(sql`SELECT set_config('app.tenant_id', ${tenantId}, true)`);
-    if (scope.userId) {
-      await tx.execute(sql`SELECT set_config('app.user_id', ${scope.userId}, true)`);
+    if (userId) {
+      await tx.execute(sql`SELECT set_config('app.user_id', ${userId}, true)`);
     }
-    if (scope.projectScope) {
-      await tx.execute(sql`SELECT set_config('app.project_scope', ${scope.projectScope}, true)`);
+    if (projectScope) {
+      await tx.execute(sql`SELECT set_config('app.project_scope', ${projectScope}, true)`);
     }
     return await fn(tx);
   });

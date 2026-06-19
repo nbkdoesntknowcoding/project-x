@@ -18,6 +18,9 @@ import { resolveApiKey, expandApiKeyScopes } from '../../lib/api-keys.js';
 export interface OAuthContext {
   userId: string;
   workspaceId: string;
+  /** Stage B: set ONLY for a project-scoped API key — hard-bounds the session
+   *  (and the meeting bot) to this one project. null = workspace-wide. */
+  projectId: string | null;
   scope: string[];
   clientId: string;
   jti: string | null;
@@ -59,6 +62,8 @@ export async function requireOAuthBearer(
       req.oauth = {
         userId: apiKeyCtx.userId,
         workspaceId: apiKeyCtx.workspaceId,
+        // Project-scoped key → hard-bounds this session (the meeting bot) to one project.
+        projectId: apiKeyCtx.projectId,
         scope: expandApiKeyScopes(apiKeyCtx.scopes),
         clientId: 'api-key',
         jti: null,
@@ -96,6 +101,7 @@ export async function requireOAuthBearer(
     req.oauth = {
       userId: p.sub,
       workspaceId: p.workspace_id,
+      projectId: null, // OAuth tokens are workspace-wide; per-user RLS bounds them.
       scope: [...expanded],
       clientId: p.client_id,
       jti: p.jti ?? null,
@@ -110,6 +116,7 @@ export async function requireOAuthBearer(
     req.oauth = {
       userId: legacyCtx.user_id,
       workspaceId: legacyCtx.tenant_id,
+      projectId: null,
       scope: legacyCtx.scopes,
       clientId: 'claude-desktop-legacy',
       jti: legacyCtx.jwt_id,
