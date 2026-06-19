@@ -22,6 +22,7 @@ import type {
   TrialEndingParams,
   RenewalReminderParams,
   McpConnectedParams,
+  WaitlistEmailParams,
 } from '../emails/templates.js';
 
 export { type WelcomeEmailParams, type WorkspaceInvitationParams };
@@ -38,7 +39,8 @@ export type EmailJobData =
   | { type: 'login_alert';           to: string; params: LoginAlertParams }
   | { type: 'trial_ending';          to: string; params: TrialEndingParams }
   | { type: 'renewal_reminder';      to: string; params: RenewalReminderParams }
-  | { type: 'mcp_connected';         to: string; params: McpConnectedParams };
+  | { type: 'mcp_connected';         to: string; params: McpConnectedParams }
+  | { type: 'waitlist';              to: string; params: WaitlistEmailParams };
 
 const connection = new IORedis(config.REDIS_URL, {
   maxRetriesPerRequest: null,

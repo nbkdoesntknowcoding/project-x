@@ -16,6 +16,9 @@ const PUBLIC_ROUTES = new Set<string>([
   '/health',
   '/api/_internal/set-session',
   '/api/_internal/join-workspace',
+  // Pre-launch waitlist capture — called server-side by the web proxy with the
+  // internal_secret (WORKOS_COOKIE_PASSWORD); no user JWT involved.
+  '/api/_internal/waitlist',
   // Phase 4.1 — invitation preview must work BEFORE the invitee signs in,
   // so the accept page can show "X invited you to Y" without forcing
   // auth-first. The endpoint only reveals workspace name + inviter, never

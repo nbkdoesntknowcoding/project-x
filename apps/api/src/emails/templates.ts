@@ -87,6 +87,11 @@ export interface McpConnectedParams {
   claudeUrl: string;        // {{claude_url}}  (HTML uses claude_url, not open_url)
 }
 
+export interface WaitlistEmailParams {
+  /** Optional first name / display name for a warmer greeting. */
+  name?: string | null;
+}
+
 // ─── Template functions ───────────────────────────────────────────────────────
 
 export function welcomeEmail(p: WelcomeEmailParams) {
@@ -115,6 +120,50 @@ export function workspaceInvitationEmail(p: WorkspaceInvitationParams) {
 
 /** Alias kept so older imports of invitationEmail() still compile. */
 export const invitationEmail = workspaceInvitationEmail;
+
+/**
+ * Waitlist confirmation. Sent once when someone joins the pre-launch waitlist.
+ * Built inline (no HTML template file) — a short, warm confirmation.
+ */
+export function waitlistEmail(p: WaitlistEmailParams) {
+  const greeting = p.name && p.name.trim() ? `Hi ${escapeHtml(p.name.trim())},` : 'Hi there,';
+  const html = `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#0A0B0D;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0A0B0D;padding:40px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#131418;border:1px solid #24272D;border-radius:16px;padding:36px;">
+            <tr><td style="font-size:18px;font-weight:600;color:#F4F5F7;letter-spacing:-0.01em;padding-bottom:18px;">Mnema</td></tr>
+            <tr><td style="font-size:20px;font-weight:600;color:#F4F5F7;letter-spacing:-0.02em;padding-bottom:14px;">You're on the waitlist.</td></tr>
+            <tr><td style="font-size:14px;line-height:1.65;color:#B8BCC4;">
+              ${greeting}<br/><br/>
+              Thanks for your interest in Mnema — the live context engine for AI-native teams.
+              You're on the list, and we'll reach out with an invite as soon as your spot opens up.
+              <br/><br/>
+              We're letting people in gradually around our launch, so it won't be long.
+              <br/><br/>
+              — The Mnema team
+            </td></tr>
+            <tr><td style="padding-top:28px;font-size:11px;color:#6E737C;border-top:1px solid #24272D;margin-top:24px;">
+              Mnema, by BOPPL · You received this because you joined the waitlist at mnema.theboringpeople.in
+            </td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+  return { subject: "You're on the Mnema waitlist", html };
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 export function invitationAcceptedEmail(p: InvitationAcceptedParams) {
   return {

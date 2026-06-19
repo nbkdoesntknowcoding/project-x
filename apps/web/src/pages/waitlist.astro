@@ -1,0 +1,341 @@
+---
+import '../styles/global.css';
+
+// Already signed in? Send them to the app — the waitlist is for new people only.
+const auth = Astro.locals.auth;
+if (auth) {
+  return Astro.redirect('/app');
+}
+---
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mnema · Join the waitlist</title>
+  <meta name="description" content="Join the waitlist for Mnema — the live context engine for AI-native teams." />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+  <link rel="preload" href="/fonts/geist/Geist-Regular.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/geist/Geist-Medium.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/geist/Geist-SemiBold.woff2" as="font" type="font/woff2" crossorigin />
+
+  <script is:inline>
+    (function () {
+      try {
+        var s = localStorage.getItem('mnema-theme');
+        document.documentElement.setAttribute('data-theme', s === 'light' ? 'light' : 'dark');
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+
+  <style is:global>
+    /* Auth page accent override — near-white, not amber */
+    :root {
+      --accent:     #F4F5F7;
+      --accent-rgb: 244, 245, 247;
+      --accent-soft: rgba(244, 245, 247, 0.10);
+      --accent-line: rgba(244, 245, 247, 0.28);
+
+      --aux-1-rgb: 124, 156, 255;
+      --aux-2-rgb: 200, 162, 255;
+      --aux-3-rgb: 255, 144, 120;
+
+      --intensity:  0.34;
+      --anim-mult:  1.2;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+      font-feature-settings: "ss01";
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated background ─────────────────────────────────── */
+    .s-bg { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+    .s-bg .s-grid {
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.022) 1px, transparent 1px);
+      background-size: 72px 72px; background-position: -1px -1px;
+      mask-image: radial-gradient(ellipse 70% 70% at 50% 40%, black 30%, transparent 88%);
+      -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 40%, black 30%, transparent 88%);
+      animation: s-gridBreath calc(14s / var(--anim-mult)) ease-in-out infinite;
+    }
+    [data-theme="light"] .s-bg .s-grid {
+      background-image:
+        linear-gradient(rgba(10,11,13,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(10,11,13,0.04) 1px, transparent 1px);
+    }
+    @keyframes s-gridBreath { 0%,100% { opacity: 0.55; } 50% { opacity: 1.0; } }
+
+    .s-bg .s-fluid { position: absolute; inset: 0; filter: url(#s-goo); opacity: calc(0.6 + var(--intensity) * 0.7); }
+    [data-theme="light"] .s-bg .s-fluid { opacity: calc(var(--intensity) * 0.5); mix-blend-mode: multiply; }
+    .s-bg .s-blob { position: absolute; border-radius: 50%; will-change: transform; filter: blur(6px); }
+    .s-blob.b1 { width:380px;height:380px;left:8%;top:12%;   background:rgba(var(--accent-rgb),0.85); animation:s-f1 calc(28s/var(--anim-mult)) ease-in-out infinite; }
+    .s-blob.b2 { width:440px;height:440px;right:6%;top:20%;  background:rgba(var(--aux-1-rgb),0.75); animation:s-f2 calc(34s/var(--anim-mult)) ease-in-out infinite; }
+    .s-blob.b3 { width:320px;height:320px;left:28%;bottom:-6%;background:rgba(var(--aux-2-rgb),0.78); animation:s-f3 calc(31s/var(--anim-mult)) ease-in-out infinite; }
+    .s-blob.b4 { width:280px;height:280px;right:22%;bottom:8%;background:rgba(var(--aux-3-rgb),0.72); animation:s-f4 calc(36s/var(--anim-mult)) ease-in-out infinite; }
+    .s-blob.b5 { width:220px;height:220px;left:46%;top:38%;  background:rgba(var(--accent-rgb),0.70); animation:s-f5 calc(24s/var(--anim-mult)) ease-in-out infinite; }
+    .s-blob.b6 { width:260px;height:260px;left:12%;bottom:26%;background:rgba(var(--aux-1-rgb),0.72); animation:s-f6 calc(30s/var(--anim-mult)) ease-in-out infinite; }
+
+    @keyframes s-f1 { 0%,100%{transform:translate(0,0) scale(1)} 20%{transform:translate(180px,90px) scale(1.12)} 45%{transform:translate(80px,260px) scale(0.92)} 70%{transform:translate(-100px,180px) scale(1.06)} 90%{transform:translate(40px,60px) scale(0.96)} }
+    @keyframes s-f2 { 0%,100%{transform:translate(0,0) scale(1)} 30%{transform:translate(-200px,120px) scale(1.15)} 55%{transform:translate(-90px,280px) scale(0.94)} 80%{transform:translate(60px,160px) scale(1.05)} }
+    @keyframes s-f3 { 0%,100%{transform:translate(0,0) scale(1)} 25%{transform:translate(140px,-200px) scale(1.1)} 55%{transform:translate(-50px,-120px) scale(0.92)} 80%{transform:translate(-180px,-240px) scale(1.04)} }
+    @keyframes s-f4 { 0%,100%{transform:translate(0,0) scale(1)} 35%{transform:translate(180px,-130px) scale(1.12)} 70%{transform:translate(-80px,-60px) scale(0.95)} }
+    @keyframes s-f5 { 0%,100%{transform:translate(0,0) scale(1)} 25%{transform:translate(-160px,-80px) scale(1.18)} 50%{transform:translate(200px,60px) scale(0.88)} 75%{transform:translate(80px,180px) scale(1.06)} }
+    @keyframes s-f6 { 0%,100%{transform:translate(0,0) scale(1)} 40%{transform:translate(220px,-140px) scale(1.1)} 75%{transform:translate(-60px,80px) scale(0.94)} }
+
+    .s-bg .s-aurora {
+      position: absolute; inset: -20%;
+      background:
+        radial-gradient(circle at 18% 30%, rgba(var(--accent-rgb),0.32) 0%, transparent 45%),
+        radial-gradient(circle at 82% 55%, rgba(var(--aux-1-rgb),0.30) 0%, transparent 50%),
+        radial-gradient(circle at 50% 90%, rgba(var(--aux-3-rgb),0.22) 0%, transparent 50%);
+      filter: blur(50px); opacity: calc(var(--intensity) * 1.1);
+      animation: s-aurora calc(22s/var(--anim-mult)) ease-in-out infinite;
+    }
+    [data-theme="light"] .s-bg .s-aurora { mix-blend-mode: multiply; opacity: calc(var(--intensity) * 0.45); }
+    @keyframes s-aurora { 0%,100% { transform: translate(0,0) rotate(0deg); } 33% { transform: translate(60px,-30px) rotate(2deg); } 66% { transform: translate(-40px,60px) rotate(-2deg); } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .s-bg .s-blob,.s-bg .s-aurora,.s-bg .s-grid { animation: none !important; }
+    }
+
+    /* ── Topbar ──────────────────────────────────────────────── */
+    .s-topbar { height: 64px; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 2; }
+    .s-brand { display: inline-flex; align-items: center; gap: 12px; font: 600 16px/1 var(--sans); letter-spacing: -0.01em; color: var(--ink); text-decoration: none; }
+    .s-brand .s-glyph { width: 30px; height: 30px; border-radius: 9px; overflow: hidden; display: inline-flex; flex-shrink: 0; }
+    .s-top-link { font: 500 13.5px/1 var(--sans); color: var(--ink-soft); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+    .s-top-link a { color: var(--ink); text-decoration: none; }
+    .s-top-link a:hover { text-decoration: underline; }
+
+    /* ── Main ────────────────────────────────────────────────── */
+    .s-main { display: flex; align-items: center; justify-content: center; padding: 32px 24px 80px; position: relative; z-index: 2; }
+    .s-col { display: flex; flex-direction: column; align-items: center; width: 100%; }
+
+    /* ── Card ────────────────────────────────────────────────── */
+    .s-card {
+      width: 440px; max-width: 100%;
+      background: rgba(6,7,10,0.72);
+      backdrop-filter: blur(24px) saturate(140%);
+      -webkit-backdrop-filter: blur(24px) saturate(140%);
+      border-radius: 20px; padding: 36px 36px 30px; position: relative;
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.07),
+        inset 0 0 0 1px rgba(255,255,255,0.05),
+        0 40px 80px -30px rgba(255,255,255,0.04),
+        0 60px 100px -40px rgba(0,0,0,0.7);
+    }
+    [data-theme="light"] .s-card {
+      background: rgba(255,255,255,0.78);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 0 var(--line), 0 30px 60px -30px rgba(10,11,13,0.18);
+    }
+
+    .s-auth-mark { display: flex; align-items: center; justify-content: center; margin-bottom: 22px; }
+    .s-glyph-lg { width: 56px; height: 56px; border-radius: 16px; overflow: hidden; display: inline-flex; flex-shrink: 0; }
+
+    .s-card h1 { margin: 0 0 8px; font: 600 24px/1.2 var(--sans); letter-spacing: -0.02em; text-align: center; }
+    .s-sub { margin: 0 0 28px; text-align: center; font-size: 14px; color: var(--ink-muted); line-height: 1.5; }
+
+    /* ── Fields ──────────────────────────────────────────────── */
+    .s-field { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
+    .s-field label { font: 500 12.5px/1 var(--sans); color: var(--ink-soft); display: flex; justify-content: space-between; align-items: center; }
+    .s-field label .s-hint { font: 500 11px/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); }
+    .s-input {
+      width: 100%; font: 400 14.5px/1 var(--sans); padding: 13px 14px; border-radius: 10px;
+      background: rgba(255,255,255,0.03); color: var(--ink); border: 1px solid rgba(255,255,255,0.10);
+      outline: none; transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+    }
+    [data-theme="light"] .s-input { background: rgba(10,11,13,0.025); border-color: rgba(10,11,13,0.12); }
+    .s-input::placeholder { color: var(--ink-muted); }
+    .s-input:focus { border-color: rgba(var(--accent-rgb),0.6); background: rgba(255,255,255,0.05); box-shadow: 0 0 0 3px rgba(var(--accent-rgb),0.12); }
+    [data-theme="light"] .s-input:focus { background: rgba(10,11,13,0.035); }
+
+    /* ── Primary button ──────────────────────────────────────── */
+    .s-btn-primary {
+      width: 100%; margin-top: 6px; font: 600 14px/1 var(--sans); padding: 14px 18px; border-radius: 10px;
+      background: var(--ink); color: var(--on-ink); border: 1px solid var(--ink); cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      transition: transform 100ms ease, background 140ms ease; position: relative;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+    }
+    .s-btn-primary:hover { background: rgba(255,255,255,0.92); }
+    [data-theme="light"] .s-btn-primary:hover { background: #1A1B1F; }
+    .s-btn-primary:active { transform: translateY(0.5px); }
+    .s-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .s-arrow { transition: transform 160ms ease; }
+    .s-btn-primary:not(:disabled):hover .s-arrow { transform: translateX(3px); }
+
+    .s-legal { margin: 22px 0 0; text-align: center; color: var(--ink-muted); font: 400 12px/1.55 var(--sans); }
+    .s-legal a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--ink-faint); }
+    .s-legal a:hover { color: var(--ink); }
+    .s-card-foot { text-align: center; margin-top: 22px; color: var(--ink-muted); font-size: 13.5px; }
+    .s-card-foot a { color: var(--ink); text-decoration: none; font-weight: 500; border-bottom: 1px solid var(--ink-faint); padding-bottom: 1px; }
+    .s-card-foot a:hover { border-color: var(--ink); }
+
+    /* ── Success state ───────────────────────────────────────── */
+    .s-success { display: none; text-align: center; }
+    .s-success.show { display: block; }
+    .s-form.hide { display: none; }
+    .s-check {
+      width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 18px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(107,227,155,0.12); color: #6BE39B; border: 1px solid rgba(107,227,155,0.4);
+    }
+  </style>
+</head>
+<body>
+
+<!-- SVG goo filter -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="s-goo">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="22" result="blur"/>
+      <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -11" result="goo"/>
+      <feBlend in="SourceGraphic" in2="goo"/>
+    </filter>
+  </defs>
+</svg>
+
+<div class="s-bg">
+  <div class="s-grid"></div>
+  <div class="s-aurora"></div>
+  <div class="s-fluid">
+    <div class="s-blob b1"></div>
+    <div class="s-blob b2"></div>
+    <div class="s-blob b3"></div>
+    <div class="s-blob b4"></div>
+    <div class="s-blob b5"></div>
+    <div class="s-blob b6"></div>
+  </div>
+</div>
+
+<header class="s-topbar">
+  <a href="/" class="s-brand">
+    <span class="s-glyph"><img src="/logo.svg" width="30" height="30" alt="Mnema" draggable="false"></span>
+    <span>Mnema</span>
+  </a>
+  <div class="s-top-link"><a href="/">← Back home</a></div>
+</header>
+
+<main class="s-main">
+  <div class="s-col">
+    <div class="s-card">
+      <div class="s-auth-mark">
+        <span class="s-glyph-lg"><img src="/logo.svg" width="56" height="56" alt="Mnema" draggable="false"></span>
+      </div>
+
+      <!-- Form -->
+      <div class="s-form" id="s-form">
+        <h1>Join the waitlist</h1>
+        <p class="s-sub">Mnema is opening up gradually. Leave your details and we'll reach out with an invite.</p>
+
+        <div class="s-field">
+          <label for="s-name">Name <span class="s-hint">REQUIRED</span></label>
+          <input class="s-input" id="s-name" type="text" placeholder="Ada Lovelace" autocomplete="name" />
+        </div>
+
+        <div class="s-field">
+          <label for="s-email">Work email <span class="s-hint">REQUIRED</span></label>
+          <input class="s-input" id="s-email" type="email" placeholder="you@workplace.com" autocomplete="email" />
+        </div>
+
+        <div class="s-field">
+          <label for="s-company">Company <span class="s-hint">OPTIONAL</span></label>
+          <input class="s-input" id="s-company" type="text" placeholder="Where you work" autocomplete="organization" />
+        </div>
+
+        <button class="s-btn-primary" id="s-submit" disabled>
+          Join the waitlist
+          <svg class="s-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+        </button>
+
+        <p class="s-legal">By joining you agree to our <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>. We'll only email you about your spot.</p>
+      </div>
+
+      <!-- Success -->
+      <div class="s-success" id="s-success">
+        <div class="s-check">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+        </div>
+        <h1 id="s-success-title">You're on the list.</h1>
+        <p class="s-sub" id="s-success-msg">Thanks — we've sent a confirmation to your inbox and we'll reach out when your spot opens.</p>
+      </div>
+    </div>
+
+    <p class="s-card-foot">Already have an account? <a href="/login">Sign in</a></p>
+  </div>
+</main>
+
+<script is:inline>
+  (function () {
+    var nameEl = document.getElementById('s-name');
+    var emailEl = document.getElementById('s-email');
+    var companyEl = document.getElementById('s-company');
+    var btn = document.getElementById('s-submit');
+    var form = document.getElementById('s-form');
+    var success = document.getElementById('s-success');
+    var successMsg = document.getElementById('s-success-msg');
+    var successTitle = document.getElementById('s-success-title');
+
+    var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    function validate() {
+      btn.disabled = !(nameEl.value.trim().length > 0 && EMAIL_RE.test(emailEl.value.trim()));
+    }
+    nameEl.addEventListener('input', validate);
+    emailEl.addEventListener('input', validate);
+
+    var SPINNER = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/></path></svg>';
+
+    function fail(label) {
+      btn.disabled = false;
+      btn.innerHTML = '✗ ' + label;
+      btn.style.background = '#f87171'; btn.style.color = '#fff'; btn.style.borderColor = '#f87171';
+      setTimeout(function () { btn.innerHTML = 'Join the waitlist'; btn.style.cssText = ''; validate(); }, 3000);
+    }
+
+    btn.addEventListener('click', function () {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.innerHTML = SPINNER + ' Joining…';
+
+      fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: emailEl.value.trim(),
+          name: nameEl.value.trim(),
+          company: companyEl.value.trim(),
+        }),
+      })
+        .then(function (res) {
+          return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+        })
+        .then(function (r) {
+          if (!r.ok) { fail('Something went wrong — try again'); return; }
+          if (r.data.already) {
+            successTitle.textContent = "You're already on the list.";
+            successMsg.textContent = "Good news — you're already in the queue. We'll reach out when your spot opens.";
+          }
+          form.classList.add('hide');
+          success.classList.add('show');
+        })
+        .catch(function () { fail('Network error — try again'); });
+    });
+  })();
+</script>
+
+</body>
+</html>

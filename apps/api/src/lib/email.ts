@@ -24,6 +24,7 @@ import {
   trialEndingEmail,
   renewalReminderEmail,
   mcpConnectedEmail,
+  waitlistEmail,
   type WelcomeEmailParams,
   type WorkspaceInvitationParams,
   type InvitationAcceptedParams,
@@ -34,6 +35,7 @@ import {
   type TrialEndingParams,
   type RenewalReminderParams,
   type McpConnectedParams,
+  type WaitlistEmailParams,
 } from '../emails/templates.js';
 
 // ── Public interface ───────────────────────────────────────────────────────────
@@ -52,6 +54,7 @@ export interface EmailSender {
   sendTrialEnding(to: string, params: TrialEndingParams): Promise<void>;
   sendRenewalReminder(to: string, params: RenewalReminderParams): Promise<void>;
   sendMcpConnected(to: string, params: McpConnectedParams): Promise<void>;
+  sendWaitlist(to: string, params: WaitlistEmailParams): Promise<void>;
 }
 
 // ── StdoutEmailSender ──────────────────────────────────────────────────────────
@@ -102,6 +105,10 @@ class StdoutEmailSender implements EmailSender {
   }
   async sendMcpConnected(to: string, p: McpConnectedParams) {
     const { subject, html } = mcpConnectedEmail(p);
+    await this.send(to, subject, html);
+  }
+  async sendWaitlist(to: string, p: WaitlistEmailParams) {
+    const { subject, html } = waitlistEmail(p);
     await this.send(to, subject, html);
   }
 }
@@ -177,6 +184,10 @@ class ResendEmailSender implements EmailSender {
     const { subject, html } = mcpConnectedEmail(p);
     await this.send(to, subject, html);
   }
+  async sendWaitlist(to: string, p: WaitlistEmailParams) {
+    const { subject, html } = waitlistEmail(p);
+    await this.send(to, subject, html);
+  }
 }
 
 // ── Singleton ──────────────────────────────────────────────────────────────────
@@ -198,4 +209,5 @@ export type {
   TrialEndingParams,
   RenewalReminderParams,
   McpConnectedParams,
+  WaitlistEmailParams,
 };

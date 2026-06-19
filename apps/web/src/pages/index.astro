@@ -45,9 +45,9 @@ const auth = Astro.locals.auth;
         class="mt-6 max-w-xl mx-auto"
         style="font-size: 16px; line-height: 1.65; color: var(--text-secondary);"
       >
-        Mnema turns your docs, instructions, and snippets into structured flows. Claude pulls
-        each step in order, with your instructions between them — so your AI reasons through
-        your context the way you'd brief a teammate.
+        Mnema turns your docs, instructions, and snippets into structured flows your AI reads
+        in order through MCP. A live knowledge graph connects everything, and a meeting
+        assistant joins your calls and answers from your workspace in real time.
       </p>
 
       <div class="mt-10 flex items-center justify-center gap-3">
@@ -64,13 +64,13 @@ const auth = Astro.locals.auth;
         ) : (
           <>
             <a
-              href="/signup"
+              href="/waitlist"
               class="inline-flex items-center justify-center h-10 px-5 font-medium transition-[background] rounded select-none"
               style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border-radius: var(--radius-md);"
               onmouseover="this.style.background='var(--interactive-primary-hover)'"
               onmouseout="this.style.background='var(--interactive-primary)'"
             >
-              Start free
+              Join the waitlist
             </a>
             <a
               href="/docs/flows"
@@ -191,11 +191,11 @@ const auth = Astro.locals.auth;
           02
         </span>
         <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-          Every doc, addressable.
+          A meeting assistant that knows.
         </h3>
         <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
-          Your workspace is a content library. Docs, snippets, instructions — each becomes a
-          step in any flow. One source, many compositions.
+          Mnema joins your calls, transcribes live, and answers from your workspace out loud —
+          scoped to the right project, so it never mixes things up.
         </p>
       </div>
       <div>
@@ -221,11 +221,11 @@ const auth = Astro.locals.auth;
           04
         </span>
         <h3 style="font-size: 18px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px;">
-          Live editing, live context.
+          A graph of everything.
         </h3>
         <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.65;">
-          Edit a doc and every flow that references it updates instantly. The context Claude
-          reads at 3:14 is the doc your teammate updated at 3:13.
+          Mnema auto-builds a knowledge graph across your docs, projects, and tasks — surfacing
+          connections and letting agents traverse how your context fits together.
         </p>
       </div>
     </div>
@@ -242,22 +242,22 @@ const auth = Astro.locals.auth;
         class="font-sans font-medium"
         style="font-size: var(--display-sm); line-height: 1.1; letter-spacing: -0.02em; color: var(--text-primary); margin-bottom: 16px;"
       >
-        Ready to try it?
+        Be first in line.
       </h2>
       <p
         class="mb-8"
         style="font-size: 15px; color: var(--text-secondary);"
       >
-        Set up a workspace in under a minute. Free forever for personal use.
+        Mnema is opening up gradually ahead of launch. Join the waitlist and we'll reach out with an invite.
       </p>
       <a
-        href="/signup"
+        href="/waitlist"
         class="inline-flex items-center justify-center h-10 px-5 font-medium transition-[background] rounded select-none"
         style="font-size: 14px; background: var(--interactive-primary); color: var(--interactive-primary-fg); border-radius: var(--radius-md);"
         onmouseover="this.style.background='var(--interactive-primary-hover)'"
         onmouseout="this.style.background='var(--interactive-primary)'"
       >
-        Start free
+        Join the waitlist
       </a>
     </div>
   </section>

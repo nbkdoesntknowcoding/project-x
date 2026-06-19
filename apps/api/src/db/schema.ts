@@ -148,6 +148,32 @@ export const invitations = pgTable(
   }),
 );
 
+/**
+ * Pre-launch waitlist. The public landing page writes here (via the internal
+ * waitlist endpoint) so we can capture interest before the LinkedIn launch. The
+ * live WorkOS sign-up flow is intentionally NOT gated by this table — approval is
+ * manual: flip `status` → 'approved' and send the person the /login link. Global
+ * table (no workspace scope, no RLS); written only by the internal endpoint.
+ */
+export const waitlist = pgTable(
+  'waitlist',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    email: citext('email').notNull().unique(),
+    name: text('name'),
+    company: text('company'),
+    // pending | approved | invited
+    status: text('status').notNull().default('pending'),
+    source: text('source').notNull().default('landing'),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    approvedAt: timestamp('approved_at', { withTimezone: true }),
+  },
+  (table) => ({
+    statusIdx: index('waitlist_status_idx').on(table.status),
+  }),
+);
+
 // Phase 6.4 / 9.3: User-created folders for organising docs.
 // Phase 9.3 adds soft-delete columns (deleted_at, deleted_by) and renames
 // parent_id → parent_folder_id for consistency with the MCP API surface.

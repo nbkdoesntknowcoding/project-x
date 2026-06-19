@@ -57,6 +57,9 @@ export function startEmailWorker(): Worker<EmailJobData> {
         case 'mcp_connected':
           await emailSender.sendMcpConnected(to, params);
           break;
+        case 'waitlist':
+          await emailSender.sendWaitlist(to, params);
+          break;
         default:
           console.error(`[email-worker] unknown job type: ${String(type)}`);
       }

@@ -183,6 +183,13 @@
       "when": 1781280000000,
       "tag": "0025_project_scoping",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1781280000001,
+      "tag": "0026_waitlist",
+      "breakpoints": true
     }
   ]
 }
