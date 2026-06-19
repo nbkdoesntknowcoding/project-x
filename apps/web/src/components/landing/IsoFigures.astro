@@ -1,8 +1,8 @@
 ---
 /**
- * IsoFigures — Mnema's take on Raycast's exploded isometric "blue box" element
- * diagrams. Built as SVG (not CSS-3D) so labels connect to plates with real
- * leader lines and all text stays crisp. Indigo technical-diagram accent + amber.
+ * IsoFigures — Mnema's exploded isometric element diagrams (Raycast-style).
+ * SVG, with real 3D boxes (top + side faces = thickness) and UI content drawn on
+ * the top faces, plus leader lines that connect labels to plate corners.
  */
 
 // ── Isometric projection (2:1 dimetric) ─────────────────────────────────────
@@ -12,70 +12,128 @@ const iso = (x: number, y: number, z: number, ox: number, oy: number): [number, 
   (x - y) * C + ox,
   (x + y) * S - z + oy,
 ];
+const pt = (p: [number, number]) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`;
 
-// Corners of a w×d plate centered at (0,0) raised to height z.
-function plateCorners(z: number, w: number, d: number, ox: number, oy: number) {
+function rect(cx: number, cy: number, z: number, w: number, d: number, ox: number, oy: number) {
   return {
-    tl: iso(-w / 2, -d / 2, z, ox, oy),
-    tr: iso(w / 2, -d / 2, z, ox, oy),
-    br: iso(w / 2, d / 2, z, ox, oy),
-    bl: iso(-w / 2, d / 2, z, ox, oy),
+    tl: iso(cx - w / 2, cy - d / 2, z, ox, oy),
+    tr: iso(cx + w / 2, cy - d / 2, z, ox, oy),
+    br: iso(cx + w / 2, cy + d / 2, z, ox, oy),
+    bl: iso(cx - w / 2, cy + d / 2, z, ox, oy),
   };
 }
-const poly = (c: ReturnType<typeof plateCorners>) =>
-  `${c.tl[0].toFixed(1)},${c.tl[1].toFixed(1)} ${c.tr[0].toFixed(1)},${c.tr[1].toFixed(1)} ${c.br[0].toFixed(1)},${c.br[1].toFixed(1)} ${c.bl[0].toFixed(1)},${c.bl[1].toFixed(1)}`;
+const polyR = (c: ReturnType<typeof rect>) => `${pt(c.tl)} ${pt(c.tr)} ${pt(c.br)} ${pt(c.bl)}`;
 
-// ── FIG_01 — the workspace, exploded into 4 layers ──────────────────────────
+// A solid iso box: top face + the two faces the viewer sees (right + left).
+function box(cx: number, cy: number, z: number, w: number, d: number, t: number, ox: number, oy: number) {
+  const top = rect(cx, cy, z, w, d, ox, oy);
+  const bot = rect(cx, cy, z - t, w, d, ox, oy);
+  return {
+    top: polyR(top),
+    right: `${pt(top.tr)} ${pt(top.br)} ${pt(bot.br)} ${pt(bot.tr)}`,
+    left: `${pt(top.bl)} ${pt(top.br)} ${pt(bot.br)} ${pt(bot.bl)}`,
+    corners: top,
+  };
+}
+// A thin bar of UI content lying on a face at height z.
+const bar = (cx: number, cy: number, z: number, w: number, d: number, ox: number, oy: number) =>
+  polyR(rect(cx, cy, z, w, d, ox, oy));
+
+const IND = 'rgba(124,156,255,'; // indigo with alpha suffix
+
+// ── FIG_01 — the workspace, exploded into 4 boxes with content ──────────────
 const OX = 280;
-const OY = 196;
-const W = 150;
-const D = 100;
-const F1 = [
-  { z: 156, label: 'COMMAND', side: 'r', bar: true },
-  { z: 104, label: 'EDITOR', side: 'r' },
-  { z: 52, label: 'DOC LIST', side: 'l' },
-  { z: 0, label: 'GRAPH', side: 'l', dots: true },
+const OY = 188;
+const W = 152;
+const D = 92;
+const T = 9;
+type Bar = { poly: string; fill: string };
+const f1defs = [
+  {
+    z: 156, label: 'COMMAND', side: 'r',
+    bars: [
+      { cx: 0, cy: -16, w: 124, d: 16, fill: 'rgba(255,179,112,0.55)' },
+      { cx: -28, cy: 8, w: 60, d: 7, fill: IND + '0.32)' },
+      { cx: -32, cy: 22, w: 50, d: 7, fill: IND + '0.22)' },
+    ],
+  },
+  {
+    z: 104, label: 'EDITOR', side: 'r',
+    bars: [
+      { cx: -6, cy: -22, w: 100, d: 6, fill: IND + '0.3)' },
+      { cx: -16, cy: -8, w: 78, d: 6, fill: IND + '0.22)' },
+      { cx: -2, cy: 6, w: 92, d: 6, fill: IND + '0.26)' },
+      { cx: -24, cy: 20, w: 56, d: 6, fill: IND + '0.2)' },
+    ],
+  },
+  {
+    z: 52, label: 'DOC LIST', side: 'l',
+    bars: [
+      { cx: -52, cy: -20, w: 8, d: 8, fill: IND + '0.5)' },
+      { cx: 4, cy: -20, w: 96, d: 7, fill: IND + '0.28)' },
+      { cx: -52, cy: -2, w: 8, d: 8, fill: IND + '0.3)' },
+      { cx: 4, cy: -2, w: 96, d: 7, fill: IND + '0.2)' },
+      { cx: -52, cy: 16, w: 8, d: 8, fill: IND + '0.3)' },
+      { cx: 4, cy: 16, w: 80, d: 7, fill: IND + '0.2)' },
+    ],
+  },
+  { z: 0, label: 'GRAPH', side: 'l', graph: true, bars: [] as { cx: number; cy: number; w: number; d: number; fill: string }[] },
 ].map((l) => {
-  const c = plateCorners(l.z, W, D, OX, OY);
-  const cy = OY - l.z; // screen-y of the plate center
-  // leader: from a label out to the plate's near corner
-  const anchor = l.side === 'r' ? c.tr : c.bl;
+  const b = box(0, 0, l.z, W, D, T, OX, OY);
+  const cy = OY - l.z;
+  const anchor = l.side === 'r' ? b.corners.tr : b.corners.bl;
   const labelX = l.side === 'r' ? 512 : 70;
-  return { ...l, poly: poly(c), corners: c, cy, anchor, labelX };
+  const bars: Bar[] = (l.bars ?? []).map((bb) => ({ poly: bar(bb.cx, bb.cy, l.z, bb.w, bb.d, OX, OY), fill: bb.fill }));
+  // graph nodes for the base plate
+  const gnodes = l.graph
+    ? [
+        { x: -34, y: -14, c: '#a78bfa', r: 4 },
+        { x: 10, y: -22, c: '#60a5fa', r: 3.4 },
+        { x: 40, y: 6, c: '#FFB370', r: 3.4 },
+        { x: -6, y: 22, c: '#6BE39B', r: 3 },
+        { x: 16, y: 4, c: '#e879f9', r: 4.6 },
+      ].map((n) => ({ ...n, p: iso(n.x, n.y, l.z + 2, OX, OY) }))
+    : [];
+  const gedges = l.graph ? ([[0, 4], [1, 4], [2, 4], [3, 0]] as [number, number][]) : [];
+  return { ...l, ...b, cy, anchor, labelX, bars, gnodes, gedges };
 });
-// highlighted command bar (small inset plate on the top layer)
-const cmdBar = poly(plateCorners(156, 112, 18, OX, OY));
 
-// ── FIG_02 — sequenced flow plates ──────────────────────────────────────────
-const F2 = [0, 26, 52].map((z, i) => ({
-  i,
-  num: i + 1,
-  poly: poly(plateCorners(z, 70, 50, 100, 96)),
-  center: iso(0, 0, z, 100, 96),
-  next: iso(0, 0, z + 26, 100, 96),
-}));
+// ── FIG_02 — sequenced flow: 3 doc-boxes with content, connected ────────────
+const F2 = [0, 34, 68].map((z, i) => {
+  const b = box(0, 0, z, 76, 52, 8, 100, 104);
+  return {
+    i,
+    box: b,
+    lines: [bar(-6, -10, z, 46, 5, 100, 104), bar(-12, 4, z, 34, 5, 100, 104)],
+    dot: bar(-26, -10, z, 7, 7, 100, 104),
+    center: iso(0, 0, z, 100, 104),
+    next: iso(0, 0, z + 34, 100, 104),
+  };
+});
 
-// ── FIG_03 — knowledge-graph nodes ──────────────────────────────────────────
+// ── FIG_03 — knowledge graph: a base plane + a real little network ──────────
+const F3plane = box(0, 0, 0, 120, 88, 5, 100, 92);
 const F3nodes = [
-  { x: -26, y: -10, z: 26, c: '#a78bfa', r: 5 },
-  { x: 22, y: -18, z: 44, c: '#60a5fa', r: 4 },
-  { x: 30, y: 14, z: 32, c: '#FFB370', r: 4 },
-  { x: -12, y: 24, z: 18, c: '#6BE39B', r: 3.5 },
-  { x: 2, y: 0, z: 58, c: '#e879f9', r: 6 },
-].map((n) => ({ ...n, p: iso(n.x, n.y, n.z, 100, 86), base: iso(n.x, n.y, 0, 100, 86) }));
-const F3edges: [number, number][] = [[0, 4], [1, 4], [2, 4], [3, 0], [1, 2]];
+  { x: -38, y: -16, z: 20, c: '#a78bfa', r: 5 },
+  { x: 8, y: -28, z: 40, c: '#60a5fa', r: 4 },
+  { x: 38, y: -8, z: 30, c: '#FFB370', r: 4 },
+  { x: 30, y: 22, z: 16, c: '#6BE39B', r: 3.5 },
+  { x: -18, y: 26, z: 24, c: '#7C9CFF', r: 3.5 },
+  { x: -2, y: 2, z: 56, c: '#e879f9', r: 6.5 },
+].map((n) => ({ ...n, p: iso(n.x, n.y, n.z, 100, 92), base: iso(n.x, n.y, 2, 100, 92) }));
+const F3edges: [number, number][] = [[0, 5], [1, 5], [2, 5], [3, 5], [4, 0], [1, 2], [3, 2]];
 
-// ── FIG_04 — MCP read (request → response) ──────────────────────────────────
-const f4req = poly(plateCorners(0, 78, 56, 100, 92));
-const f4res = poly(plateCorners(54, 78, 56, 100, 92));
-const f4lineA = iso(0, 0, 4, 100, 92);
-const f4lineB = iso(0, 0, 50, 100, 92);
-const f4token = iso(0, 0, 28, 100, 92);
-const f4check = iso(0, 0, 54, 100, 92);
+// ── FIG_04 — MCP terminal box with code content ─────────────────────────────
+const F4 = box(0, 0, 0, 116, 70, 10, 100, 78);
+const F4lines = [
+  { poly: bar(-18, -22, 0, 66, 5, 100, 78), fill: 'rgba(255,179,112,0.5)' },
+  { poly: bar(-30, -8, 0, 42, 5, 100, 78), fill: IND + '0.28)' },
+  { poly: bar(-26, 6, 0, 50, 5, 100, 78), fill: IND + '0.28)' },
+  { poly: bar(-34, 20, 0, 34, 5, 100, 78), fill: 'rgba(107,227,155,0.55)' },
+];
 ---
 
 <div class="iso-root">
-  <!-- heading -->
   <div class="iso-head">
     <span class="iso-eyebrow">Composable down to the element</span>
     <h2 class="iso-title">Every surface is just<br />docs, wired together.</h2>
@@ -86,39 +144,36 @@ const f4check = iso(0, 0, 54, 100, 92);
     <a class="iso-link" href="/docs">Read the docs <span aria-hidden="true">→</span></a>
   </div>
 
-  <!-- FIG_01 -->
   <div class="iso-fig-wrap" aria-hidden="true">
-    <svg viewBox="0 0 560 430" width="100%" role="img" aria-label="Exploded workspace diagram">
+    <svg viewBox="0 0 560 440" width="100%" role="img" aria-label="Exploded workspace diagram">
       <defs>
         <pattern id="isoDots" width="22" height="22" patternUnits="userSpaceOnUse">
-          <circle cx="1.1" cy="1.1" r="1.1" fill="rgba(124,156,255,0.16)" />
+          <circle cx="1.1" cy="1.1" r="1.1" fill="rgba(124,156,255,0.14)" />
         </pattern>
-        <linearGradient id="isoPlate" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="rgba(124,156,255,0.16)" />
-          <stop offset="1" stop-color="rgba(124,156,255,0.03)" />
+        <linearGradient id="isoTop" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="rgba(124,156,255,0.18)" />
+          <stop offset="1" stop-color="rgba(124,156,255,0.06)" />
         </linearGradient>
       </defs>
 
-      <rect x="40" y="20" width="420" height="390" fill="url(#isoDots)"
-        style="mask: radial-gradient(ellipse 60% 60% at 46% 46%, #000 35%, transparent 85%); -webkit-mask: radial-gradient(ellipse 60% 60% at 46% 46%, #000 35%, transparent 85%);" />
-
+      <rect x="46" y="24" width="410" height="392" fill="url(#isoDots)"
+        style="mask: radial-gradient(ellipse 58% 58% at 46% 46%, #000 35%, transparent 85%); -webkit-mask: radial-gradient(ellipse 58% 58% at 46% 46%, #000 35%, transparent 85%);" />
       <text x="20" y="26" class="iso-tag">FIG_01 — WORKSPACE</text>
 
-      {F1.map((l) => (
+      {f1defs.map((l) => (
         <g>
-          <polygon points={l.poly} fill="url(#isoPlate)" stroke="rgba(124,156,255,0.6)" stroke-width="1.2" stroke-linejoin="round" />
-          {l.bar && <polygon points={cmdBar} fill="rgba(255,179,112,0.5)" stroke="rgba(255,179,112,0.85)" stroke-width="1" />}
-          {l.dots && (
-            <g>
-              <circle cx={l.corners.tl[0] + (l.corners.br[0] - l.corners.tl[0]) * 0.42} cy={l.corners.tl[1] + (l.corners.br[1] - l.corners.tl[1]) * 0.42} r="3.4" fill="#a78bfa" />
-              <circle cx={l.corners.tl[0] + (l.corners.br[0] - l.corners.tl[0]) * 0.6} cy={l.corners.tl[1] + (l.corners.br[1] - l.corners.tl[1]) * 0.55} r="3" fill="#60a5fa" />
-              <circle cx={l.corners.tl[0] + (l.corners.br[0] - l.corners.tl[0]) * 0.5} cy={l.corners.tl[1] + (l.corners.br[1] - l.corners.tl[1]) * 0.7} r="2.6" fill="#6BE39B" />
-            </g>
-          )}
-          {/* leader line: label → plate corner */}
+          {/* solid box: sides first (depth), then top */}
+          <polygon points={l.left} fill="rgba(10,12,20,0.85)" stroke={IND + '0.4)'} stroke-width="1" stroke-linejoin="round" />
+          <polygon points={l.right} fill="rgba(40,52,92,0.5)" stroke={IND + '0.45)'} stroke-width="1" stroke-linejoin="round" />
+          <polygon points={l.top} fill="url(#isoTop)" stroke={IND + '0.65)'} stroke-width="1.2" stroke-linejoin="round" />
+          {/* UI content on the top face */}
+          {l.bars.map((b) => <polygon points={b.poly} fill={b.fill} />)}
+          {l.gedges.map(([a, b]) => <line x1={l.gnodes[a]!.p[0]} y1={l.gnodes[a]!.p[1]} x2={l.gnodes[b]!.p[0]} y2={l.gnodes[b]!.p[1]} stroke={IND + '0.45)'} stroke-width="0.9" />)}
+          {l.gnodes.map((n) => <g><circle cx={n.p[0]} cy={n.p[1]} r={n.r * 2.1} fill={n.c} opacity="0.18" /><circle cx={n.p[0]} cy={n.p[1]} r={n.r} fill={n.c} /></g>)}
+          {/* leader line → label */}
           <polyline
-            points={`${l.labelX + (l.side === 'r' ? -6 : 6)},${l.cy} ${l.side === 'r' ? l.anchor[0] + 8 : l.anchor[0] - 8},${l.cy} ${l.anchor[0].toFixed(1)},${l.anchor[1].toFixed(1)}`}
-            fill="none" stroke="rgba(124,156,255,0.5)" stroke-width="1" />
+            points={`${l.labelX + (l.side === 'r' ? -6 : 6)},${l.cy} ${l.side === 'r' ? l.anchor[0] + 8 : l.anchor[0] - 8},${l.cy} ${pt(l.anchor)}`}
+            fill="none" stroke={IND + '0.5)'} stroke-width="1" />
           <circle cx={l.anchor[0]} cy={l.anchor[1]} r="2" fill="#7C9CFF" />
           <text x={l.labelX} y={l.cy + 3.5} class="iso-anno" text-anchor={l.side === 'r' ? 'start' : 'end'}>{l.label}</text>
         </g>
@@ -127,51 +182,49 @@ const f4check = iso(0, 0, 54, 100, 92);
   </div>
 </div>
 
-<!-- secondary figures — distinct iso objects, editorial layout (no cards) -->
 <div class="iso-strip" aria-hidden="true">
-  <!-- FIG_02 — sequenced flow -->
+  <!-- FIG_02 — flow of doc boxes -->
   <div class="iso-cell">
-    <svg viewBox="0 0 200 150" width="100%" role="img">
+    <svg viewBox="0 0 200 165" width="100%" role="img">
       <text x="6" y="14" class="iso-tag">FIG_02</text>
       {F2.map((p) => (
         <g>
-          {p.i < 2 && <line x1={p.center[0]} y1={p.center[1]} x2={p.next[0]} y2={p.next[1]} stroke="rgba(255,179,112,0.5)" stroke-width="1" />}
-          <polygon points={p.poly} fill="url(#isoPlate)" stroke="rgba(124,156,255,0.6)" stroke-width="1.1" stroke-linejoin="round" />
-          <text x={p.center[0]} y={p.center[1] + 3} class="iso-num" text-anchor="middle">{p.num}</text>
+          {p.i < 2 && <line x1={p.center[0]} y1={p.center[1]} x2={p.next[0]} y2={p.next[1]} stroke="rgba(255,179,112,0.55)" stroke-width="1.2" />}
+          <polygon points={p.box.left} fill="rgba(10,12,20,0.85)" stroke="rgba(124,156,255,0.4)" stroke-width="1" stroke-linejoin="round" />
+          <polygon points={p.box.right} fill="rgba(40,52,92,0.5)" stroke="rgba(124,156,255,0.45)" stroke-width="1" stroke-linejoin="round" />
+          <polygon points={p.box.top} fill="url(#isoTop)" stroke="rgba(124,156,255,0.65)" stroke-width="1.1" stroke-linejoin="round" />
+          <polygon points={p.dot} fill="rgba(255,179,112,0.7)" />
+          {p.lines.map((ln) => <polygon points={ln} fill="rgba(124,156,255,0.3)" />)}
         </g>
       ))}
     </svg>
     <h3 class="iso-cell-title">Sequenced into flows.</h3>
-    <p class="iso-cell-desc">Each step is one doc plus your instruction — read in order, not dumped.</p>
+    <p class="iso-cell-desc">Each step is a doc plus your instruction — read in order, not dumped.</p>
   </div>
 
-  <!-- FIG_03 — knowledge graph -->
+  <!-- FIG_03 — graph network -->
   <div class="iso-cell">
-    <svg viewBox="0 0 200 150" width="100%" role="img">
+    <svg viewBox="0 0 200 165" width="100%" role="img">
       <text x="6" y="14" class="iso-tag">FIG_03</text>
-      <polygon points={poly(plateCorners(0, 110, 80, 100, 86))} fill="rgba(124,156,255,0.04)" stroke="rgba(124,156,255,0.18)" stroke-width="1" />
-      {F3nodes.map((n) => <line x1={n.base[0]} y1={n.base[1]} x2={n.p[0]} y2={n.p[1]} stroke="rgba(124,156,255,0.25)" stroke-width="0.8" />)}
+      <polygon points={F3plane.left} fill="rgba(10,12,20,0.7)" stroke="rgba(124,156,255,0.2)" stroke-width="0.8" />
+      <polygon points={F3plane.right} fill="rgba(40,52,92,0.35)" stroke="rgba(124,156,255,0.22)" stroke-width="0.8" />
+      <polygon points={F3plane.top} fill="rgba(124,156,255,0.05)" stroke="rgba(124,156,255,0.28)" stroke-width="0.9" />
+      {F3nodes.map((n) => <line x1={n.base[0]} y1={n.base[1]} x2={n.p[0]} y2={n.p[1]} stroke="rgba(124,156,255,0.22)" stroke-width="0.8" />)}
       {F3edges.map(([a, b]) => <line x1={F3nodes[a]!.p[0]} y1={F3nodes[a]!.p[1]} x2={F3nodes[b]!.p[0]} y2={F3nodes[b]!.p[1]} stroke="rgba(124,156,255,0.4)" stroke-width="0.9" />)}
-      {F3nodes.map((n) => (
-        <g>
-          <circle cx={n.p[0]} cy={n.p[1]} r={n.r * 2.2} fill={n.c} opacity="0.16" />
-          <circle cx={n.p[0]} cy={n.p[1]} r={n.r} fill={n.c} />
-        </g>
-      ))}
+      {F3nodes.map((n) => <g><circle cx={n.p[0]} cy={n.p[1]} r={n.r * 2.1} fill={n.c} opacity="0.18" /><circle cx={n.p[0]} cy={n.p[1]} r={n.r} fill={n.c} /></g>)}
     </svg>
     <h3 class="iso-cell-title">A graph above the docs.</h3>
     <p class="iso-cell-desc">Connections lift off the page — links agents can traverse.</p>
   </div>
 
-  <!-- FIG_04 — read via MCP -->
+  <!-- FIG_04 — MCP terminal -->
   <div class="iso-cell">
-    <svg viewBox="0 0 200 150" width="100%" role="img">
+    <svg viewBox="0 0 200 165" width="100%" role="img">
       <text x="6" y="14" class="iso-tag">FIG_04</text>
-      <polygon points={f4req} fill="url(#isoPlate)" stroke="rgba(124,156,255,0.6)" stroke-width="1.1" stroke-linejoin="round" />
-      <polygon points={f4res} fill="rgba(107,227,155,0.08)" stroke="rgba(107,227,155,0.6)" stroke-width="1.1" stroke-linejoin="round" />
-      <line x1={f4lineA[0]} y1={f4lineA[1]} x2={f4lineB[0]} y2={f4lineB[1]} stroke="rgba(255,179,112,0.55)" stroke-width="1" />
-      <circle cx={f4token[0]} cy={f4token[1]} r="3.5" fill="#FFB370" />
-      <text x={f4check[0]} y={f4check[1] + 3} class="iso-num" text-anchor="middle" style="fill:#6BE39B;">✓</text>
+      <polygon points={F4.left} fill="rgba(10,12,20,0.85)" stroke="rgba(124,156,255,0.4)" stroke-width="1" stroke-linejoin="round" />
+      <polygon points={F4.right} fill="rgba(40,52,92,0.5)" stroke="rgba(124,156,255,0.45)" stroke-width="1" stroke-linejoin="round" />
+      <polygon points={F4.top} fill="url(#isoTop)" stroke="rgba(124,156,255,0.65)" stroke-width="1.1" stroke-linejoin="round" />
+      {F4lines.map((ln) => <polygon points={ln.poly} fill={ln.fill} />)}
     </svg>
     <h3 class="iso-cell-title">Read live via MCP.</h3>
     <p class="iso-cell-desc">An agent calls a tool; Mnema returns the exact context, fast.</p>
@@ -179,50 +232,23 @@ const f4check = iso(0, 0, 54, 100, 92);
 </div>
 
 <style>
-  .iso-root {
-    display: grid;
-    grid-template-columns: 0.82fr 1.18fr;
-    gap: 40px;
-    align-items: center;
-  }
+  .iso-root { display: grid; grid-template-columns: 0.82fr 1.18fr; gap: 40px; align-items: center; }
   @media (max-width: 860px) { .iso-root { grid-template-columns: 1fr; gap: 16px; } }
-
-  .iso-eyebrow {
-    display: block; font-family: var(--mono); font-size: 11px;
-    letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 14px;
-  }
-  .iso-title {
-    font-family: var(--sans); font-weight: 500; font-size: 32px; line-height: 1.14;
-    letter-spacing: -0.02em; color: var(--text-primary); margin: 0 0 16px;
-  }
+  .iso-eyebrow { display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 14px; }
+  .iso-title { font-family: var(--sans); font-weight: 500; font-size: 32px; line-height: 1.14; letter-spacing: -0.02em; color: var(--text-primary); margin: 0 0 16px; }
   .iso-desc { font-size: 15px; line-height: 1.6; color: var(--text-secondary); max-width: 30rem; margin: 0 0 22px; }
-  .iso-link {
-    display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
-    font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-primary);
-    text-decoration: none; border-bottom: 1px solid var(--border-default); padding-bottom: 3px; transition: border-color 160ms;
-  }
+  .iso-link { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-primary); text-decoration: none; border-bottom: 1px solid var(--border-default); padding-bottom: 3px; transition: border-color 160ms; }
   .iso-link:hover { border-color: #7C9CFF; }
-
   .iso-fig-wrap { position: relative; }
-
-  /* SVG text classes (crisp + visible) */
   :global(.iso-tag) { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em; fill: var(--text-quaternary); }
   :global(.iso-anno) { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; fill: var(--text-secondary); }
-  :global(.iso-num) { font-family: var(--mono); font-size: 12px; fill: #9db0e8; }
 
-  /* secondary strip — editorial, no card borders, thin dividers */
-  .iso-strip {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    margin-top: 48px;
-    padding-top: 40px;
-    border-top: 1px solid var(--border-subtle);
-  }
+  .iso-strip { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 48px; padding-top: 40px; border-top: 1px solid var(--border-subtle); }
   @media (max-width: 860px) { .iso-strip { grid-template-columns: 1fr; gap: 32px; } }
   .iso-cell { padding: 0 26px; position: relative; }
   .iso-cell + .iso-cell { border-left: 1px solid var(--border-subtle); }
   @media (max-width: 860px) { .iso-cell + .iso-cell { border-left: none; } }
-  .iso-cell svg { display: block; height: 150px; margin-bottom: 14px; }
+  .iso-cell svg { display: block; height: 165px; margin-bottom: 14px; }
   .iso-cell-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 6px; letter-spacing: -0.01em; }
   .iso-cell-desc { font-size: 13px; line-height: 1.5; color: var(--text-tertiary); margin: 0; }
 </style>
