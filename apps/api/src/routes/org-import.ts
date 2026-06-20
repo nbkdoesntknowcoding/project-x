@@ -116,14 +116,23 @@ export const orgImportRoutes: FastifyPluginAsync = async (app) => {
     const parsed = structureSchema.safeParse(extracted);
     const structure = parsed.success ? parsed.data : { teams: [], roles: [], people: [] };
 
-    const [imp] = await db.insert(orgChartImports).values({
-      workspaceId: req.auth.tenant_id,
-      importType: p.data.type,
-      sourceFileUrl: p.data.file_url ?? null,
-      extractedStructure: structure,
-      status: 'pending',
-      createdBy: req.auth.sub,
-    }).returning({ id: orgChartImports.id });
+    let imp: { id: string } | undefined;
+    try {
+      [imp] = await db.insert(orgChartImports).values({
+        workspaceId: req.auth.tenant_id,
+        importType: p.data.type,
+        sourceFileUrl: p.data.file_url ?? null,
+        extractedStructure: structure,
+        status: 'pending',
+        createdBy: req.auth.sub,
+      }).returning({ id: orgChartImports.id });
+    } catch (err) {
+      // Most likely the org/IAM migrations haven't been applied to this DB yet
+      // (relation "org_chart_imports" does not exist). Surface a clear 503
+      // instead of a bare 500 so the cause is obvious in the UI.
+      req.log.error({ err }, 'org import: failed to persist extraction');
+      return reply.code(503).send({ error: 'org_import_unavailable', detail: 'org tables missing — run db:migrate' });
+    }
 
     return reply.send({ import_id: imp!.id, extracted_structure: structure, valid: parsed.success });
   });

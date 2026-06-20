@@ -25,6 +25,23 @@ const ghostBtn: React.CSSProperties = { padding: '6px 12px', borderRadius: 8, bo
 const input: React.CSSProperties = { padding: '7px 10px', borderRadius: 7, border: `0.5px solid ${line}`, background: surface, color: ink, fontSize: 13, outline: 'none' };
 const cell: React.CSSProperties = { border: `0.5px solid ${line}`, padding: '6px 8px', fontSize: 12, color: soft };
 
+// Group people into their department/team for an org-hierarchy view. Leadership
+// floats to the top; everyone without a department lands in "Unassigned" last.
+function groupByDepartment(people: OrgPerson[], teams: OrgTeam[]): Array<[string, OrgPerson[]]> {
+  const order = new Map(teams.map((t, i) => [t.name, i]));
+  const groups = new Map<string, OrgPerson[]>();
+  for (const p of people) {
+    const key = p.department?.trim() || 'Unassigned';
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(p);
+  }
+  const rank = (name: string): number => {
+    if (name === 'Leadership') return -1;
+    if (name === 'Unassigned') return 1e6;
+    return order.get(name) ?? 1e5;
+  };
+  return [...groups.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]));
+}
+
 export function OrgPageRoot(): JSX.Element {
   const [tab, setTab] = useState<Tab>('structure');
   const tabs: Array<[Tab, string]> = [['structure', 'Structure'], ['roles', 'Roles'], ['access', 'Access'], ['audit', 'Audit Log']];
@@ -93,12 +110,22 @@ function StructureTab(): JSX.Element {
 
       <h3 style={{ fontSize: 13, color: muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>People</h3>
       {people.length === 0 ? <p style={{ color: muted, fontSize: 13 }}>No org profiles yet — they appear once invited members accept with a role.</p> : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {people.map((p) => (
-            <div key={p.userId} style={{ display: 'flex', gap: 10, padding: '8px 12px', borderRadius: 8, background: surface, border: `0.5px solid ${line}` }}>
-              <span style={{ flex: 1, color: ink, fontSize: 13 }}>{p.displayName || p.email}</span>
-              <span style={{ color: soft, fontSize: 12 }}>{p.displayTitle || '—'}</span>
-              <span style={{ color: muted, fontSize: 12 }}>{p.department || ''}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {groupByDepartment(people, teams).map(([dept, members]) => (
+            <div key={dept}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px' }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: teams.find((t) => t.name === dept)?.color ?? '#6b7280' }} />
+                <span style={{ color: soft, fontSize: 12, fontWeight: 600 }}>{dept}</span>
+                <span style={{ color: muted, fontSize: 11 }}>{members.length}</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 16, borderLeft: `0.5px solid ${line}` }}>
+                {members.map((p) => (
+                  <div key={p.userId} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', borderRadius: 8, background: surface, border: `0.5px solid ${line}` }}>
+                    <span style={{ flex: 1, color: ink, fontSize: 13 }}>{p.displayName || p.email}</span>
+                    <span style={{ color: soft, fontSize: 12 }}>{p.displayTitle || '—'}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
