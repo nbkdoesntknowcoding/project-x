@@ -140,6 +140,12 @@ const envSchema = z.object({
   RAZORPAY_WEBHOOK_SECRET: z.string().min(1),
   RAZORPAY_ENVIRONMENT: z.enum(['test', 'live']).default('test'),
 
+  // Recall.ai workspace verification secret (whsec_…) — signs the participant-events
+  // webhook. Optional: when set, the meeting bot's act-as identity is validated
+  // against Recall's tamper-proof roster (Phase 4 anti-impersonation); when unset,
+  // act-as behaves as before (no roster validation).
+  RECALL_WEBHOOK_SECRET: z.string().startsWith('whsec_').optional(),
+
   // Cloudflare R2 (DOCX/PDF attachment storage — optional; upload/export routes
   // return 503 if not configured rather than crashing the whole server)
   R2_ACCOUNT_ID:        z.string().min(1).optional(),

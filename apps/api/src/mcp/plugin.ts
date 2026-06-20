@@ -9,9 +9,10 @@ import { McpForbiddenError } from './scope.js';
 import { createMcpServer } from './server.js';
 import { handleStreamableHttp } from './transport.js';
 import { and } from 'drizzle-orm';
+import { config } from '../config/env.js';
 import { db } from '../db/index.js';
 import { tenantScopeStore } from '../db/with-tenant.js';
-import { mcpTokens, participantAliases, users, workspaceMembers, workspaces } from '../db/schema.js';
+import { mcpTokens, meetingParticipants, meetings, participantAliases, users, workspaceMembers, workspaces } from '../db/schema.js';
 
 // Meeting identity. Headers an act-as key sets per request to name the participant
 // currently asking. The server resolves to a workspace user and enforces that
@@ -25,6 +26,9 @@ const ACT_AS_NAME_HEADER = 'x-mnema-act-as-name';
 // This guarantees the meeting organizer always gets their own access even without a
 // calendar email or a saved alias. (Phase 4 will validate the host claim server-side.)
 const ACT_AS_HOST_HEADER = 'x-mnema-act-as-host';
+// Phase 4: names the live meeting so the asserted identity can be validated against
+// Recall's signature-verified roster.
+const MEETING_ID_HEADER = 'x-mnema-meeting-id';
 
 // A guest (a meeting attendee with no matching Mnema user) must get NOTHING from
 // the knowledge base. Scoping the session to this impossible project makes the RLS
@@ -77,6 +81,55 @@ async function resolveActAsAlias(
     )
     .limit(1);
   return rows[0]?.userId ?? null;
+}
+
+/**
+ * Phase 4 anti-impersonation: confirm an act-as resolution is backed by Recall's
+ * signature-verified roster for the named meeting. Only `verified = true` rows count.
+ *   • host fallback → the meeting must have a verified participant who is actually host;
+ *   • email/name    → some verified participant must have resolved to that exact user.
+ * No meeting / no matching verified row → false (caller guest-denies). Bounded to the
+ * key's workspace so a meeting id from another tenant can't be replayed.
+ */
+async function validateAgainstRoster(
+  workspaceId: string,
+  recallBotId: string | undefined,
+  resolvedUserId: string,
+  viaHost: boolean,
+): Promise<boolean> {
+  if (!recallBotId) return false;
+  const meeting = await db.query.meetings.findFirst({
+    where: and(eq(meetings.recallBotId, recallBotId), eq(meetings.workspaceId, workspaceId)),
+  });
+  if (!meeting) return false;
+
+  if (viaHost) {
+    const host = await db
+      .select({ id: meetingParticipants.id })
+      .from(meetingParticipants)
+      .where(
+        and(
+          eq(meetingParticipants.meetingId, meeting.id),
+          eq(meetingParticipants.verified, true),
+          eq(meetingParticipants.isHost, true),
+        ),
+      )
+      .limit(1);
+    return host.length > 0;
+  }
+
+  const match = await db
+    .select({ id: meetingParticipants.id })
+    .from(meetingParticipants)
+    .where(
+      and(
+        eq(meetingParticipants.meetingId, meeting.id),
+        eq(meetingParticipants.verified, true),
+        eq(meetingParticipants.resolvedUserId, resolvedUserId),
+      ),
+    )
+    .limit(1);
+  return match.length > 0;
 }
 
 declare module 'fastify' {
@@ -227,11 +280,27 @@ async function handleMcpRequest(req: FastifyRequest, reply: FastifyReply): Promi
     let resolved = assertedEmail
       ? await resolveActAsUser(oauthCtx.workspaceId, assertedEmail)
       : null;
+    let resolvedViaHost = false;
     if (!resolved && assertedName) {
       resolved = await resolveActAsAlias(oauthCtx.workspaceId, assertedName);
     }
     if (!resolved && isHost) {
       resolved = oauthCtx.userId; // the act-as key's creator = the organizer
+      resolvedViaHost = true;
+    }
+
+    // Phase 4: when a workspace verification secret is configured, the asserted
+    // identity must be backed by Recall's tamper-proof roster for the named meeting.
+    // A leaked key can no longer claim to be someone Recall didn't confirm is present.
+    if (resolved && config.RECALL_WEBHOOK_SECRET) {
+      const meetingId = hdr(MEETING_ID_HEADER);
+      const ok = await validateAgainstRoster(
+        oauthCtx.workspaceId, meetingId, resolved, resolvedViaHost,
+      );
+      if (!ok) {
+        req.log.info({ meetingId: meetingId ?? null }, 'mcp: act-as failed roster validation → guest deny');
+        resolved = null;
+      }
     }
 
     if (resolved) {

@@ -81,6 +81,11 @@ class MnemaMCP:
             if is_host:
                 headers["X-Mnema-Act-As-Host"] = "true"
                 key_parts.append("host")
+            # Phase 4: name the meeting so the server can validate the asserted identity
+            # against Recall's tamper-proof roster for THIS meeting.
+            if self._state.bot_id:
+                headers["X-Mnema-Meeting-Id"] = self._state.bot_id
+                key_parts.append(f"m:{self._state.bot_id}")
             if headers:
                 return "|".join(key_parts), headers
         return "guest", {}

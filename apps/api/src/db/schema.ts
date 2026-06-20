@@ -301,6 +301,10 @@ export const meetingParticipants = pgTable(
     name:               text('name'),
     email:              text('email'),
     isHost:             boolean('is_host').notNull().default(false),
+    // Phase 4: true only when this roster entry came from Recall's signature-verified
+    // webhook (tamper-proof). The MCP boundary validates act-as identities against
+    // verified rows only. false = best-effort, bot-reported (UI/capture only).
+    verified:           boolean('verified').notNull().default(false),
     resolvedUserId:     uuid('resolved_user_id').references(() => users.id, { onDelete: 'set null' }),
   },
   (table) => ({

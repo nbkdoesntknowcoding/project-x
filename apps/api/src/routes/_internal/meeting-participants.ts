@@ -11,18 +11,12 @@
  * `meeting_participants` row, resolving each attendee to a Mnema user the same way
  * the live MCP path does (email → saved name alias → else unresolved).
  */
-import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { db } from '../../db/index.js';
-import {
-  meetingParticipants,
-  meetings,
-  participantAliases,
-  users,
-  workspaceMembers,
-} from '../../db/schema.js';
+import { meetingParticipants, meetings } from '../../db/schema.js';
 import { resolveApiKey } from '../../lib/api-keys.js';
+import { resolveAttendee } from '../../lib/meeting-identity.js';
 
 const bodySchema = z.object({
   recall_bot_id: z.string().min(1),
@@ -39,43 +33,6 @@ const bodySchema = z.object({
     )
     .default([]),
 });
-
-/** email → workspace user, else name → saved alias, else null. */
-async function resolveAttendee(
-  workspaceId: string,
-  email: string | null,
-  name: string | null,
-): Promise<string | null> {
-  if (email && email.trim()) {
-    const rows = await db
-      .select({ userId: users.id })
-      .from(users)
-      .innerJoin(
-        workspaceMembers,
-        and(
-          eq(workspaceMembers.userId, users.id),
-          eq(workspaceMembers.workspaceId, workspaceId),
-        ),
-      )
-      .where(eq(users.email, email.trim()))
-      .limit(1);
-    if (rows[0]?.userId) return rows[0].userId;
-  }
-  if (name && name.trim()) {
-    const rows = await db
-      .select({ userId: participantAliases.userId })
-      .from(participantAliases)
-      .where(
-        and(
-          eq(participantAliases.workspaceId, workspaceId),
-          eq(participantAliases.displayName, name.trim()),
-        ),
-      )
-      .limit(1);
-    if (rows[0]?.userId) return rows[0].userId;
-  }
-  return null;
-}
 
 export const meetingParticipantsRoutes: FastifyPluginAsync = async (app) => {
   app.post('/api/_internal/meeting-participants', async (req, reply) => {

@@ -232,6 +232,13 @@
       "when": 1781280000007,
       "tag": "0032_meetings",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1781280000008,
+      "tag": "0033_meeting_participant_verified",
+      "breakpoints": true
     }
   ]
 }

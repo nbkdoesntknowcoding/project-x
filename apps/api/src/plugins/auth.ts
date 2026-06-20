@@ -23,6 +23,9 @@ const PUBLIC_ROUTES = new Set<string>([
   // Meeting bot reports its roster here, authenticated with its own mnema_api_ key
   // (resolved inside the handler) rather than a user JWT.
   '/api/_internal/meeting-participants',
+  // Recall posts signature-verified participant events here (verified inside the
+  // handler via the workspace secret), no user JWT.
+  '/api/_internal/recall-webhook',
   // Phase 4.1 — invitation preview must work BEFORE the invitee signs in,
   // so the accept page can show "X invited you to Y" without forcing
   // auth-first. The endpoint only reveals workspace name + inviter, never

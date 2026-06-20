@@ -17,6 +17,10 @@ const API_KEY = process.env.RECALL_API_KEY ?? '';
 // build the Output Media page URL (same host, served by pipecat at /output-page).
 const AUDIO_WSS = process.env.RECALL_AUDIO_WSS ?? '';
 const TTS_RATE = process.env.MEETING_TTS_SAMPLE_RATE ?? '24000';
+// Phase 4: Recall posts signature-verified participant events to this server URL so
+// the API has a tamper-proof roster. Optional — when unset, no webhook is added and
+// act-as runs without roster validation (the API gate is the workspace secret).
+const WEBHOOK_URL = process.env.RECALL_WEBHOOK_URL ?? '';
 
 const headers = {
   Authorization: API_KEY,
@@ -50,6 +54,36 @@ export async function createBot(meetingUrl: string): Promise<CreateBotResult> {
   // audio_mixed_raw.data payload as bot.metadata.cid (pipecat keys the output WS on it).
   const cid = randomUUID();
 
+  // realtime endpoints: the audio websocket (to pipecat) always; plus, when
+  // configured, a signature-verified webhook to the API carrying participant
+  // identity events (Phase 4 tamper-proof roster). Speech events stay on the
+  // websocket for low-latency live attribution.
+  const realtimeEndpoints: Array<Record<string, unknown>> = [
+    {
+      type: 'websocket',
+      url: AUDIO_WSS,
+      events: [
+        'audio_mixed_raw.data',
+        'participant_events.join',
+        'participant_events.update',
+        'participant_events.leave',
+        'participant_events.speech_on',
+        'participant_events.speech_off',
+      ],
+    },
+  ];
+  if (WEBHOOK_URL) {
+    realtimeEndpoints.push({
+      type: 'webhook',
+      url: WEBHOOK_URL,
+      events: [
+        'participant_events.join',
+        'participant_events.update',
+        'participant_events.leave',
+      ],
+    });
+  }
+
   const body = {
     meeting_url: meetingUrl,
     bot_name: 'Mnema',
@@ -62,25 +96,9 @@ export async function createBot(meetingUrl: string): Promise<CreateBotResult> {
       audio_mixed_raw: {},
       // ... and stream it in real time to our Pipecat WS (input path).
       // Format is mono 16-bit LE PCM @ 16 kHz (parsed by recall_io.RecallSerializer).
-      realtime_endpoints: [
-        {
-          type: 'websocket',
-          url: AUDIO_WSS,
-          // audio_mixed_raw.data → the audio the pipeline transcribes.
-          // participant_events.* → meeting identity (Phase 2): join/update carry
-          // each attendee's name (+ email when calendar-matched); speech_on/off are
-          // the active-speaker signal. pipecat correlates the active speaker at
-          // utterance time to answer scoped to whoever is asking.
-          events: [
-            'audio_mixed_raw.data',
-            'participant_events.join',
-            'participant_events.update',
-            'participant_events.leave',
-            'participant_events.speech_on',
-            'participant_events.speech_off',
-          ],
-        },
-      ],
+      // See realtimeEndpoints above: audio + live participant events on the WS, plus
+      // the optional verified webhook to the API.
+      realtime_endpoints: realtimeEndpoints,
     },
     // Output path (talking): the bot renders our webpage as its camera; the page holds
     // a WS back to pipecat (/output/<secret>?cid=) and plays streamed TTS audio into the
