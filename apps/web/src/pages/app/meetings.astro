@@ -1,0 +1,22 @@
+---
+// Temporary top-level home for the Meetings feature (moved out of Settings).
+// The dedicated frontend page + utilities will be designed separately; the
+// MeetingsPage component and /api/meetings endpoints are ready to drop into it.
+import AppLayout from '../../layouts/AppLayout.astro';
+import { MeetingsPage } from '../../components/meetings/MeetingsPage';
+
+const auth = Astro.locals.auth;
+if (!auth) return Astro.redirect('/auth/login');
+---
+
+<AppLayout title="Meetings">
+  <div style="padding:28px 32px;">
+    <h1 style="margin:0 0 6px;font:500 22px/1.15 var(--sans);letter-spacing:-0.02em;color:var(--ink);">Meetings</h1>
+    <p style="margin:0 0 28px;font-size:13px;color:var(--ink-soft);max-width:42rem;">
+      Attendees the meeting bot saw. Map anyone it didn't recognize to their Mnema account —
+      the bot answers each person scoped to their own access, and a mapping is remembered for
+      future meetings.
+    </p>
+    <MeetingsPage client:load />
+  </div>
+</AppLayout>
