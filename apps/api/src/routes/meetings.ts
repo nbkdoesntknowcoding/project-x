@@ -13,6 +13,7 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
+import { config } from '../config/env.js';
 import { db } from '../db/index.js';
 import {
   meetingParticipants,
@@ -22,6 +23,30 @@ import {
   workspaceMembers,
 } from '../db/schema.js';
 import { requireRole, RoleError } from '../lib/role.js';
+
+/**
+ * Ask the meeting-bot controller to send the Mnema bot into a meeting. Returns
+ * true on success. Never throws — a bot-join failure must not fail the caller's
+ * action (admit still succeeds; the meeting folder/docs are still created).
+ */
+async function dispatchBot(meeting: { id: string; workspaceId: string; meetingUrl: string | null }): Promise<boolean> {
+  if (!meeting.meetingUrl) return false;
+  try {
+    const res = await fetch(`${config.MEETING_BOT_INTERNAL_URL}/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        meetingUrl: meeting.meetingUrl,
+        meetingId: meeting.id,
+        workspaceId: meeting.workspaceId,
+        apiKey: config.MNEMA_MEETING_BOT_API_KEY,
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -42,15 +67,16 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
     try { await requireRole(req, 'viewer'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
 
     const rows = await db.execute(sql`
-      SELECT m.id, m.meeting_url, m.started_at, m.ended_at,
+      SELECT m.id, m.title, m.meeting_url, m.started_at, m.ended_at,
+             m.scheduled_start_at, m.scheduled_end_at, m.status, m.admitted, m.calendar_event_id,
              count(mp.id)::int AS participant_count,
              count(mp.id) FILTER (WHERE mp.resolved_user_id IS NULL)::int AS unresolved_count
       FROM meetings m
       LEFT JOIN meeting_participants mp ON mp.meeting_id = m.id
       WHERE m.workspace_id = ${req.auth.tenant_id}::uuid
       GROUP BY m.id
-      ORDER BY m.started_at DESC
-      LIMIT 50`);
+      ORDER BY COALESCE(m.scheduled_start_at, m.started_at) DESC
+      LIMIT 100`);
     return reply.send({ meetings: rows });
   });
 
@@ -136,5 +162,64 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
       );
 
     return reply.send({ ok: true });
+  });
+
+  // ── POST /api/meetings/:id/admit ───────────────────────────────────────────
+  // Track this calendar meeting. If it starts within 15 minutes, dispatch the
+  // bot immediately (bot-join failure is non-blocking). Editor+.
+  app.post('/api/meetings/:id/admit', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params as { id: string };
+    if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
+    try { await requireRole(req, 'editor'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
+
+    const meeting = await db.query.meetings.findFirst({
+      where: and(eq(meetings.id, id), eq(meetings.workspaceId, req.auth.tenant_id)),
+    });
+    if (!meeting) return reply.code(404).send({ error: 'not_found' });
+
+    await db.update(meetings).set({ admitted: true, status: 'scheduled' }).where(eq(meetings.id, id));
+
+    // Phase D (meeting folder + pre-meeting brief) is wired here later.
+    let botDispatched = false;
+    const startMs = meeting.scheduledStartAt ? new Date(meeting.scheduledStartAt).getTime() : null;
+    const minutesUntilStart = startMs != null ? (startMs - Date.now()) / 60000 : null;
+    if (minutesUntilStart != null && minutesUntilStart <= 15) {
+      botDispatched = await dispatchBot(meeting);
+    }
+    return reply.send({ ok: true, admitted: true, botDispatched, minutesUntilStart });
+  });
+
+  // ── POST /api/meetings/:id/ignore ──────────────────────────────────────────
+  app.post('/api/meetings/:id/ignore', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params as { id: string };
+    if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
+    try { await requireRole(req, 'editor'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
+
+    const updated = await db.update(meetings)
+      .set({ admitted: false, status: 'ignored' })
+      .where(and(eq(meetings.id, id), eq(meetings.workspaceId, req.auth.tenant_id)))
+      .returning({ id: meetings.id });
+    if (updated.length === 0) return reply.code(404).send({ error: 'not_found' });
+    return reply.send({ ok: true });
+  });
+
+  // ── POST /api/meetings/:id/dispatch ────────────────────────────────────────
+  // Send the bot into an admitted meeting right now (manual trigger). Editor+.
+  app.post('/api/meetings/:id/dispatch', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params as { id: string };
+    if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
+    try { await requireRole(req, 'editor'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
+
+    const meeting = await db.query.meetings.findFirst({
+      where: and(eq(meetings.id, id), eq(meetings.workspaceId, req.auth.tenant_id)),
+    });
+    if (!meeting) return reply.code(404).send({ error: 'not_found' });
+    if (!meeting.meetingUrl) return reply.code(400).send({ error: 'no_meeting_url' });
+
+    const ok = await dispatchBot(meeting);
+    return ok ? reply.send({ ok: true }) : reply.code(502).send({ error: 'bot_dispatch_failed' });
   });
 };

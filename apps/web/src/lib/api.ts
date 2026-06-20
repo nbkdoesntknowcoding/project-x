@@ -179,9 +179,15 @@ export interface OrgStructure {
 // Phase 2b — meetings + identity mapping.
 export interface MeetingRow {
   id: string;
+  title: string | null;
   meeting_url: string | null;
   started_at: string;
   ended_at: string | null;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
+  status: string | null;          // 'scheduled' | 'live' | 'ended' | 'ignored' | …
+  admitted: boolean | null;
+  calendar_event_id: string | null;
   participant_count: number;
   unresolved_count: number;
 }
@@ -285,6 +291,16 @@ export const api = {
 
   // Phase 2b — meetings + post-meeting identity mapping
   listMeetings: (): Promise<{ meetings: MeetingRow[] }> => apiFetch('/api/meetings'),
+  // Phase C — calendar linking + admit/dispatch
+  calendarStatus: (): Promise<{ connected: boolean; configured: boolean }> => apiFetch('/api/calendar/status'),
+  calendarSync: (): Promise<{ ok: true; created: number; updated: number; total: number }> =>
+    apiFetch('/api/calendar/sync', { method: 'POST' }),
+  admitMeeting: (id: string): Promise<{ ok: true; botDispatched: boolean; minutesUntilStart: number | null }> =>
+    apiFetch(`/api/meetings/${id}/admit`, { method: 'POST' }),
+  ignoreMeeting: (id: string): Promise<{ ok: true }> =>
+    apiFetch(`/api/meetings/${id}/ignore`, { method: 'POST' }),
+  dispatchMeetingBot: (id: string): Promise<{ ok: true }> =>
+    apiFetch(`/api/meetings/${id}/dispatch`, { method: 'POST' }),
   listMeetingParticipants: (
     meetingId: string,
   ): Promise<{ participants: MeetingParticipantRow[] }> =>

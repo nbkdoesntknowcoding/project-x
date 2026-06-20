@@ -101,6 +101,8 @@ export const workspaceMembers = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     role: workspaceRole('role').notNull().default('editor'),
     joinedAt: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+    // Phase C — encrypted Google Calendar refresh token (per member).
+    calendarRefreshToken: text('calendar_refresh_token'),
   },
   (table) => ({
     pk: primaryKey({ columns: [table.workspaceId, table.userId] }),
@@ -279,11 +281,16 @@ export const meetings = pgTable(
     id:              uuid('id').primaryKey().default(sql`gen_random_uuid()`),
     workspaceId:     uuid('workspace_id').notNull()
                      .references(() => workspaces.id, { onDelete: 'cascade' }),
-    recallBotId:     text('recall_bot_id').notNull().unique(),
+    // Nullable: calendar-synced meetings (Phase C) exist before any bot joins.
+    recallBotId:     text('recall_bot_id').unique(),
     organizerUserId: uuid('organizer_user_id').references(() => users.id, { onDelete: 'set null' }),
     meetingUrl:      text('meeting_url'),
     startedAt:       timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
     endedAt:         timestamp('ended_at', { withTimezone: true }),
+    // Phase C — calendar-scheduled meeting metadata (migration 0041)
+    title:            text('title'),
+    scheduledStartAt: timestamp('scheduled_start_at', { withTimezone: true }),
+    scheduledEndAt:   timestamp('scheduled_end_at', { withTimezone: true }),
     // Phase A additions (migration 0038)
     projectId:        uuid('project_id').references(() => projects.id),
     calendarEventId:  text('calendar_event_id'),

@@ -178,6 +178,20 @@ const envSchema = z.object({
   // WorkOS redirect URI for the OAuth authorize flow (api-server callback).
   // Must be registered in WorkOS dashboard as an allowed redirect URI.
   WORKOS_REDIRECT_URI_OAUTH: z.string().url(),
+
+  // Phase C — Google Calendar linking (optional; calendar routes return 503 when
+  // unset). Create an OAuth client in Google Cloud Console with scope
+  // calendar.readonly and add these. Redirect URI must equal the /api/calendar/
+  // callback URL and be registered as an authorised redirect URI in Google.
+  GOOGLE_CALENDAR_CLIENT_ID:     z.string().min(1).optional(),
+  GOOGLE_CALENDAR_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_CALENDAR_REDIRECT_URI:  z.string().url().optional(),
+
+  // Phase C — internal meeting-bot controller (the express service that asks
+  // Recall to send the bot). Defaults to the Docker-network address; the API
+  // POSTs /join here when an admitted meeting is starting soon.
+  MEETING_BOT_INTERNAL_URL:   z.string().url().default('http://meeting-bot:3001'),
+  MNEMA_MEETING_BOT_API_KEY:  z.string().min(1).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

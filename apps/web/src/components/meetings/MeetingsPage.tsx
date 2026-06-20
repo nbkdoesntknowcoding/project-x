@@ -11,6 +11,15 @@ import {
  * lets an admin map unrecognized attendees (by display name) to a workspace member.
  * Mapping is saved as an alias, so that person is recognized in every future meeting.
  */
+const muted = 'var(--ink-muted, #71717a)';
+const soft = 'var(--ink-soft, #a1a1aa)';
+const ink = 'var(--ink, #e7e7e9)';
+const line = 'var(--line, rgba(255,255,255,0.1))';
+const surface = 'var(--surface-1, rgba(255,255,255,0.02))';
+const accent = 'var(--amber, #f0997b)';
+const btn: React.CSSProperties = { padding: '6px 12px', borderRadius: 8, border: 'none', background: accent, color: '#0A0B0D', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' };
+const ghost: React.CSSProperties = { padding: '6px 12px', borderRadius: 8, border: `0.5px solid ${line}`, background: 'transparent', color: soft, fontSize: 12.5, cursor: 'pointer' };
+
 export function MeetingsPage(): JSX.Element {
   const [meetings, setMeetings] = useState<MeetingRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
@@ -34,28 +43,128 @@ export function MeetingsPage(): JSX.Element {
     setMeetings(m.meetings);
   }
 
-  if (loading) return <p style={{ color: 'var(--ink-muted)', fontSize: 14 }}>Loading…</p>;
-  if (meetings.length === 0) {
-    return (
-      <p style={{ color: 'var(--ink-soft)', fontSize: 14, maxWidth: '34rem' }}>
-        No meetings captured yet. After the bot attends a meeting, its attendees show up
-        here so you can connect anyone it didn't recognize to their Mnema account.
-      </p>
-    );
+  if (loading) return <p style={{ color: muted, fontSize: 14 }}>Loading…</p>;
+
+  // Calendar-scheduled meetings (have a scheduled start) vs bot-attended meetings.
+  const scheduled = meetings.filter((m) => m.scheduled_start_at && m.status !== 'ignored');
+  const attended = meetings.filter((m) => !m.scheduled_start_at);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, maxWidth: '46rem' }}>
+      <CalendarBar onSynced={refreshMeetings} />
+
+      {scheduled.length > 0 && (
+        <section>
+          <h3 style={{ fontSize: 12, color: muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Upcoming (from calendar)</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {scheduled.map((m) => <ScheduledCard key={m.id} meeting={m} onChange={refreshMeetings} />)}
+          </div>
+        </section>
+      )}
+
+      <section>
+        <h3 style={{ fontSize: 12, color: muted, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 10px' }}>Meetings the bot attended</h3>
+        {attended.length === 0 ? (
+          <p style={{ color: soft, fontSize: 13, maxWidth: '34rem' }}>
+            None yet. Admit an upcoming meeting (or send the bot in) and its attendees show up here.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {attended.map((m) => (
+              <MeetingCard
+                key={m.id}
+                meeting={m}
+                members={members}
+                open={openId === m.id}
+                onToggle={() => setOpenId(openId === m.id ? null : m.id)}
+                onMapped={refreshMeetings}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function CalendarBar({ onSynced }: { onSynced: () => void }): JSX.Element {
+  const [state, setState] = useState<{ connected: boolean; configured: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => { void api.calendarStatus().then(setState).catch(() => setState({ connected: false, configured: false })); }, []);
+
+  async function sync() {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api.calendarSync();
+      setMsg(`Synced — ${r.created} new, ${r.updated} updated.`);
+      onSynced();
+    } catch {
+      setMsg('Sync failed.');
+    } finally { setBusy(false); }
+  }
+
+  const wrap: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, background: surface, border: `0.5px solid ${line}` };
+  if (!state) return <div style={wrap}><span style={{ color: muted, fontSize: 13 }}>Checking calendar…</span></div>;
+
+  if (!state.configured) return (
+    <div style={wrap}>
+      <span style={{ color: soft, fontSize: 13 }}>📅 Calendar integration isn't configured yet. An admin needs to add the Google OAuth credentials.</span>
+    </div>
+  );
+
+  return (
+    <div style={wrap}>
+      <span style={{ flex: 1, color: ink, fontSize: 13 }}>
+        {state.connected ? '📅 Google Calendar connected' : '📅 Link your Google Calendar to auto-detect meetings'}
+      </span>
+      {msg && <span style={{ color: muted, fontSize: 12 }}>{msg}</span>}
+      {state.connected
+        ? <button style={ghost} disabled={busy} onClick={sync}>{busy ? 'Syncing…' : 'Sync now'}</button>
+        : <a href="/api/calendar/connect" style={{ ...btn, textDecoration: 'none' }}>Connect Google Calendar</a>}
+    </div>
+  );
+}
+
+function ScheduledCard({ meeting, onChange }: { meeting: MeetingRow; onChange: () => void }): JSX.Element {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function admit() {
+    setBusy(true); setNote(null);
+    try {
+      const r = await api.admitMeeting(meeting.id);
+      setNote(r.botDispatched ? 'Admitted — bot dispatched.' : 'Admitted.');
+      onChange();
+    } finally { setBusy(false); }
+  }
+  async function ignore() { setBusy(true); try { await api.ignoreMeeting(meeting.id); onChange(); } finally { setBusy(false); } }
+  async function sendBot() {
+    setBusy(true); setNote(null);
+    try { await api.dispatchMeetingBot(meeting.id); setNote('Bot dispatched.'); }
+    catch { setNote('Bot dispatch failed.'); }
+    finally { setBusy(false); }
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: '46rem' }}>
-      {meetings.map((m) => (
-        <MeetingCard
-          key={m.id}
-          meeting={m}
-          members={members}
-          open={openId === m.id}
-          onToggle={() => setOpenId(openId === m.id ? null : m.id)}
-          onMapped={refreshMeetings}
-        />
-      ))}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, background: surface, border: `0.5px solid ${line}` }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, color: ink, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meeting.title || 'Untitled meeting'}</div>
+        <div style={{ fontSize: 12, color: muted, marginTop: 2 }}>
+          {meeting.scheduled_start_at ? fmtDate(meeting.scheduled_start_at) : 'time TBD'}
+          {meeting.admitted ? <span style={{ color: 'var(--green, #6BE39B)' }}> · admitted</span> : null}
+        </div>
+      </div>
+      {note && <span style={{ color: muted, fontSize: 12 }}>{note}</span>}
+      {meeting.admitted
+        ? <button style={ghost} disabled={busy} onClick={sendBot}>{busy ? '…' : 'Send bot now'}</button>
+        : (
+          <>
+            <button style={btn} disabled={busy} onClick={admit}>{busy ? '…' : 'Admit'}</button>
+            <button style={ghost} disabled={busy} onClick={ignore}>Ignore</button>
+          </>
+        )}
     </div>
   );
 }
