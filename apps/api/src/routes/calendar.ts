@@ -14,7 +14,7 @@ import { and, eq } from 'drizzle-orm';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { config } from '../config/env.js';
 import { db } from '../db/index.js';
-import { meetings, notifications, users, workspaceMembers } from '../db/schema.js';
+import { meetings, notifications, workspaceMembers } from '../db/schema.js';
 import {
   calendarConfigured, consentUrl, exchangeCode, listUpcoming, refreshAccess,
 } from '../lib/google-calendar.js';
@@ -33,9 +33,7 @@ export const calendarRoutes: FastifyPluginAsync = async (app) => {
     if (!calendarConfigured()) return reply.code(503).send({ error: 'calendar_not_configured' });
     try { await requireRole(req, 'viewer'); } catch (e) { if (guard(e, reply)) return; throw e; }
     const state = signState({ sub: req.auth.sub, tenant: req.auth.tenant_id });
-    // Pre-fill the account so Google skips its (currently-400ing) email-entry page.
-    const me = await db.select({ email: users.email }).from(users).where(eq(users.id, req.auth.sub)).limit(1);
-    return reply.redirect(consentUrl(state, me[0]?.email ?? undefined));
+    return reply.redirect(consentUrl(state));
   });
 
   // ── Google redirects back here ─────────────────────────────────────────────

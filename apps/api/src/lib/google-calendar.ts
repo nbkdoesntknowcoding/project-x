@@ -24,22 +24,22 @@ export function calendarConfigured(): boolean {
 /**
  * The Google consent URL to start the calendar-link flow.
  *
- * `loginHint` (the user's email) is important: without it, when Google can't
- * resolve a session for the request it routes to its "enter your email"
- * identifier page (flowName=GeneralOAuthLite), which currently throws a bare
- * 400. Passing login_hint skips that page and goes straight to consent.
+ * prompt='select_account consent' forces Google's account CHOOSER (over accounts
+ * the browser already has sessions for) and then the consent screen. We avoid
+ * `login_hint` on purpose: per Google's docs it "suppresses the account chooser"
+ * and pre-fills the *sign-in form* — and that sign-in/identifier page throws a
+ * bare 400 when there's no resolvable session. The chooser path doesn't.
  */
-export function consentUrl(state: string, loginHint?: string): string {
+export function consentUrl(state: string): string {
   const p = new URLSearchParams({
     client_id: config.GOOGLE_CALENDAR_CLIENT_ID!,
     redirect_uri: config.GOOGLE_CALENDAR_REDIRECT_URI!,
     response_type: 'code',
     scope: CAL_SCOPE,
-    access_type: 'offline',     // required to receive a refresh_token
-    prompt: 'consent',          // force refresh_token even on re-link
+    access_type: 'offline',            // required to receive a refresh_token
+    prompt: 'select_account consent',  // chooser → consent (avoids sign-in form 400)
     state,
   });
-  if (loginHint) p.set('login_hint', loginHint);
   return `${AUTH_URL}?${p.toString()}`;
 }
 
