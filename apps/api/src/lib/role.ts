@@ -32,6 +32,19 @@ export class RoleError extends Error {
   }
 }
 
+/**
+ * Phase A (IAM) — the user's workspace role as a bare string for the IAM fall-through
+ * (lib/iam.ts), '' when not a member. Takes `db` to match the IAM call signature;
+ * resolution itself uses the shared client via getUserRole.
+ */
+export async function getWorkspaceRole(
+  _db: unknown,
+  userId: string,
+  workspaceId: string,
+): Promise<string> {
+  return (await getUserRole(userId, workspaceId)) ?? '';
+}
+
 export async function getUserRole(
   userId: string,
   workspaceId: string,

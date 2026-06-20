@@ -279,9 +279,22 @@ export const meetings = pgTable(
     meetingUrl:      text('meeting_url'),
     startedAt:       timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
     endedAt:         timestamp('ended_at', { withTimezone: true }),
+    // Phase A additions (migration 0038)
+    projectId:        uuid('project_id').references(() => projects.id),
+    calendarEventId:  text('calendar_event_id'),
+    calendarProvider: text('calendar_provider').default('google'),
+    admitted:         boolean('admitted').default(false),
+    meetingFolderId:  uuid('meeting_folder_id'),
+    linkedMeetingIds: uuid('linked_meeting_ids').array().default(sql`'{}'`),
+    postMeetingDocId: uuid('post_meeting_doc_id'),
+    preMeetingDocId:  uuid('pre_meeting_doc_id'),
+    status:           text('status').default('scheduled'),
   },
   (table) => ({
-    workspaceIdx: index('meetings_workspace_idx').on(table.workspaceId),
+    workspaceIdx:   index('meetings_workspace_idx').on(table.workspaceId),
+    calendarIdx:    index('idx_meetings_calendar').on(table.calendarEventId),
+    projectIdx:     index('idx_meetings_project').on(table.projectId),
+    wsStatusIdx:    index('idx_meetings_workspace_status').on(table.workspaceId, table.status),
   }),
 );
 
@@ -313,6 +326,113 @@ export const meetingParticipants = pgTable(
   }),
 );
 
+// ── Org Structure + IAM (Phase A, migrations 0034–0039) ─────────────────────────
+
+/** Teams: departments / squads inside a workspace. Supports nesting (0034). */
+export const teams = pgTable(
+  'teams',
+  {
+    id:           uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId:  uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    name:         text('name').notNull(),
+    slug:         text('slug').notNull(),
+    description:  text('description'),
+    parentTeamId: uuid('parent_team_id'),
+    color:        text('color').default('#6b7280'),
+    createdAt:    timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    uniqueSlug:   unique('teams_workspace_slug_uq').on(table.workspaceId, table.slug),
+    workspaceIdx: index('idx_teams_workspace').on(table.workspaceId),
+    parentIdx:    index('idx_teams_parent').on(table.parentTeamId),
+  }),
+);
+
+export const teamMembers = pgTable(
+  'team_members',
+  {
+    teamId:   uuid('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+    userId:   uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    role:     text('role').notNull().default('member'), // 'member' | 'lead' | 'admin'
+    joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({ pk: primaryKey({ columns: [table.teamId, table.userId] }) }),
+);
+
+/** Named job titles with policy defaults applied on invite (0034). */
+export const orgRoles = pgTable(
+  'org_roles',
+  {
+    id:                  uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId:         uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    teamId:              uuid('team_id').references(() => teams.id, { onDelete: 'set null' }),
+    name:                text('name').notNull(),
+    slug:                text('slug').notNull(),
+    description:         text('description'),
+    workspaceRole:       text('workspace_role').notNull().default('editor'),
+    defaultFolderAccess: jsonb('default_folder_access').notNull().default(sql`'[]'::jsonb`),
+    createdAt:           timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    uniqueSlug:   unique('org_roles_workspace_slug_uq').on(table.workspaceId, table.slug),
+    workspaceIdx: index('idx_org_roles_workspace').on(table.workspaceId),
+    teamIdx:      index('idx_org_roles_team').on(table.teamId),
+  }),
+);
+
+/** One row per (user, workspace): the user's identity inside this org (0035). */
+export const userOrgProfiles = pgTable(
+  'user_org_profiles',
+  {
+    userId:        uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    workspaceId:   uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    orgRoleId:     uuid('org_role_id').references(() => orgRoles.id, { onDelete: 'set null' }),
+    displayTitle:  text('display_title'),
+    roleSlug:      text('role_slug'),
+    managerUserId: uuid('manager_user_id').references(() => users.id),
+    department:    text('department'),
+    botDisplayName: text('bot_display_name'),
+  },
+  (table) => ({
+    pk:           primaryKey({ columns: [table.userId, table.workspaceId] }),
+    workspaceIdx: index('idx_uop_workspace').on(table.workspaceId),
+    roleSlugIdx:  index('idx_uop_role_slug').on(table.roleSlug),
+  }),
+);
+
+/** Immutable IAM audit trail (0037). */
+export const iamAuditLog = pgTable(
+  'iam_audit_log',
+  {
+    id:           uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId:  uuid('workspace_id').notNull().references(() => workspaces.id),
+    actorUserId:  uuid('actor_user_id').references(() => users.id),
+    action:       text('action').notNull(),
+    resourceType: text('resource_type'),
+    resourceId:   uuid('resource_id'),
+    payload:      jsonb('payload'),
+    createdAt:    timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({ workspaceIdx: index('idx_iam_audit_workspace').on(table.workspaceId, table.createdAt) }),
+);
+
+/** Org-chart import tracking (0038). */
+export const orgChartImports = pgTable(
+  'org_chart_imports',
+  {
+    id:                 uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId:        uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    importType:         text('import_type').notNull(),
+    sourceFileUrl:      text('source_file_url'),
+    extractedStructure: jsonb('extracted_structure'),
+    confirmedStructure: jsonb('confirmed_structure'),
+    status:             text('status').default('pending'),
+    appliedAt:          timestamp('applied_at', { withTimezone: true }),
+    createdBy:          uuid('created_by').references(() => users.id),
+    createdAt:          timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+);
+
 export const folders = pgTable(
   'folders',
   {
@@ -333,11 +453,19 @@ export const folders = pgTable(
     // Phase 9.3: soft-delete
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     deletedBy: text('deleted_by'),
+    // Phase A additions (migration 0039): system folders that users can't delete,
+    // team-root + meeting-docs linkage, and a slug for IAM default_folder_access lookup.
+    folderType:  text('folder_type').default('user'), // 'user'|'team_root'|'meeting_docs'|'system'
+    teamId:      uuid('team_id').references(() => teams.id),
+    meetingId:   uuid('meeting_id').references(() => meetings.id),
+    isDeletable: boolean('is_deletable').default(true),
+    slug:        text('slug'),
   },
   (table) => ({
     workspaceIdx: index('folders_workspace_idx').on(table.workspaceId),
     parentIdx:    index('folders_parent_idx').on(table.parentFolderId),
     projectIdx:   index('folders_project_idx').on(table.projectId),
+    slugIdx:      index('idx_folders_workspace_slug').on(table.workspaceId, table.slug),
   }),
 );
 
@@ -554,20 +682,32 @@ export const embeddings = pgTable(
   }),
 );
 
+/**
+ * Phase A (migration 0036) — activated doc_acl: full resource × principal × permission
+ * matrix. resource_type doc|folder|project; principal_type user|team|org_role;
+ * permission read|write|admin|none ('none' = explicit deny). Resolved by the
+ * app_effective_permission() SQL function (doc > folder > project; deny wins).
+ */
 export const docAcl = pgTable(
   'doc_acl',
   {
-    docId: uuid('doc_id')
-      .notNull()
-      .references(() => docs.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    canRead: boolean('can_read').notNull().default(true),
-    canWrite: boolean('can_write').notNull().default(true),
+    id:            uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId:   uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    resourceType:  text('resource_type').notNull(), // 'doc' | 'folder' | 'project'
+    resourceId:    uuid('resource_id').notNull(),
+    principalType: text('principal_type').notNull(), // 'user' | 'team' | 'org_role'
+    principalId:   uuid('principal_id').notNull(),
+    permission:    text('permission').notNull(),     // 'read' | 'write' | 'admin' | 'none'
+    createdBy:     uuid('created_by').references(() => users.id),
+    createdAt:     timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt:     timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
   (table) => ({
-    pk: primaryKey({ columns: [table.docId, table.userId] }),
+    uniqueGrant:  unique('doc_acl_resource_principal_uq').on(
+                    table.resourceType, table.resourceId, table.principalType, table.principalId),
+    resourceIdx:  index('idx_doc_acl_resource').on(table.resourceType, table.resourceId),
+    principalIdx: index('idx_doc_acl_principal').on(table.principalType, table.principalId),
+    workspaceIdx: index('idx_doc_acl_workspace').on(table.workspaceId),
   }),
 );
 
