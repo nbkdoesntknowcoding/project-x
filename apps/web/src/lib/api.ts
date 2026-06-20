@@ -162,6 +162,20 @@ export interface ProjectMemberRow {
   joinedAt: string;
 }
 
+// Phase B — Org / IAM.
+export interface FolderAccess { folder_slug: string; permission: 'read' | 'write' | 'admin' | 'none' }
+export interface OrgTeam { id: string; name: string; slug: string; description: string | null; parentTeamId: string | null; color: string | null }
+export interface OrgRole { id: string; name: string; slug: string; teamId: string | null; workspaceRole: string; defaultFolderAccess: FolderAccess[] }
+export interface OrgPerson { userId: string; displayName: string | null; email: string; displayTitle: string | null; roleSlug: string | null; department: string | null; botDisplayName: string | null }
+export interface OrgFolder { id: string; name: string; slug: string | null; folderType: string | null }
+export interface OrgGrant { id: string; resourceType: string; resourceId: string; principalType: string; principalId: string; permission: string }
+export interface OrgAuditEntry { id: string; actorUserId: string | null; action: string; resourceType: string | null; resourceId: string | null; payload: unknown; createdAt: string }
+export interface OrgStructure {
+  teams: Array<{ name: string; slug?: string; parent_slug?: string | null; color?: string }>;
+  roles: Array<{ name: string; slug?: string; team_slug?: string | null; workspace_role?: string; default_folder_access?: FolderAccess[] }>;
+  people: Array<{ name: string; email?: string | null; department?: string | null; job_title?: string | null; manager_email?: string | null; role_slug?: string | null }>;
+}
+
 // Phase 2b — meetings + identity mapping.
 export interface MeetingRow {
   id: string;
@@ -229,6 +243,29 @@ export const api = {
     apiFetch(`/api/members/${userId}/role`, { method: 'PATCH', body: { role } }),
   removeMember: (userId: string): Promise<{ removed: true }> =>
     apiFetch(`/api/members/${userId}`, { method: 'DELETE' }),
+
+  // Phase B — Org structure + IAM
+  orgStructure: (): Promise<{ teams: OrgTeam[]; roles: OrgRole[]; people: OrgPerson[] }> =>
+    apiFetch('/api/org/structure'),
+  orgTeams: (): Promise<{ teams: OrgTeam[] }> => apiFetch('/api/org/teams'),
+  createTeam: (body: { name: string; color?: string }): Promise<{ team: OrgTeam }> =>
+    apiFetch('/api/org/teams', { method: 'POST', body }),
+  deleteTeam: (id: string): Promise<{ ok: true }> => apiFetch(`/api/org/teams/${id}`, { method: 'DELETE' }),
+  orgRoles: (): Promise<{ roles: OrgRole[] }> => apiFetch('/api/org/roles'),
+  createOrgRole: (body: { name: string; teamId?: string | null; workspaceRole?: string; defaultFolderAccess?: FolderAccess[] }): Promise<{ role: OrgRole }> =>
+    apiFetch('/api/org/roles', { method: 'POST', body }),
+  updateOrgRole: (id: string, body: { defaultFolderAccess?: FolderAccess[]; workspaceRole?: string; teamId?: string | null }): Promise<{ role: OrgRole }> =>
+    apiFetch(`/api/org/roles/${id}`, { method: 'PATCH', body }),
+  deleteOrgRole: (id: string): Promise<{ ok: true }> => apiFetch(`/api/org/roles/${id}`, { method: 'DELETE' }),
+  orgFolders: (): Promise<{ folders: OrgFolder[] }> => apiFetch('/api/org/folders'),
+  orgAccess: (): Promise<{ grants: OrgGrant[] }> => apiFetch('/api/org/access'),
+  setOrgAccess: (body: { principalType: 'user' | 'team' | 'org_role'; principalId: string; resourceType?: string; resourceId: string; permission: string }): Promise<{ ok: true }> =>
+    apiFetch('/api/org/access', { method: 'POST', body }),
+  orgAudit: (): Promise<{ entries: OrgAuditEntry[] }> => apiFetch('/api/org/audit'),
+  orgImportExtract: (body: { type: 'description' | 'image'; text?: string; file_url?: string }): Promise<{ import_id: string; extracted_structure: OrgStructure; valid: boolean }> =>
+    apiFetch('/api/org/import/extract', { method: 'POST', body }),
+  orgImportApply: (body: { import_id?: string; confirmed_structure: OrgStructure }): Promise<{ ok: true; created: Record<string, number> }> =>
+    apiFetch('/api/org/import/apply', { method: 'POST', body }),
 
   // Phase 2b — meetings + post-meeting identity mapping
   listMeetings: (): Promise<{ meetings: MeetingRow[] }> => apiFetch('/api/meetings'),
