@@ -21,8 +21,15 @@ export function calendarConfigured(): boolean {
   );
 }
 
-/** The Google consent URL to start the calendar-link flow. */
-export function consentUrl(state: string): string {
+/**
+ * The Google consent URL to start the calendar-link flow.
+ *
+ * `loginHint` (the user's email) is important: without it, when Google can't
+ * resolve a session for the request it routes to its "enter your email"
+ * identifier page (flowName=GeneralOAuthLite), which currently throws a bare
+ * 400. Passing login_hint skips that page and goes straight to consent.
+ */
+export function consentUrl(state: string, loginHint?: string): string {
   const p = new URLSearchParams({
     client_id: config.GOOGLE_CALENDAR_CLIENT_ID!,
     redirect_uri: config.GOOGLE_CALENDAR_REDIRECT_URI!,
@@ -30,9 +37,9 @@ export function consentUrl(state: string): string {
     scope: CAL_SCOPE,
     access_type: 'offline',     // required to receive a refresh_token
     prompt: 'consent',          // force refresh_token even on re-link
-    include_granted_scopes: 'true',
     state,
   });
+  if (loginHint) p.set('login_hint', loginHint);
   return `${AUTH_URL}?${p.toString()}`;
 }
 
