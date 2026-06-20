@@ -89,7 +89,11 @@ export const orgImportRoutes: FastifyPluginAsync = async (app) => {
     }).safeParse(req.body);
     if (!p.success) return reply.code(400).send({ error: 'validation' });
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    // `dangerouslyAllowBrowser` disables the SDK's browser-env guard, which
+    // false-positives on Node >=21 because it now defines a global `navigator`.
+    // This runs server-side only — the key stays in process.env, never shipped
+    // to a real browser — so the flag is safe here.
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, dangerouslyAllowBrowser: true });
     const userContent: OpenAI.Chat.ChatCompletionContentPart[] =
       p.data.type === 'image' && p.data.file_url
         ? [{ type: 'text', text: 'Extract the org chart from this image.' },
