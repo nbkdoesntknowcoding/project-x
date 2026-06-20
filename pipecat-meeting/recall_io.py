@@ -19,7 +19,10 @@ import os
 import json
 import time
 import base64
+import asyncio
 import logging
+
+import httpx
 
 from pipecat.serializers.base_serializer import FrameSerializer
 from pipecat.frames.frames import (
@@ -65,15 +68,71 @@ def _extract_email(p: dict):
     return extra.get("email") or None
 
 
+# ── Roster reporting (Phase 2b capture) ───────────────────────────────────────
+# Report the meeting roster to Mnema so the organizer can map unrecognized
+# attendees afterwards. Authenticated with the bot's own MCP key. Best-effort.
+_MNEMA_API_URL = os.environ.get("MNEMA_API_URL", "").rstrip("/")
+_MNEMA_API_KEY = os.environ.get("MNEMA_API_KEY", "")
+_report_task: "asyncio.Task | None" = None
+
+
+def schedule_roster_report(state: "BotState", ended: bool = False, delay: float = 3.0) -> None:
+    """Debounced fire-and-forget roster report. Coalesces bursts of join/update
+    events into one POST; `ended=True` reports immediately."""
+    global _report_task
+    if _report_task is not None and not _report_task.done():
+        _report_task.cancel()
+    try:
+        _report_task = asyncio.create_task(_delayed_report(state, ended, delay))
+    except RuntimeError:
+        pass  # no running loop (shouldn't happen inside the pipeline)
+
+
+async def _delayed_report(state: "BotState", ended: bool, delay: float) -> None:
+    try:
+        if not ended and delay > 0:
+            await asyncio.sleep(delay)
+    except asyncio.CancelledError:
+        return
+    await report_roster(state, ended)
+
+
+async def report_roster(state: "BotState", ended: bool = False) -> None:
+    if not _MNEMA_API_URL or not _MNEMA_API_KEY or not state.bot_id:
+        return
+    payload = {
+        "recall_bot_id": state.bot_id,
+        "ended": ended,
+        "participants": [
+            {
+                "recall_participant_id": pid,
+                "name": p.get("name"),
+                "email": p.get("email"),
+                "is_host": bool(p.get("is_host")),
+            }
+            for pid, p in state.participants.items()
+        ],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"{_MNEMA_API_URL}/api/_internal/meeting-participants",
+                json=payload,
+                headers={"Authorization": f"Bearer {_MNEMA_API_KEY}"},
+            )
+    except Exception as e:  # noqa: BLE001 — reporting must never break the meeting
+        logger.warning("[recall] roster report failed: %s", e)
+
+
 def current_asker(state: BotState) -> dict:
-    """The participant currently (or most recently) speaking → {email, name}.
+    """The participant currently (or most recently) speaking → {email, name, is_host}.
     Falls back to last_speaker_id because speech_off may fire before STT finalizes
-    the utterance. Empty dict values when no speaker is known (→ backend guest-deny)."""
+    the utterance. Empty values when no speaker is known (→ backend guest-deny)."""
     pid = state.active_speaker_id or state.last_speaker_id
     if not pid:
-        return {"email": None, "name": None}
+        return {"email": None, "name": None, "is_host": False}
     p = state.participants.get(pid) or {}
-    return {"email": p.get("email"), "name": p.get("name")}
+    return {"email": p.get("email"), "name": p.get("name"), "is_host": bool(p.get("is_host"))}
 
 
 class RecallSerializer(FrameSerializer):
@@ -129,6 +188,12 @@ class RecallSerializer(FrameSerializer):
             return
         pid = str(pid)
         st = self._state
+        # Bind the Recall bot id early (also available on participant events) so the
+        # roster reporter has it before audio starts flowing.
+        if st.bot_id is None:
+            bot = d.get("bot") or {}
+            if bot.get("id"):
+                st.bot_id = bot.get("id")
         if event in ("participant_events.join", "participant_events.update"):
             existing = st.participants.get(pid, {})
             name = p.get("name") or existing.get("name")
@@ -141,6 +206,7 @@ class RecallSerializer(FrameSerializer):
                 "[recall] participant %s name=%s email=%s host=%s",
                 pid, name, "yes" if email else "no", is_host,
             )
+            schedule_roster_report(st)
         elif event == "participant_events.speech_on":
             st.active_speaker_id = pid
             st.last_speaker_id = pid
@@ -151,6 +217,7 @@ class RecallSerializer(FrameSerializer):
             st.participants.pop(pid, None)
             if st.active_speaker_id == pid:
                 st.active_speaker_id = None
+            schedule_roster_report(st)
 
 
 class InputGate(FrameProcessor):

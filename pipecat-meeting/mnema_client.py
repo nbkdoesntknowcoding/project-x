@@ -67,10 +67,22 @@ class MnemaMCP:
             asker = current_asker(self._state)
             email = (asker.get("email") or "").strip()
             name = (asker.get("name") or "").strip()
+            is_host = bool(asker.get("is_host"))
+            # Always send name + host alongside email so the server can fall back
+            # (email → alias → host→organizer) within one resolution.
+            headers: dict = {}
+            key_parts = []
             if email:
-                return f"email:{email.lower()}", {"X-Mnema-Act-As-Email": email}
+                headers["X-Mnema-Act-As-Email"] = email
+                key_parts.append(f"e:{email.lower()}")
             if name:
-                return f"name:{name.lower()}", {"X-Mnema-Act-As-Name": name}
+                headers["X-Mnema-Act-As-Name"] = name
+                key_parts.append(f"n:{name.lower()}")
+            if is_host:
+                headers["X-Mnema-Act-As-Host"] = "true"
+                key_parts.append("host")
+            if headers:
+                return "|".join(key_parts), headers
         return "guest", {}
 
     async def _ensure(self, key: str, extra_headers: dict) -> ClientSession:

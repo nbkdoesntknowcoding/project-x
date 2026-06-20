@@ -68,6 +68,7 @@ from recall_io import (
     WebOutputProcessor,
     register_output_ws,
     unregister_output_ws,
+    report_roster,
     RECALL_INPUT_SAMPLE_RATE,
     OUTPUT_SAMPLE_RATE,
 )
@@ -319,6 +320,11 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     try:
         await runner.run(task)
     finally:
+        # Final roster snapshot (marks the meeting ended) before tearing down.
+        try:
+            await report_roster(state, ended=True)
+        except Exception:  # noqa: BLE001
+            pass
         await mnema.aclose()
     logger.info("[meeting-pipeline] finished")
 

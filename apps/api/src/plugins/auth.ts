@@ -20,6 +20,9 @@ const PUBLIC_ROUTES = new Set<string>([
   // Pre-launch waitlist capture — called server-side by the web proxy with the
   // internal_secret (WORKOS_COOKIE_PASSWORD); no user JWT involved.
   '/api/_internal/waitlist',
+  // Meeting bot reports its roster here, authenticated with its own mnema_api_ key
+  // (resolved inside the handler) rather than a user JWT.
+  '/api/_internal/meeting-participants',
   // Phase 4.1 — invitation preview must work BEFORE the invitee signs in,
   // so the accept page can show "X invited you to Y" without forcing
   // auth-first. The endpoint only reveals workspace name + inviter, never

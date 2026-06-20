@@ -20,6 +20,11 @@ import { mcpTokens, participantAliases, users, workspaceMembers, workspaces } fr
 // attendees with no resolvable email.
 const ACT_AS_EMAIL_HEADER = 'x-mnema-act-as-email';
 const ACT_AS_NAME_HEADER = 'x-mnema-act-as-name';
+// When the asking participant is the meeting HOST and couldn't be resolved by email
+// or alias, fall back to the act-as key's creator (the organizer who owns the bot).
+// This guarantees the meeting organizer always gets their own access even without a
+// calendar email or a saved alias. (Phase 4 will validate the host claim server-side.)
+const ACT_AS_HOST_HEADER = 'x-mnema-act-as-host';
 
 // A guest (a meeting attendee with no matching Mnema user) must get NOTHING from
 // the knowledge base. Scoping the session to this impossible project makes the RLS
@@ -215,13 +220,18 @@ async function handleMcpRequest(req: FastifyRequest, reply: FastifyReply): Promi
     };
     const assertedEmail = hdr(ACT_AS_EMAIL_HEADER);
     const assertedName = hdr(ACT_AS_NAME_HEADER);
+    const isHost = hdr(ACT_AS_HOST_HEADER) === 'true';
 
-    // Email first (calendar-matched attendee), then a saved name alias.
+    // Resolution order: email (calendar match) → saved name alias → host falls back
+    // to the key's organizer → guest.
     let resolved = assertedEmail
       ? await resolveActAsUser(oauthCtx.workspaceId, assertedEmail)
       : null;
     if (!resolved && assertedName) {
       resolved = await resolveActAsAlias(oauthCtx.workspaceId, assertedName);
+    }
+    if (!resolved && isHost) {
+      resolved = oauthCtx.userId; // the act-as key's creator = the organizer
     }
 
     if (resolved) {

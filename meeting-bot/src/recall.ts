@@ -75,6 +75,7 @@ export async function createBot(meetingUrl: string): Promise<CreateBotResult> {
             'audio_mixed_raw.data',
             'participant_events.join',
             'participant_events.update',
+            'participant_events.leave',
             'participant_events.speech_on',
             'participant_events.speech_off',
           ],

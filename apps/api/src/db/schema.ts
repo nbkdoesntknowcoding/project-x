@@ -263,6 +263,52 @@ export const participantAliases = pgTable(
   }),
 );
 
+/**
+ * A meeting the bot attended (Phase 2b capture). Keyed by the Recall bot id so the
+ * bot can upsert it. organizer_user_id = the act-as key's creator (who the host
+ * resolves to). Used to surface unrecognized attendees for post-meeting mapping.
+ */
+export const meetings = pgTable(
+  'meetings',
+  {
+    id:              uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId:     uuid('workspace_id').notNull()
+                     .references(() => workspaces.id, { onDelete: 'cascade' }),
+    recallBotId:     text('recall_bot_id').notNull().unique(),
+    organizerUserId: uuid('organizer_user_id').references(() => users.id, { onDelete: 'set null' }),
+    meetingUrl:      text('meeting_url'),
+    startedAt:       timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    endedAt:         timestamp('ended_at', { withTimezone: true }),
+  },
+  (table) => ({
+    workspaceIdx: index('meetings_workspace_idx').on(table.workspaceId),
+  }),
+);
+
+/**
+ * One attendee seen in a meeting (Phase 2b). resolved_user_id = the Mnema user the
+ * bot resolved them to (via email or saved alias) at capture time; NULL = the
+ * organizer still needs to map them. Mapping writes a [[participant_aliases]] row
+ * and back-fills this column.
+ */
+export const meetingParticipants = pgTable(
+  'meeting_participants',
+  {
+    id:                 uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    meetingId:          uuid('meeting_id').notNull()
+                        .references(() => meetings.id, { onDelete: 'cascade' }),
+    recallParticipantId: text('recall_participant_id').notNull(),
+    name:               text('name'),
+    email:              text('email'),
+    isHost:             boolean('is_host').notNull().default(false),
+    resolvedUserId:     uuid('resolved_user_id').references(() => users.id, { onDelete: 'set null' }),
+  },
+  (table) => ({
+    uniqueParticipant: unique('meeting_participants_uq').on(table.meetingId, table.recallParticipantId),
+    meetingIdx:        index('meeting_participants_meeting_idx').on(table.meetingId),
+  }),
+);
+
 export const folders = pgTable(
   'folders',
   {
