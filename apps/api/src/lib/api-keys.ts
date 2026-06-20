@@ -19,7 +19,7 @@ export function generateApiKey(): { plaintext: string; hash: string; prefix: str
 
 export async function resolveApiKey(
   bearerToken: string,
-): Promise<{ userId: string; workspaceId: string; projectId: string | null; scopes: string[] } | null> {
+): Promise<{ userId: string; workspaceId: string; projectId: string | null; actAsUser: boolean; scopes: string[] } | null> {
   if (!bearerToken?.startsWith('mnema_api_')) return null;
 
   const hash = crypto.createHash('sha256').update(bearerToken).digest('hex');
@@ -48,6 +48,7 @@ export async function resolveApiKey(
     userId: key.createdBy,
     workspaceId: key.workspaceId,
     projectId: key.projectId ?? null,
+    actAsUser: key.actAsUser ?? false,
     scopes: key.scopes,
   };
 }

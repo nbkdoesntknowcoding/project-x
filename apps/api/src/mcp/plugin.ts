@@ -8,9 +8,46 @@ import { mcpConfig } from './config.js';
 import { McpForbiddenError } from './scope.js';
 import { createMcpServer } from './server.js';
 import { handleStreamableHttp } from './transport.js';
+import { and } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { tenantScopeStore } from '../db/with-tenant.js';
-import { mcpTokens, workspaces } from '../db/schema.js';
+import { mcpTokens, users, workspaceMembers, workspaces } from '../db/schema.js';
+
+// Meeting identity (Phase 1). Header an act-as key sets per request to name the
+// participant currently asking. The server resolves it to a workspace user and
+// enforces that user's access. Lower-case — Fastify normalizes header names.
+const ACT_AS_EMAIL_HEADER = 'x-mnema-act-as-email';
+
+// A guest (a meeting attendee with no matching Mnema user) must get NOTHING from
+// the knowledge base. Scoping the session to this impossible project makes the RLS
+// predicate app_can_see_project() false for every row (it requires project_id to
+// equal this id, and nothing — not even unfiled/NULL — matches). Pure deny.
+const GUEST_DENY_PROJECT = '00000000-0000-0000-0000-000000000000';
+
+/**
+ * Resolve an asserted participant email to a user who is a member of `workspaceId`.
+ * Returns null if the email isn't a Mnema user in this workspace (→ treated as a
+ * guest). Bounded to the key's workspace so an act-as key can never reach users of
+ * another tenant.
+ */
+async function resolveActAsUser(
+  workspaceId: string,
+  email: string,
+): Promise<string | null> {
+  const rows = await db
+    .select({ userId: users.id })
+    .from(users)
+    .innerJoin(
+      workspaceMembers,
+      and(
+        eq(workspaceMembers.userId, users.id),
+        eq(workspaceMembers.workspaceId, workspaceId),
+      ),
+    )
+    .where(eq(users.email, email.trim())) // users.email is citext → case-insensitive
+    .limit(1);
+  return rows[0]?.userId ?? null;
+}
 
 declare module 'fastify' {
   interface FastifyContextConfig {
@@ -138,36 +175,64 @@ async function handleMcpRequest(req: FastifyRequest, reply: FastifyReply): Promi
     workspaceMode = undefined;
   }
 
+  // Meeting identity (Phase 1): resolve the effective principal for THIS request.
+  // For an act-as key, the asking participant is named in the X-Mnema-Act-As-Email
+  // header; we resolve it to a workspace user and answer as THEM. No header or an
+  // unrecognized email → guest → denied all knowledge (scoped to an impossible
+  // project). For every other token, the principal is just the token's own user.
+  let effectiveUserId: string | null = oauthCtx.userId;
+  let effectiveProjectScope: string | null = oauthCtx.projectId;
+
+  if (oauthCtx.actAsUser) {
+    const rawEmail = req.headers[ACT_AS_EMAIL_HEADER];
+    const assertedEmail = Array.isArray(rawEmail) ? rawEmail[0] : rawEmail;
+    const resolved = assertedEmail
+      ? await resolveActAsUser(oauthCtx.workspaceId, assertedEmail)
+      : null;
+    if (resolved) {
+      // Answer as the identified participant — their per-user RLS access applies.
+      effectiveUserId = resolved;
+      effectiveProjectScope = null;
+    } else {
+      // Guest / unidentified speaker → no knowledge at all.
+      effectiveUserId = null;
+      effectiveProjectScope = GUEST_DENY_PROJECT;
+      req.log.info(
+        { assertedEmail: assertedEmail ?? null },
+        'mcp: act-as principal unresolved → guest deny',
+      );
+    }
+  }
+
   const authCtx = {
-    user_id: oauthCtx.userId,
+    user_id: effectiveUserId ?? oauthCtx.userId,
     tenant_id: oauthCtx.workspaceId,
     email: '',  // not available on OAuth tokens; tools don't use it
     scopes: oauthCtx.scope,
     jwt_id: oauthCtx.jti,
     workspaceMode,
-    project_id: oauthCtx.projectId,
+    project_id: effectiveProjectScope,
   };
 
   // 6. Build per-request server with the verified context captured in
   //    its handler closures. This is the only safe place to bind ctx.
   const server = createMcpServer(authCtx);
 
-  // Stage B activation: set the request-scoped tenant scope ONCE here so every
-  // withTenant() inside any tool handler inherits the project-aware RLS predicate
-  // without touching the 29 call sites.
+  // Set the request-scoped tenant scope ONCE here so every withTenant() inside any
+  // tool handler inherits the project-aware RLS predicate without touching the 29
+  // call sites.
   //   • userId       (= app.user_id)       → per-user project-membership RLS.
-  //   • projectScope (= app.project_scope) → set ONLY for a project-scoped API key
-  //                  (the meeting bot); when present it short-circuits the predicate
-  //                  to that one project, ignoring userId — the "don't blabber" bound.
+  //   • projectScope (= app.project_scope) → set for a project-scoped key (bot bound
+  //                  to one project) OR the guest-deny sentinel; short-circuits the
+  //                  predicate, ignoring userId.
   //
   // Safe by construction: unfiled docs (project_id NULL) stay visible to every
   // workspace member, and workspace owners/editors are admins (app_is_workspace_admin)
   // who see all projects. Only docs explicitly FILED into a project are restricted
-  // to that project's members — which is exactly the authorization B5 adds, with the
-  // Members UI to grant it.
+  // to that project's members.
   try {
     await tenantScopeStore.run(
-      { userId: oauthCtx.userId, projectScope: oauthCtx.projectId },
+      { userId: effectiveUserId, projectScope: effectiveProjectScope },
       () => handleStreamableHttp(req, reply, server),
     );
   } catch (err) {

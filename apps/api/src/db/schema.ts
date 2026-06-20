@@ -1016,6 +1016,13 @@ export const apiKeys = pgTable(
     // (regardless of creator) — this is what hard-bounds the meeting bot. NULL =
     // workspace-wide key (acts as its creator's access).
     projectId:   uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    // Meeting identity (Phase 1): when true, this key may assert the asking
+    // principal per request via the X-Mnema-Act-As-Email header. The server
+    // resolves that email → a workspace user and enforces THAT user's access for
+    // the call — how the meeting bot answers scoped to whoever is speaking. A
+    // guest (no matching Mnema user) is denied all knowledge. Pairs with a NULL
+    // projectId (per-user identity, not a single fixed project).
+    actAsUser:   boolean('act_as_user').notNull().default(false),
     name:        text('name').notNull(),
     // SHA-256 of plaintext key. Format: mnema_api_ + 48 random hex chars.
     keyHash:     text('key_hash').notNull().unique(),

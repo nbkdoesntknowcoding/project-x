@@ -21,6 +21,10 @@ export interface OAuthContext {
   /** Stage B: set ONLY for a project-scoped API key — hard-bounds the session
    *  (and the meeting bot) to this one project. null = workspace-wide. */
   projectId: string | null;
+  /** Meeting identity (Phase 1): true only for an act-as key. When set, the MCP
+   *  boundary resolves the X-Mnema-Act-As-Email header → a workspace user and
+   *  enforces that user's access per request (per-asker meeting scoping). */
+  actAsUser: boolean;
   scope: string[];
   clientId: string;
   jti: string | null;
@@ -64,6 +68,7 @@ export async function requireOAuthBearer(
         workspaceId: apiKeyCtx.workspaceId,
         // Project-scoped key → hard-bounds this session (the meeting bot) to one project.
         projectId: apiKeyCtx.projectId,
+        actAsUser: apiKeyCtx.actAsUser,
         scope: expandApiKeyScopes(apiKeyCtx.scopes),
         clientId: 'api-key',
         jti: null,
@@ -102,6 +107,7 @@ export async function requireOAuthBearer(
       userId: p.sub,
       workspaceId: p.workspace_id,
       projectId: null, // OAuth tokens are workspace-wide; per-user RLS bounds them.
+      actAsUser: false,
       scope: [...expanded],
       clientId: p.client_id,
       jti: p.jti ?? null,
@@ -117,6 +123,7 @@ export async function requireOAuthBearer(
       userId: legacyCtx.user_id,
       workspaceId: legacyCtx.tenant_id,
       projectId: null,
+      actAsUser: false,
       scope: legacyCtx.scopes,
       clientId: 'claude-desktop-legacy',
       jti: legacyCtx.jwt_id,
