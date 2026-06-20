@@ -11,12 +11,15 @@ import { handleStreamableHttp } from './transport.js';
 import { and } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { tenantScopeStore } from '../db/with-tenant.js';
-import { mcpTokens, users, workspaceMembers, workspaces } from '../db/schema.js';
+import { mcpTokens, participantAliases, users, workspaceMembers, workspaces } from '../db/schema.js';
 
-// Meeting identity (Phase 1). Header an act-as key sets per request to name the
-// participant currently asking. The server resolves it to a workspace user and
-// enforces that user's access. Lower-case — Fastify normalizes header names.
+// Meeting identity. Headers an act-as key sets per request to name the participant
+// currently asking. The server resolves to a workspace user and enforces that
+// user's access. Lower-case — Fastify normalizes header names. Email is tried
+// first (calendar-matched attendees); name is the fallback (saved alias) for
+// attendees with no resolvable email.
 const ACT_AS_EMAIL_HEADER = 'x-mnema-act-as-email';
+const ACT_AS_NAME_HEADER = 'x-mnema-act-as-name';
 
 // A guest (a meeting attendee with no matching Mnema user) must get NOTHING from
 // the knowledge base. Scoping the session to this impossible project makes the RLS
@@ -45,6 +48,28 @@ async function resolveActAsUser(
       ),
     )
     .where(eq(users.email, email.trim())) // users.email is citext → case-insensitive
+    .limit(1);
+  return rows[0]?.userId ?? null;
+}
+
+/**
+ * Fallback resolution: map a participant's display NAME to a workspace user via a
+ * saved alias (participant_aliases). Used for attendees with no resolvable email.
+ * Bounded to the key's workspace. Returns null if no alias exists (→ guest).
+ */
+async function resolveActAsAlias(
+  workspaceId: string,
+  name: string,
+): Promise<string | null> {
+  const rows = await db
+    .select({ userId: participantAliases.userId })
+    .from(participantAliases)
+    .where(
+      and(
+        eq(participantAliases.workspaceId, workspaceId),
+        eq(participantAliases.displayName, name.trim()), // citext → case-insensitive
+      ),
+    )
     .limit(1);
   return rows[0]?.userId ?? null;
 }
@@ -184,11 +209,21 @@ async function handleMcpRequest(req: FastifyRequest, reply: FastifyReply): Promi
   let effectiveProjectScope: string | null = oauthCtx.projectId;
 
   if (oauthCtx.actAsUser) {
-    const rawEmail = req.headers[ACT_AS_EMAIL_HEADER];
-    const assertedEmail = Array.isArray(rawEmail) ? rawEmail[0] : rawEmail;
-    const resolved = assertedEmail
+    const hdr = (name: string): string | undefined => {
+      const raw = req.headers[name];
+      return Array.isArray(raw) ? raw[0] : raw;
+    };
+    const assertedEmail = hdr(ACT_AS_EMAIL_HEADER);
+    const assertedName = hdr(ACT_AS_NAME_HEADER);
+
+    // Email first (calendar-matched attendee), then a saved name alias.
+    let resolved = assertedEmail
       ? await resolveActAsUser(oauthCtx.workspaceId, assertedEmail)
       : null;
+    if (!resolved && assertedName) {
+      resolved = await resolveActAsAlias(oauthCtx.workspaceId, assertedName);
+    }
+
     if (resolved) {
       // Answer as the identified participant — their per-user RLS access applies.
       effectiveUserId = resolved;
@@ -198,7 +233,7 @@ async function handleMcpRequest(req: FastifyRequest, reply: FastifyReply): Promi
       effectiveUserId = null;
       effectiveProjectScope = GUEST_DENY_PROJECT;
       req.log.info(
-        { assertedEmail: assertedEmail ?? null },
+        { assertedEmail: assertedEmail ?? null, assertedName: assertedName ?? null },
         'mcp: act-as principal unresolved → guest deny',
       );
     }

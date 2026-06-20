@@ -46,6 +46,34 @@ class BotState:
         # monotonic time until which the bot is considered "speaking" — used by
         # InputGate to mute the (echoing) mixed input so the bot doesn't hear itself.
         self.speaking_until: float = 0.0
+        # Meeting identity (Phase 2): roster + active speaker, fed by Recall
+        # participant_events. participants: id -> {"name", "email", "is_host"}.
+        # email is only present for calendar-matched attendees (may arrive late via
+        # participant_events.update). last_speaker_id keeps the most recent speaker so
+        # we can still attribute an utterance after speech_off has fired.
+        self.participants: dict[str, dict] = {}
+        self.active_speaker_id: str | None = None
+        self.last_speaker_id: str | None = None
+
+
+def _extract_email(p: dict):
+    """Pull an email from a Recall participant object, checking the common nests."""
+    email = p.get("email")
+    if email:
+        return email
+    extra = p.get("extra_data") or {}
+    return extra.get("email") or None
+
+
+def current_asker(state: BotState) -> dict:
+    """The participant currently (or most recently) speaking → {email, name}.
+    Falls back to last_speaker_id because speech_off may fire before STT finalizes
+    the utterance. Empty dict values when no speaker is known (→ backend guest-deny)."""
+    pid = state.active_speaker_id or state.last_speaker_id
+    if not pid:
+        return {"email": None, "name": None}
+    p = state.participants.get(pid) or {}
+    return {"email": p.get("email"), "name": p.get("name")}
 
 
 class RecallSerializer(FrameSerializer):
@@ -67,9 +95,15 @@ class RecallSerializer(FrameSerializer):
             msg = json.loads(data)
         except Exception:  # noqa: BLE001
             return None
-        if msg.get("event") != "audio_mixed_raw.data":
-            return None
+        event = msg.get("event")
         d = msg.get("data", {}) or {}
+        # Meeting identity (Phase 2): participant join/update build the roster;
+        # speech_on/off track the active speaker. These produce no audio frame.
+        if event and event.startswith("participant_events."):
+            self._handle_participant_event(event, d)
+            return None
+        if event != "audio_mixed_raw.data":
+            return None
         if self._state.cid is None:
             bot = d.get("bot") or {}
             meta = bot.get("metadata") or {}
@@ -85,6 +119,38 @@ class RecallSerializer(FrameSerializer):
         return InputAudioRawFrame(
             audio=pcm, sample_rate=RECALL_INPUT_SAMPLE_RATE, num_channels=1
         )
+
+    def _handle_participant_event(self, event: str, d: dict) -> None:
+        # Recall nests the real payload under data.data (same as audio's data.data.buffer).
+        inner = d.get("data") or {}
+        p = inner.get("participant") or {}
+        pid = p.get("id")
+        if pid is None:
+            return
+        pid = str(pid)
+        st = self._state
+        if event in ("participant_events.join", "participant_events.update"):
+            existing = st.participants.get(pid, {})
+            name = p.get("name") or existing.get("name")
+            email = _extract_email(p) or existing.get("email")
+            is_host = p.get("is_host")
+            if is_host is None:
+                is_host = existing.get("is_host")
+            st.participants[pid] = {"name": name, "email": email, "is_host": is_host}
+            logger.info(
+                "[recall] participant %s name=%s email=%s host=%s",
+                pid, name, "yes" if email else "no", is_host,
+            )
+        elif event == "participant_events.speech_on":
+            st.active_speaker_id = pid
+            st.last_speaker_id = pid
+        elif event == "participant_events.speech_off":
+            if st.active_speaker_id == pid:
+                st.active_speaker_id = None
+        elif event == "participant_events.leave":
+            st.participants.pop(pid, None)
+            if st.active_speaker_id == pid:
+                st.active_speaker_id = None
 
 
 class InputGate(FrameProcessor):

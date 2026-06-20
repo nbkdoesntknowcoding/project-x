@@ -259,8 +259,9 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         api_key=os.environ["OPENAI_API_KEY"],
         model=os.environ.get("OPENAI_LLM_MODEL", "gpt-4o-mini"),
     )
-    # One persistent Mnema MCP session per meeting (low latency for per-turn search).
-    mnema = MnemaMCP()
+    # Per-asker Mnema MCP sessions (meeting identity): MnemaMCP reads the active
+    # speaker from BotState and answers each call scoped to that participant.
+    mnema = MnemaMCP(state)
     register_mnema_tools(llm, mnema)
 
     # ── TTS — ElevenLabs cloned voice, streaming PCM for the Output Media webpage ──

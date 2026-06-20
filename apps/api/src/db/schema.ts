@@ -237,6 +237,32 @@ export const projectMembers = pgTable(
   }),
 );
 
+/**
+ * Meeting identity (Phase 2) — a saved mapping from a meeting participant's
+ * display NAME to a Mnema user, within a workspace. Used as the fallback when a
+ * meeting attendee has no resolvable email (no calendar link): the bot asserts
+ * the speaker's name (X-Mnema-Act-As-Name) and the MCP boundary resolves it here.
+ * Rows are created when an organizer maps an unrecognized attendee post-meeting.
+ * display_name is citext → the unique index is case-insensitive per workspace.
+ */
+export const participantAliases = pgTable(
+  'participant_aliases',
+  {
+    id:          uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId: uuid('workspace_id').notNull()
+                 .references(() => workspaces.id, { onDelete: 'cascade' }),
+    displayName: citext('display_name').notNull(),
+    userId:      uuid('user_id').notNull()
+                 .references(() => users.id, { onDelete: 'cascade' }),
+    createdBy:   uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    uniqueName:  unique('participant_aliases_ws_name_uq').on(table.workspaceId, table.displayName),
+    workspaceIdx: index('participant_aliases_workspace_idx').on(table.workspaceId),
+  }),
+);
+
 export const folders = pgTable(
   'folders',
   {

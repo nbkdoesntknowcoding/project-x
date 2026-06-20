@@ -66,7 +66,18 @@ export async function createBot(meetingUrl: string): Promise<CreateBotResult> {
         {
           type: 'websocket',
           url: AUDIO_WSS,
-          events: ['audio_mixed_raw.data'],
+          // audio_mixed_raw.data → the audio the pipeline transcribes.
+          // participant_events.* → meeting identity (Phase 2): join/update carry
+          // each attendee's name (+ email when calendar-matched); speech_on/off are
+          // the active-speaker signal. pipecat correlates the active speaker at
+          // utterance time to answer scoped to whoever is asking.
+          events: [
+            'audio_mixed_raw.data',
+            'participant_events.join',
+            'participant_events.update',
+            'participant_events.speech_on',
+            'participant_events.speech_off',
+          ],
         },
       ],
     },

@@ -218,6 +218,13 @@
       "when": 1781280000005,
       "tag": "0030_api_key_act_as_user",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1781280000006,
+      "tag": "0031_participant_aliases",
+      "breakpoints": true
     }
   ]
 }
