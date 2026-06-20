@@ -59,10 +59,20 @@ export const recallWebhookRoutes: FastifyPluginAsync = async (app) => {
     const p = (inner.participant as Record<string, unknown>) ?? {};
     const botId = ((d.bot as Record<string, unknown> | undefined)?.id as string) ?? undefined;
     const pid = p.id != null ? String(p.id) : null;
-    if (!botId || !pid) return reply.code(200).send({ ok: true });
+    if (!botId || !pid) {
+      // Help diagnose payload-nesting mismatches without dumping PII.
+      req.log.info(
+        { event, botId: botId ?? null, dKeys: Object.keys(d), innerKeys: Object.keys(inner) },
+        'recall-webhook: missing bot/participant id (check nesting)',
+      );
+      return reply.code(200).send({ ok: true });
+    }
 
     const meeting = await db.query.meetings.findFirst({ where: eq(meetings.recallBotId, botId) });
-    if (!meeting) return reply.code(200).send({ ok: true, pending: true });
+    if (!meeting) {
+      req.log.info({ event, botId }, 'recall-webhook: meeting row not found yet (pending)');
+      return reply.code(200).send({ ok: true, pending: true });
+    }
 
     // leave keeps the historical row; only join/update carry identity.
     if (event === 'participant_events.leave') return reply.code(200).send({ ok: true });
@@ -71,6 +81,10 @@ export const recallWebhookRoutes: FastifyPluginAsync = async (app) => {
     const email = (extractEmail(p) ?? '').trim() || null;
     const isHost = Boolean(p.is_host);
     const resolvedUserId = await resolveAttendee(meeting.workspaceId, email, name);
+    req.log.info(
+      { event, pid, name, isHost, email: email ? 'yes' : 'no', resolved: !!resolvedUserId },
+      'recall-webhook: verified participant',
+    );
 
     await db
       .insert(meetingParticipants)

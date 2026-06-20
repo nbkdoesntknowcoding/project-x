@@ -10,6 +10,26 @@ import { createBot, leaveBot } from './recall';
 const app = express();
 app.use(express.json());
 
+const MNEMA_API_URL = (process.env.MNEMA_API_URL ?? '').replace(/\/+$/, '');
+const MNEMA_API_KEY = process.env.MNEMA_API_KEY ?? '';
+
+// Create the meeting row immediately at join time (before Recall enters the call),
+// authenticated with the bot's Mnema key → establishes recall_bot_id ↔ workspace +
+// organizer. This MUST exist before Recall's participant webhooks arrive, so the
+// signature-verified roster (Phase 4) can attach to it. Best-effort; never blocks join.
+async function ensureMeetingRow(botId: string, meetingUrl: string): Promise<void> {
+  if (!MNEMA_API_URL || !MNEMA_API_KEY) return;
+  try {
+    await fetch(`${MNEMA_API_URL}/api/_internal/meeting-participants`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MNEMA_API_KEY}` },
+      body: JSON.stringify({ recall_bot_id: botId, meeting_url: meetingUrl, participants: [] }),
+    });
+  } catch (err) {
+    console.error('[MeetingBot] ensureMeetingRow failed:', err);
+  }
+}
+
 app.get('/health', (_req, res) => res.json({ status: 'ok', backend: 'recall' }));
 
 // POST /join — { meetingUrl } (meetingPlatform optional; Recall detects it from the URL)
@@ -19,6 +39,7 @@ app.post('/join', async (req, res) => {
   try {
     const bot = await createBot(meetingUrl);
     console.log('[MeetingBot] Recall bot created:', bot.id, 'for', meetingUrl);
+    await ensureMeetingRow(bot.id, meetingUrl);
     res.json({ success: true, botId: bot.id });
   } catch (err) {
     console.error('[MeetingBot] join failed:', err);
