@@ -3,7 +3,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config/env.js';
 import { db } from '../db/index.js';
-import { invitations, users, workspaceMembers, workspaces } from '../db/schema.js';
+import { invitations, orgRoles, teams, users, workspaceMembers, workspaces } from '../db/schema.js';
 import { withSystemPrivilege } from '../db/with-system-privilege.js';
 import { withTenant } from '../db/with-tenant.js';
 import { enforceRateLimit } from '../lib/auth-rate-limit.js';
@@ -161,6 +161,22 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
     const inviterName =
       inviterRows[0]?.displayName || inviterRows[0]?.email || 'A teammate';
     const acceptUrl = `${config.WEB_BASE_URL}/invite/${token}`;
+
+    // Phase B: show the role/team in the email. Use the org role name when present,
+    // otherwise the plain workspace role.
+    let roleName: string = parsed.data.role;
+    let teamName = '—';
+    if (parsed.data.org_role_id) {
+      const orgRoleRow = await db.query.orgRoles.findFirst({ where: eq(orgRoles.id, parsed.data.org_role_id) });
+      if (orgRoleRow) {
+        roleName = orgRoleRow.name;
+        if (orgRoleRow.teamId) {
+          const t = await db.query.teams.findFirst({ where: eq(teams.id, orgRoleRow.teamId) });
+          teamName = t?.name ?? '—';
+        }
+      }
+    }
+
     // Enqueue via BullMQ so the HTTP response returns immediately.
     await emailQueue.add('invitation', {
       type: 'invitation',
@@ -169,6 +185,8 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
         inviterName,
         workspaceName: wsRows[0]?.name ?? 'a workspace',
         acceptUrl,
+        roleName,
+        teamName,
       },
     });
 

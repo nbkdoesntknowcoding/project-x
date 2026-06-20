@@ -63,10 +63,13 @@ table, td, h1, p, a { font-family: Arial, Helvetica, sans-serif !important; }
               <tr><td>
                 <h1 class="mnema-heading" style="margin:0;padding:0;font-family:'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;font-size:36px;line-height:1.1;font-weight:700;letter-spacing:-0.02em;color:#1A1A1A;">You've been invited.</h1>
               </td></tr>
-              <tr><td style="padding:20px 0 28px 0;font-family:'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;font-size:16px;line-height:1.55;color:#1A1A1A;font-weight:400;">
-                <strong>{{inviter_name}}</strong> has added you to <strong>{{workspace_name}}</strong> on Mnema. Accept to join the workspace.
+              <tr><td style="padding:20px 0 16px 0;font-family:'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;font-size:16px;line-height:1.55;color:#1A1A1A;font-weight:400;">
+                <strong>{{inviter_name}}</strong> has added you to <strong>{{workspace_name}}</strong> on Mnema. Your access is pre-configured — accept to join.
               </td></tr>
-              
+              <tr><td style="padding:0 0 28px 0;font-family:'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;font-size:14px;line-height:1.7;color:#4A4A44;font-weight:400;">
+                Your role: <strong>{{role_name}}</strong><br/>Your team: <strong>{{team_name}}</strong>
+              </td></tr>
+
               <tr><td style="padding:0 0 4px 0;">
                 <!-- CTA button (table-based for Outlook) -->
                 <table role="presentation" cellspacing="0" cellpadding="0" border="0">

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { config } from '../../config/env.js';
 import { db } from '../../db/index.js';
 import { invitations, users, workspaceMembers, workspaces } from '../../db/schema.js';
+import { provisionOrgProfile } from '../../lib/iam-policy-factory.js';
 import { withSystemPrivilege } from '../../db/with-system-privilege.js';
 import { signJwt } from '../../lib/jwt.js';
 import { scopesForRole } from '../../lib/scopes.js';
@@ -71,6 +72,8 @@ export const acceptInvitePendingRoutes: FastifyPluginAsync = async (app) => {
           acceptedAt: invitations.acceptedAt,
           revokedAt: invitations.revokedAt,
           expiresAt: invitations.expiresAt,
+          orgRoleId: invitations.orgRoleId,
+          displayTitle: invitations.displayTitle,
         })
         .from(invitations)
         .where(eq(invitations.tokenJti, claims.jti))
@@ -96,12 +99,33 @@ export const acceptInvitePendingRoutes: FastifyPluginAsync = async (app) => {
         .set({ acceptedAt: new Date(), acceptedBy: user_id })
         .where(eq(invitations.id, row.id));
 
-      return { workspace_id: row.workspaceId, role: row.role, invited_by: row.invitedBy };
+      return {
+        workspace_id: row.workspaceId,
+        role: row.role,
+        invited_by: row.invitedBy,
+        org_role_id: row.orgRoleId,
+        display_title: row.displayTitle,
+      };
     });
 
     if ('error' in result) {
       const status = result.error === 'not_found' ? 404 : 410;
       return reply.code(status).send({ error: result.error });
+    }
+
+    // Phase B: provision org identity if the invite carried an org_role (best-effort).
+    if (result.org_role_id) {
+      try {
+        await provisionOrgProfile({
+          userId: user_id,
+          workspaceId: result.workspace_id,
+          orgRoleId: result.org_role_id,
+          actorUserId: user_id,
+          displayTitle: result.display_title,
+        });
+      } catch (err) {
+        app.log.warn({ err }, 'pending-invite accept: provisionOrgProfile failed (membership still granted)');
+      }
     }
 
     const jwt = await signJwt({

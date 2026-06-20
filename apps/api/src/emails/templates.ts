@@ -29,6 +29,8 @@ export interface WorkspaceInvitationParams {
   inviterName: string;      // {{inviter_name}}
   workspaceName: string;    // {{workspace_name}}
   acceptUrl: string;        // {{accept_url}}
+  roleName?: string;        // {{role_name}}  — Phase B: org role / workspace role
+  teamName?: string;        // {{team_name}}  — Phase B: team, or '—'
 }
 
 export interface InvitationAcceptedParams {
@@ -113,6 +115,8 @@ export function workspaceInvitationEmail(p: WorkspaceInvitationParams) {
       inviter_name: p.inviterName,
       workspace_name: p.workspaceName,
       accept_url: p.acceptUrl,
+      role_name: p.roleName ?? 'Member',
+      team_name: p.teamName ?? '—',
       unsubscribe_url: UNSUBSCRIBE_URL,
     }),
   };

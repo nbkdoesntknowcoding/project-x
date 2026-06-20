@@ -198,10 +198,10 @@ export const orgImportRoutes: FastifyPluginAsync = async (app) => {
         if (!person.email) continue;
         const email = person.email.trim().toLowerCase();
         const orgRoleId = person.role_slug ? roleIdBySlug.get(person.role_slug) ?? null : null;
-        const wsRole = (orgRoleId && roleSpecs.find((r) => (r.slug || slugify(r.name)) === person.role_slug)?.workspace_role) || 'editor';
-        const teamId = orgRoleId
-          ? roleSpecs.find((r) => (r.slug || slugify(r.name)) === person.role_slug)?.team_slug
-          : null;
+        const roleSpec = orgRoleId ? roleSpecs.find((r) => (r.slug || slugify(r.name)) === person.role_slug) : undefined;
+        const wsRole = roleSpec?.workspace_role || 'editor';
+        const teamId = roleSpec?.team_slug ?? null;
+        const teamSpec = teamId ? teamSpecs.find((t) => (t.slug || slugify(t.name)) === teamId) : undefined;
 
         // Skip if already a member
         const member = await tx.select({ u: workspaceMembers.userId }).from(workspaceMembers)
@@ -222,7 +222,12 @@ export const orgImportRoutes: FastifyPluginAsync = async (app) => {
 
         await emailQueue.add('invitation', {
           type: 'invitation', to: email,
-          params: { inviterName: 'Your team', workspaceName: 'Mnema', acceptUrl: `${config.WEB_BASE_URL}/invite/${token}` },
+          params: {
+            inviterName: 'Your team', workspaceName: 'Mnema',
+            acceptUrl: `${config.WEB_BASE_URL}/invite/${token}`,
+            roleName: roleSpec?.name ?? person.job_title ?? 'Member',
+            teamName: teamSpec?.name ?? person.department ?? '—',
+          },
         }).catch(() => { /* email best-effort */ });
       }
 
