@@ -231,8 +231,22 @@ export const api = {
   createInvitation: (body: {
     email: string;
     role: Role;
+    /** Person's name → stored as the invitation's display title. */
+    name?: string;
+    /** Optional org role; the backend derives the team from it. */
+    orgRoleId?: string | null;
+    teamId?: string | null;
   }): Promise<{ invitation: { id: string; email: string; role: Role; expires_at: string } }> =>
-    apiFetch('/api/invitations', { method: 'POST', body }),
+    apiFetch('/api/invitations', {
+      method: 'POST',
+      body: {
+        email: body.email,
+        role: body.role,
+        ...(body.name ? { display_title: body.name } : {}),
+        ...(body.orgRoleId ? { org_role_id: body.orgRoleId } : {}),
+        ...(body.teamId ? { team_id: body.teamId } : {}),
+      },
+    }),
   revokeInvitation: (id: string): Promise<{ revoked: true }> =>
     apiFetch(`/api/invitations/${id}`, { method: 'DELETE' }),
   acceptInvitation: (token: string): Promise<{ workspace_id: string }> =>
@@ -247,6 +261,8 @@ export const api = {
   // Phase B — Org structure + IAM
   orgStructure: (): Promise<{ teams: OrgTeam[]; roles: OrgRole[]; people: OrgPerson[] }> =>
     apiFetch('/api/org/structure'),
+  setOrgPerson: (userId: string, body: { orgRoleId?: string | null; displayTitle?: string | null; department?: string | null; managerUserId?: string | null }): Promise<{ ok: true }> =>
+    apiFetch(`/api/org/people/${userId}`, { method: 'PATCH', body }),
   orgTeams: (): Promise<{ teams: OrgTeam[] }> => apiFetch('/api/org/teams'),
   createTeam: (body: { name: string; color?: string }): Promise<{ team: OrgTeam }> =>
     apiFetch('/api/org/teams', { method: 'POST', body }),

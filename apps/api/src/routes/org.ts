@@ -256,6 +256,65 @@ export const orgRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ teams: teamRows, roles: roleRows, people: profileRows });
   });
 
+  // Assign/update a member's place in the org (role, team, title, manager).
+  // Upserts their user_org_profiles row and applies the role's folder access.
+  app.patch('/api/org/people/:userId', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { userId } = req.params as { userId: string };
+    if (!UUID_RE.test(userId)) return reply.code(400).send({ error: 'invalid_id' });
+    if (!(await requireOwner(req, reply))) return;
+    const p = z.object({
+      orgRoleId:     z.string().uuid().nullable().optional(),
+      displayTitle:  z.string().max(200).nullable().optional(),
+      department:    z.string().max(200).nullable().optional(),
+      managerUserId: z.string().uuid().nullable().optional(),
+    }).safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: 'validation', issues: p.error.issues });
+    const ws = req.auth.tenant_id;
+
+    // Derive role_slug + department from the chosen org role / its team.
+    let roleSlug: string | null | undefined;
+    let department = p.data.department;
+    if (p.data.orgRoleId) {
+      const role = await db.query.orgRoles.findFirst({
+        where: and(eq(orgRoles.id, p.data.orgRoleId), eq(orgRoles.workspaceId, ws)),
+      });
+      if (!role) return reply.code(400).send({ error: 'unknown_role' });
+      roleSlug = role.slug;
+      if (department === undefined && role.teamId) {
+        const t = await db.query.teams.findFirst({ where: eq(teams.id, role.teamId) });
+        if (t) department = t.name;
+      }
+    } else if (p.data.orgRoleId === null) {
+      roleSlug = null;
+    }
+
+    await db.insert(userOrgProfiles).values({
+      userId, workspaceId: ws,
+      orgRoleId: p.data.orgRoleId ?? null,
+      displayTitle: p.data.displayTitle ?? null,
+      roleSlug: roleSlug ?? null,
+      department: department ?? null,
+      managerUserId: p.data.managerUserId ?? null,
+    }).onConflictDoUpdate({
+      target: [userOrgProfiles.userId, userOrgProfiles.workspaceId],
+      set: {
+        ...(p.data.orgRoleId !== undefined ? { orgRoleId: p.data.orgRoleId } : {}),
+        ...(roleSlug !== undefined ? { roleSlug } : {}),
+        ...(p.data.displayTitle !== undefined ? { displayTitle: p.data.displayTitle } : {}),
+        ...(department !== undefined ? { department } : {}),
+        ...(p.data.managerUserId !== undefined ? { managerUserId: p.data.managerUserId } : {}),
+      },
+    });
+
+    // Materialise the role's default folder access for this user.
+    if (p.data.orgRoleId) {
+      await applyOrgRolePolicies(userId, ws, p.data.orgRoleId, req.auth.sub).catch(() => { /* best-effort */ });
+    }
+    await audit(ws, req.auth.sub, 'org_profile.updated', 'user', userId, { orgRoleId: p.data.orgRoleId ?? null });
+    return reply.send({ ok: true });
+  });
+
   // ── Access matrix ───────────────────────────────────────────────────────────
   app.get('/api/org/access', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });

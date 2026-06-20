@@ -4,15 +4,30 @@ import { OrgPageRoot } from '../../../components/settings/OrgPageRoot';
 
 const auth = Astro.locals.auth;
 if (!auth) return Astro.redirect('/auth/login');
+
+// Fetch the current user's role server-side so the page renders in the correct
+// shape on first paint (owners see management controls; editors/viewers don't).
+const apiUrl =
+  (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
+const meRes = await fetch(`${apiUrl}/api/auth/me`, {
+  headers: { Cookie: `boppl_jwt=${auth.jwt}` },
+});
+let role: 'owner' | 'editor' | 'viewer' = 'viewer';
+if (meRes.ok) {
+  const body = (await meRes.json()) as { role?: string };
+  if (body.role === 'owner' || body.role === 'editor' || body.role === 'viewer') {
+    role = body.role;
+  }
+}
 ---
 
 <SettingsLayout title="Organization">
   <p style="font:500 11px/1 var(--mono);letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-muted);margin:0 0 12px;">Settings</p>
   <h1 style="margin:0;font:500 28px/1.15 var(--sans);letter-spacing:-0.02em;color:var(--ink);">Organization</h1>
   <p style="margin:6px 0 32px;font-size:14px;color:var(--ink-soft);max-width:40rem;">
-    Teams, roles, and folder access. Import your org chart, define what each role can see,
-    and invitations pre-configure access automatically.
+    People, teams, roles and folder access in one place. Invite people with a role and team,
+    arrange the org chart, and define what each role can see.
   </p>
 
-  <OrgPageRoot client:load />
+  <OrgPageRoot client:load currentUserId={auth.user_id} currentUserRole={role} />
 </SettingsLayout>
