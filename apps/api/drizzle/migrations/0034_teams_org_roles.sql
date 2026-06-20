@@ -49,3 +49,7 @@ CREATE TABLE IF NOT EXISTS org_roles (
 
 CREATE INDEX IF NOT EXISTS idx_org_roles_workspace ON org_roles(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_org_roles_team      ON org_roles(team_id);
+
+-- grants for app roles (idempotent)
+GRANT SELECT, INSERT, UPDATE, DELETE ON teams, team_members, org_roles TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON teams, team_members, org_roles TO boppl_system;

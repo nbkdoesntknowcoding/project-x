@@ -138,6 +138,11 @@ export const invitations = pgTable(
     acceptedBy: uuid('accepted_by').references(() => users.id),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // Phase B (migration 0040): optional org-role onboarding. FK constraints live in
+    // the DB; declared as plain uuids here because org_roles/teams are defined later.
+    orgRoleId:    uuid('org_role_id'),
+    teamId:       uuid('team_id'),
+    displayTitle: text('display_title'),
   },
   (table) => ({
     workspaceIdx: index('invitations_workspace_idx').on(table.workspaceId),

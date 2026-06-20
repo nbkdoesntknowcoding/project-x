@@ -7,6 +7,7 @@ import { invitations, users, workspaceMembers, workspaces } from '../db/schema.j
 import { withSystemPrivilege } from '../db/with-system-privilege.js';
 import { withTenant } from '../db/with-tenant.js';
 import { enforceRateLimit } from '../lib/auth-rate-limit.js';
+import { provisionOrgProfile } from '../lib/iam-policy-factory.js';
 import { emailQueue } from '../queue/email.js';
 import { signInvitationToken, verifyInvitationToken } from '../lib/invitation-token.js';
 import { signJwt } from '../lib/jwt.js';
@@ -22,6 +23,10 @@ const INVITATION_TTL_MS = INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000;
 const createSchema = z.object({
   email: z.string().email(),
   role: z.enum(['owner', 'editor', 'viewer']),
+  // Phase B: optionally onboard with an org role (provisions profile + IAM on accept).
+  org_role_id: z.string().uuid().optional(),
+  team_id: z.string().uuid().optional(),
+  display_title: z.string().max(200).optional(),
 });
 
 const acceptSchema = z.object({
@@ -146,6 +151,9 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
           invitedBy: req.auth!.sub,
           tokenJti: jti,
           expiresAt,
+          orgRoleId: parsed.data.org_role_id ?? null,
+          teamId: parsed.data.team_id ?? null,
+          displayTitle: parsed.data.display_title ?? null,
         })
         .returning(),
     );
@@ -370,6 +378,8 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
           acceptedAt: invitations.acceptedAt,
           revokedAt: invitations.revokedAt,
           expiresAt: invitations.expiresAt,
+          orgRoleId: invitations.orgRoleId,
+          displayTitle: invitations.displayTitle,
         })
         .from(invitations)
         .where(eq(invitations.tokenJti, claims.jti))
@@ -397,11 +407,32 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
         .set({ acceptedAt: new Date(), acceptedBy: req.auth!.sub })
         .where(eq(invitations.id, row.id));
 
-      return { workspace_id: row.workspaceId, role: row.role };
+      return {
+        workspace_id: row.workspaceId,
+        role: row.role,
+        org_role_id: row.orgRoleId,
+        display_title: row.displayTitle,
+      };
     });
 
     if ('error' in result) {
       return reply.code(410).send({ error: result.error });
+    }
+
+    // Phase B: if the invite carried an org_role, provision the user's org identity
+    // (profile + team + IAM policies). Best-effort — never block the membership grant.
+    if (result.org_role_id) {
+      try {
+        await provisionOrgProfile({
+          userId: req.auth.sub,
+          workspaceId: result.workspace_id,
+          orgRoleId: result.org_role_id,
+          actorUserId: req.auth.sub,
+          displayTitle: result.display_title,
+        });
+      } catch (err) {
+        req.log.warn({ err }, 'invite accept: provisionOrgProfile failed (membership still granted)');
+      }
     }
 
     const jwt = await signJwt({

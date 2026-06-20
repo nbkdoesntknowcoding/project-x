@@ -97,3 +97,7 @@ BEGIN
   RETURN COALESCE(v_permission, NULL); -- NULL = no explicit policy, fall through to workspace_role
 END;
 $$;
+
+-- grants for app roles (idempotent)
+GRANT SELECT, INSERT, UPDATE, DELETE ON doc_acl TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON doc_acl TO boppl_system;

@@ -18,3 +18,7 @@ CREATE TABLE IF NOT EXISTS user_org_profiles (
 
 CREATE INDEX IF NOT EXISTS idx_uop_workspace   ON user_org_profiles(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_uop_role_slug   ON user_org_profiles(role_slug);
+
+-- grants for app roles (idempotent)
+GRANT SELECT, INSERT, UPDATE, DELETE ON user_org_profiles TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON user_org_profiles TO boppl_system;

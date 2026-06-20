@@ -281,6 +281,13 @@
       "when": 1781280000014,
       "tag": "0039_folders_system_type",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1781280000015,
+      "tag": "0040_invitations_org_role",
+      "breakpoints": true
     }
   ]
 }

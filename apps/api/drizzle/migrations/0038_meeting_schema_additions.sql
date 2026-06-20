@@ -32,3 +32,7 @@ CREATE TABLE IF NOT EXISTS org_chart_imports (
   created_by          uuid REFERENCES users(id),
   created_at          timestamptz DEFAULT now()
 );
+
+-- grants for app roles (idempotent)
+GRANT SELECT, INSERT, UPDATE, DELETE ON org_chart_imports TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON org_chart_imports TO boppl_system;

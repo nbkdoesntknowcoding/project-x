@@ -1,24 +1,38 @@
 /**
- * Phase A (A3) — IAM policy auto-creation on org_role assignment.
+ * Phase A (A3) + Phase B (B2) — IAM policy auto-creation + org-profile provisioning.
  *
- * Called when a user is invited with an org_role: reads org_role.default_folder_access
- * and creates doc_acl rows automatically. Also called when an org_role's
- * default_folder_access is edited — re-applies policies to all members of that role.
+ * These are SYSTEM operations: they materialise org-role defaults into per-user
+ * doc_acl rows and provision a user's org identity on invite-accept. They straddle
+ * tenant boundaries and read folders (FORCE RLS), so they run under boppl_system
+ * (BYPASSRLS) via withSystemPrivilege — NOT the request's app_user connection.
+ * (Deviation from the spec's `db` param, required by our RLS model. New
+ * withSystemPrivilege caller, justified: org-IAM provisioning.)
  */
 import { and, eq } from 'drizzle-orm';
-import type { Database } from '../db/index.js';
-import { docAcl, folders, iamAuditLog, orgRoles } from '../db/schema.js';
+import { db } from '../db/index.js';
+import { withSystemPrivilege } from '../db/with-system-privilege.js';
+import {
+  docAcl,
+  folders,
+  iamAuditLog,
+  orgRoles,
+  teamMembers,
+  teams,
+  userOrgProfiles,
+  users,
+} from '../db/schema.js';
 
-type DB = Database;
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-export async function applyOrgRolePolicies(
-  db: DB,
+/** Materialise an org_role's default_folder_access into per-user doc_acl rows (uses a given tx). */
+async function applyPoliciesTx(
+  tx: Tx,
   userId: string,
   workspaceId: string,
   orgRoleId: string,
   actorUserId: string,
 ): Promise<void> {
-  const orgRole = await db.query.orgRoles.findFirst({
+  const orgRole = await tx.query.orgRoles.findFirst({
     where: and(eq(orgRoles.id, orgRoleId), eq(orgRoles.workspaceId, workspaceId)),
   });
   if (!orgRole) throw new Error('Org role not found');
@@ -29,17 +43,12 @@ export async function applyOrgRolePolicies(
   }>;
 
   for (const policy of policies) {
-    // Resolve folder_slug to folder_id
-    const folder = await db.query.folders.findFirst({
-      where: and(
-        eq(folders.workspaceId, workspaceId),
-        eq(folders.slug, policy.folder_slug),
-      ),
+    const folder = await tx.query.folders.findFirst({
+      where: and(eq(folders.workspaceId, workspaceId), eq(folders.slug, policy.folder_slug)),
     });
     if (!folder) continue;
 
-    // Upsert doc_acl row
-    await db.insert(docAcl).values({
+    await tx.insert(docAcl).values({
       workspaceId,
       resourceType: 'folder',
       resourceId: folder.id,
@@ -52,8 +61,7 @@ export async function applyOrgRolePolicies(
       set: { permission: policy.permission, updatedAt: new Date() },
     });
 
-    // Log to audit trail
-    await db.insert(iamAuditLog).values({
+    await tx.insert(iamAuditLog).values({
       workspaceId,
       actorUserId,
       action: 'policy.created',
@@ -62,4 +70,75 @@ export async function applyOrgRolePolicies(
       payload: { userId, permission: policy.permission, source: 'org_role_auto' },
     });
   }
+}
+
+/**
+ * Public: re-apply an org role's folder policies to a user (e.g. on invite or when
+ * default_folder_access is edited).
+ */
+export async function applyOrgRolePolicies(
+  userId: string,
+  workspaceId: string,
+  orgRoleId: string,
+  actorUserId: string,
+): Promise<void> {
+  await withSystemPrivilege((tx) => applyPoliciesTx(tx, userId, workspaceId, orgRoleId, actorUserId));
+}
+
+/**
+ * Phase B (B2) — provision a user's org identity when they accept an invite that
+ * carries an org_role. Creates user_org_profiles + team_members, applies the role's
+ * folder policies, computes bot_display_name, and audits. Idempotent.
+ */
+export async function provisionOrgProfile(args: {
+  userId: string;
+  workspaceId: string;
+  orgRoleId: string;
+  actorUserId: string;
+  displayTitle?: string | null;
+}): Promise<void> {
+  const { userId, workspaceId, orgRoleId, actorUserId } = args;
+  await withSystemPrivilege(async (tx) => {
+    const orgRole = await tx.query.orgRoles.findFirst({
+      where: and(eq(orgRoles.id, orgRoleId), eq(orgRoles.workspaceId, workspaceId)),
+    });
+    if (!orgRole) throw new Error('Org role not found');
+
+    const team = orgRole.teamId
+      ? await tx.query.teams.findFirst({ where: eq(teams.id, orgRole.teamId) })
+      : null;
+    const user = await tx.query.users.findFirst({ where: eq(users.id, userId) });
+
+    const title = (args.displayTitle ?? '').trim() || orgRole.name;
+    const personName = user?.displayName ?? user?.email ?? 'Member';
+    const botDisplayName = `${personName} · ${title}`;
+
+    await tx.insert(userOrgProfiles).values({
+      userId, workspaceId, orgRoleId,
+      displayTitle: title,
+      roleSlug: orgRole.slug,
+      department: team?.name ?? null,
+      botDisplayName,
+    }).onConflictDoUpdate({
+      target: [userOrgProfiles.userId, userOrgProfiles.workspaceId],
+      set: { orgRoleId, displayTitle: title, roleSlug: orgRole.slug, department: team?.name ?? null, botDisplayName },
+    });
+
+    if (orgRole.teamId) {
+      await tx.insert(teamMembers)
+        .values({ teamId: orgRole.teamId, userId, role: 'member' })
+        .onConflictDoNothing();
+    }
+
+    await applyPoliciesTx(tx, userId, workspaceId, orgRoleId, actorUserId);
+
+    await tx.insert(iamAuditLog).values({
+      workspaceId,
+      actorUserId,
+      action: 'user.role.changed',
+      resourceType: 'user',
+      resourceId: userId,
+      payload: { orgRoleId, roleSlug: orgRole.slug, team: team?.slug ?? null, source: 'invite_accept' },
+    });
+  });
 }

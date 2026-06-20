@@ -15,3 +15,7 @@ CREATE TABLE IF NOT EXISTS iam_audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_iam_audit_workspace ON iam_audit_log(workspace_id, created_at DESC);
+
+-- grants for app roles (idempotent)
+GRANT SELECT, INSERT, UPDATE, DELETE ON iam_audit_log TO app_user;
+GRANT SELECT, INSERT, UPDATE, DELETE ON iam_audit_log TO boppl_system;
