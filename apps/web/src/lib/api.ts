@@ -162,6 +162,26 @@ export interface ProjectMemberRow {
   joinedAt: string;
 }
 
+// Phase 2b — meetings + identity mapping.
+export interface MeetingRow {
+  id: string;
+  meeting_url: string | null;
+  started_at: string;
+  ended_at: string | null;
+  participant_count: number;
+  unresolved_count: number;
+}
+
+export interface MeetingParticipantRow {
+  id: string;
+  name: string | null;
+  email: string | null;
+  isHost: boolean;
+  resolvedUserId: string | null;
+  resolvedEmail: string | null;
+  resolvedName: string | null;
+}
+
 export const api = {
   listDocs: (): Promise<{ docs: DocSummary[] }> => apiFetch('/api/docs'),
   createDoc: (body: DocCreatePayload): Promise<{ doc: DocFull }> =>
@@ -209,6 +229,22 @@ export const api = {
     apiFetch(`/api/members/${userId}/role`, { method: 'PATCH', body: { role } }),
   removeMember: (userId: string): Promise<{ removed: true }> =>
     apiFetch(`/api/members/${userId}`, { method: 'DELETE' }),
+
+  // Phase 2b — meetings + post-meeting identity mapping
+  listMeetings: (): Promise<{ meetings: MeetingRow[] }> => apiFetch('/api/meetings'),
+  listMeetingParticipants: (
+    meetingId: string,
+  ): Promise<{ participants: MeetingParticipantRow[] }> =>
+    apiFetch(`/api/meetings/${meetingId}/participants`),
+  mapMeetingParticipant: (
+    meetingId: string,
+    participantId: string,
+    userId: string,
+  ): Promise<{ ok: true }> =>
+    apiFetch(`/api/meetings/${meetingId}/participants/${participantId}/identity`, {
+      method: 'POST',
+      body: { user_id: userId },
+    }),
 
   // Stage B5 — project members / access
   listProjectMembers: (projectId: string): Promise<{ members: ProjectMemberRow[] }> =>
