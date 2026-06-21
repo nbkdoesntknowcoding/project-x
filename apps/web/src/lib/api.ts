@@ -56,7 +56,12 @@ async function apiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T> {
     ...opts,
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      // Only set a JSON content-type when there's actually a body. Sending
+      // Content-Type: application/json with an EMPTY body makes Fastify reject
+      // the request with a 400 ("Body cannot be empty…") before the route
+      // handler runs — which broke every no-body POST (calendar sync, meeting
+      // admit/ignore/dispatch).
+      ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...authHeaders(),
       ...(opts.headers ?? {}),
     },
