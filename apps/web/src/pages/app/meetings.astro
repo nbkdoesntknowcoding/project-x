@@ -12,10 +12,9 @@ if (!auth) return Astro.redirect('/auth/login');
 <AppLayout title="Meetings">
   <div style="padding:28px 32px;">
     <h1 style="margin:0 0 6px;font:500 22px/1.15 var(--sans);letter-spacing:-0.02em;color:var(--ink);">Meetings</h1>
-    <p style="margin:0 0 28px;font-size:13px;color:var(--ink-soft);max-width:42rem;">
-      Attendees the meeting bot saw. Map anyone it didn't recognize to their Mnema account —
-      the bot answers each person scoped to their own access, and a mapping is remembered for
-      future meetings.
+    <p style="margin:0 0 24px;font-size:13px;color:var(--ink-soft);max-width:42rem;">
+      Your meetings at a glance. Pick any meeting to see its attendees, transcript, post-meeting
+      notes and key points — and admit, ignore or send the bot into upcoming calls.
     </p>
     <MeetingsPage client:load />
   </div>
