@@ -97,11 +97,23 @@ export const calendarRoutes: FastifyPluginAsync = async (app) => {
     const me = req.auth.sub;
     // Token is user-scoped (their Google calendar); meetings are created in the
     // active workspace `ws`. Find the token by user across any membership.
-    const rows = await db.select({ tok: workspaceMembers.calendarRefreshToken })
+    // Prefer the requesting user's own calendar token (across any of their
+    // memberships). Fall back to a calendar connected in the active workspace —
+    // this absorbs cookie-vs-Bearer identity drift where the XHR sync resolves a
+    // different sub/tenant than the navigation-based connect.
+    let rows = await db.select({ tok: workspaceMembers.calendarRefreshToken })
       .from(workspaceMembers)
       .where(and(eq(workspaceMembers.userId, me), isNotNull(workspaceMembers.calendarRefreshToken)))
       .limit(1);
-    req.log.info({ syncSub: me, syncTenant: ws, tokenRows: rows.length }, 'calendar sync token lookup');
+    let via = 'user';
+    if (!rows[0]?.tok) {
+      rows = await db.select({ tok: workspaceMembers.calendarRefreshToken })
+        .from(workspaceMembers)
+        .where(and(eq(workspaceMembers.workspaceId, ws), isNotNull(workspaceMembers.calendarRefreshToken)))
+        .limit(1);
+      via = 'workspace';
+    }
+    req.log.info({ syncSub: me, syncTenant: ws, found: rows.length, via }, 'calendar sync token lookup');
     if (!rows[0]?.tok) return reply.code(400).send({ error: 'calendar_not_connected' });
 
     let events;
