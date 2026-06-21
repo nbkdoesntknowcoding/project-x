@@ -101,6 +101,7 @@ export const calendarRoutes: FastifyPluginAsync = async (app) => {
       .from(workspaceMembers)
       .where(and(eq(workspaceMembers.userId, me), isNotNull(workspaceMembers.calendarRefreshToken)))
       .limit(1);
+    req.log.info({ syncSub: me, syncTenant: ws, tokenRows: rows.length }, 'calendar sync token lookup');
     if (!rows[0]?.tok) return reply.code(400).send({ error: 'calendar_not_connected' });
 
     let events;
