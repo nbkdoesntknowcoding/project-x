@@ -10,7 +10,7 @@
  * land as status='scheduled', admitted=false and drop a `meeting_detected`
  * notification; the user admits them from /app/meetings (which dispatches the bot).
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { config } from '../config/env.js';
 import { db } from '../db/index.js';
@@ -78,11 +78,13 @@ export const calendarRoutes: FastifyPluginAsync = async (app) => {
   // ── Connection status ──────────────────────────────────────────────────────
   app.get('/api/calendar/status', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    // The calendar token is the user's (one Google calendar), so look it up by
+    // user across any of their workspace memberships — not by active workspace.
     const rows = await db.select({ tok: workspaceMembers.calendarRefreshToken })
       .from(workspaceMembers)
-      .where(and(eq(workspaceMembers.workspaceId, req.auth.tenant_id), eq(workspaceMembers.userId, req.auth.sub)))
+      .where(and(eq(workspaceMembers.userId, req.auth.sub), isNotNull(workspaceMembers.calendarRefreshToken)))
       .limit(1);
-    return reply.send({ connected: Boolean(rows[0]?.tok), configured: calendarConfigured() });
+    return reply.send({ connected: rows.length > 0, configured: calendarConfigured() });
   });
 
   // ── Pull events → upsert scheduled meetings ────────────────────────────────
@@ -93,9 +95,11 @@ export const calendarRoutes: FastifyPluginAsync = async (app) => {
 
     const ws = req.auth.tenant_id;
     const me = req.auth.sub;
+    // Token is user-scoped (their Google calendar); meetings are created in the
+    // active workspace `ws`. Find the token by user across any membership.
     const rows = await db.select({ tok: workspaceMembers.calendarRefreshToken })
       .from(workspaceMembers)
-      .where(and(eq(workspaceMembers.workspaceId, ws), eq(workspaceMembers.userId, me)))
+      .where(and(eq(workspaceMembers.userId, me), isNotNull(workspaceMembers.calendarRefreshToken)))
       .limit(1);
     if (!rows[0]?.tok) return reply.code(400).send({ error: 'calendar_not_connected' });
 
