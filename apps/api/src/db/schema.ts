@@ -1406,7 +1406,10 @@ export const graphNodes = pgTable(
     workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
     // 'doc'|'flow'|'flow_step'|'task'|'session'|'concept'|'decision'|'project'|'rationale'
     entityType:  text('entity_type').notNull(),
-    entityId:    uuid('entity_id').notNull(),
+    // Source/dedup key: a doc/project UUID for structural nodes, OR a synthetic
+    // text key (e.g. "<ws>-<concept-slug>") for semantic concept nodes — so text,
+    // not uuid (migration 0043).
+    entityId:    text('entity_id').notNull(),
     // Denormalized project scope (from the referenced entity's doc/task project) for
     // project-filtered graph queries. Null = workspace-wide. Set by the graph builder.
     projectId:   uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
