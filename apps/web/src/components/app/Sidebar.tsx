@@ -36,6 +36,7 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
   const isOnOptimize  = currentPath.startsWith('/app/optimize');
   const isOnTeam      = currentPath.startsWith('/app/team');
   const isOnGraph     = currentPath.startsWith('/app/graph');
+  const isOnMeetings  = currentPath.startsWith('/app/meetings');
 
   const isDevProject = workspaceMode === 'dev_project';
 
@@ -139,6 +140,21 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
               </svg>
             </span>
             <span className="sb-label">All flows</span>
+          </span>
+        </a>
+      </div>
+
+      {/* ── MEETINGS ─────────────────────────────── */}
+      <div className="sb-section">
+        <div className="sb-section-head"><span>Meetings</span></div>
+        <a href="/app/meetings" className={`sb-row${isOnMeetings ? ' active' : ''}`}>
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+              </svg>
+            </span>
+            <span className="sb-label">Meetings</span>
           </span>
         </a>
       </div>

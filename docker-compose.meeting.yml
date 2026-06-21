@@ -25,6 +25,8 @@ services:
       - infra/.env            # RECALL_API_KEY, RECALL_REGION, RECALL_AUDIO_WSS, MNEMA_*
     ports:
       - "127.0.0.1:3001:3001" # /join control endpoint (internal only)
+    networks:
+      - internal              # so the core api can POST /join at http://meeting-bot:3001
     depends_on:
       - pipecat-meeting
 
