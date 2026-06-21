@@ -8,6 +8,8 @@ export interface MeetingEndJobData {
   meetingId: string;
   workspaceId: string;
   recallBotId: string | null;
+  /** 'end' (default) = post-meeting processing; 'brief' = pre-meeting brief on admit. */
+  kind?: 'end' | 'brief';
 }
 
 const connection = new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null });
@@ -34,6 +36,16 @@ export function enqueueMeetingEnd(meetingId: string, workspaceId: string, recall
   void (async () => {
     const existing = await meetingEndQueue.getJob(jobId);
     if (existing) await existing.remove().catch(() => { /* race / already gone */ });
-    await meetingEndQueue.add('process', { meetingId, workspaceId, recallBotId }, { jobId });
+    await meetingEndQueue.add('process', { meetingId, workspaceId, recallBotId, kind: 'end' }, { jobId });
+  })();
+}
+
+/** Generate a pre-meeting brief when a meeting is admitted (fire-and-forget). */
+export function enqueuePreBrief(meetingId: string, workspaceId: string, recallBotId: string | null): void {
+  const jobId = `meeting-brief-${meetingId}`;
+  void (async () => {
+    const existing = await meetingEndQueue.getJob(jobId);
+    if (existing) await existing.remove().catch(() => { /* race / already gone */ });
+    await meetingEndQueue.add('brief', { meetingId, workspaceId, recallBotId, kind: 'brief' }, { jobId });
   })();
 }

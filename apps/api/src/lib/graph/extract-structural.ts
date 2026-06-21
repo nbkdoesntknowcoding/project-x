@@ -7,6 +7,7 @@
 import { and, eq, isNull, isNotNull, ne } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import * as schema from '../../db/schema.js';
+import { syncAllMeetings } from './meeting-graph.js';
 
 const {
   graphNodes, graphEdges,
@@ -266,6 +267,9 @@ export async function extractStructural(
       edgeCount++;
     }
   }
+
+  // ── 6. MEETING nodes (+ person, edges to project/docs/tasks/links) ──────────
+  await syncAllMeetings(db, workspaceId);
 
   return { nodeCount, edgeCount };
 }

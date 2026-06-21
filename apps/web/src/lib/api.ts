@@ -220,7 +220,22 @@ export interface MeetingDetail {
   summary: MeetingSummary | null;
   transcript_status: string;
   post_meeting_doc_id: string | null;
+  pre_meeting_doc_id: string | null;
   meeting_folder_id: string | null;
+}
+
+export interface MeetingTask {
+  id: string;
+  title: string;
+  status: string;
+  assignee: string | null;
+}
+
+export interface LinkedMeeting {
+  id: string;
+  title: string | null;
+  started_at: string | null;
+  scheduled_start_at: string | null;
 }
 
 export interface TranscriptTurn {
@@ -329,7 +344,8 @@ export const api = {
 
   // Phase 2b — meetings + post-meeting identity mapping
   listMeetings: (): Promise<{ meetings: MeetingRow[] }> => apiFetch('/api/meetings'),
-  getMeeting: (id: string): Promise<{ meeting: MeetingDetail }> => apiFetch(`/api/meetings/${id}`),
+  getMeeting: (id: string): Promise<{ meeting: MeetingDetail; tasks: MeetingTask[]; linked_meetings: LinkedMeeting[] }> =>
+    apiFetch(`/api/meetings/${id}`),
   getMeetingTranscript: (id: string): Promise<{ status: string; turns: TranscriptTurn[] }> =>
     apiFetch(`/api/meetings/${id}/transcript`),
   // Phase C — calendar linking + admit/dispatch

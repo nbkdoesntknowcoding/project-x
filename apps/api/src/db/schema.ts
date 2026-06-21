@@ -1133,6 +1133,10 @@ export const tasks = pgTable(
     // Nullable FK to projects — tasks can exist without a project.
     projectId:          uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
 
+    // Phase 3 (migration 0046): set when this task was auto-created from a meeting's
+    // action items. Powers meeting → task graph edges + "tasks from this meeting".
+    meetingId:          uuid('meeting_id').references(() => meetings.id, { onDelete: 'set null' }),
+
     createdAt:          timestamp('created_at').notNull().defaultNow(),
     updatedAt:          timestamp('updated_at').notNull().defaultNow(),
     completedAt:        timestamp('completed_at'),

@@ -10,7 +10,7 @@
  * any matching unresolved attendee. Reads are viewer+; mapping is editor+ (it's an
  * identity assertion that grants that name the mapped user's access).
  */
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config/env.js';
@@ -20,10 +20,12 @@ import {
   meetings,
   meetingTranscripts,
   participantAliases,
+  tasks,
   users,
   workspaceMembers,
 } from '../db/schema.js';
 import { requireRole, RoleError } from '../lib/role.js';
+import { enqueuePreBrief } from '../queue/meeting-end.js';
 
 /**
  * Ask the meeting-bot controller to send the Mnema bot into a meeting. Returns
@@ -96,6 +98,20 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
     });
     if (!meeting) return reply.code(404).send({ error: 'not_found' });
 
+    // Tasks auto-created from this meeting (with assignee name).
+    const taskRows = await db
+      .select({ id: tasks.id, title: tasks.title, status: tasks.status, assigneeName: users.displayName, assigneeEmail: users.email })
+      .from(tasks)
+      .leftJoin(users, eq(users.id, tasks.assignedMemberId))
+      .where(and(eq(tasks.meetingId, meeting.id), eq(tasks.workspaceId, req.auth.tenant_id)));
+
+    // Linked (related) meetings — resolve ids → titles.
+    const linkedIds = (meeting.linkedMeetingIds ?? []).filter((x): x is string => !!x);
+    const linked = linkedIds.length
+      ? await db.select({ id: meetings.id, title: meetings.title, started_at: meetings.startedAt, scheduled_start_at: meetings.scheduledStartAt })
+          .from(meetings).where(and(eq(meetings.workspaceId, req.auth.tenant_id), inArray(meetings.id, linkedIds)))
+      : [];
+
     return reply.send({
       meeting: {
         id: meeting.id,
@@ -110,8 +126,11 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
         summary: meeting.summary ?? null,
         transcript_status: meeting.transcriptStatus ?? 'none',
         post_meeting_doc_id: meeting.postMeetingDocId,
+        pre_meeting_doc_id: meeting.preMeetingDocId,
         meeting_folder_id: meeting.meetingFolderId,
       },
+      tasks: taskRows.map((t) => ({ id: t.id, title: t.title, status: t.status, assignee: t.assigneeName || t.assigneeEmail || null })),
+      linked_meetings: linked,
     });
   });
 
@@ -242,7 +261,10 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
 
     await db.update(meetings).set({ admitted: true, status: 'scheduled' }).where(eq(meetings.id, id));
 
-    // Phase D (meeting folder + pre-meeting brief) is wired here later.
+    // Phase 3: generate the pre-meeting brief (context + prior meeting + agenda),
+    // filed in the meeting folder. Fire-and-forget — never blocks admit.
+    enqueuePreBrief(id, req.auth.tenant_id, meeting.recallBotId);
+
     let botDispatched = false;
     const startMs = meeting.scheduledStartAt ? new Date(meeting.scheduledStartAt).getTime() : null;
     const minutesUntilStart = startMs != null ? (startMs - Date.now()) / 60000 : null;

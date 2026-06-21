@@ -53,7 +53,7 @@ export function MeetingsPage(): JSX.Element {
             onSelect={setSelectedId}
             initialMonth={selected ? meetingDate(selected) : latest}
           />
-          <MeetingDetailPanel meeting={selected} members={members} onChange={refresh} />
+          <MeetingDetailPanel meeting={selected} members={members} onChange={refresh} onSelectMeeting={setSelectedId} />
         </div>
       )}
     </div>

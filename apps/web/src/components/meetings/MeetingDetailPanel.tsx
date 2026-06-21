@@ -2,6 +2,7 @@ import { type JSX, useEffect, useState } from 'react';
 import {
   api, type MeetingRow, type MeetingParticipantRow, type MemberRow,
   type MeetingDetail, type MeetingSummary, type TranscriptTurn,
+  type MeetingTask, type LinkedMeeting,
 } from '../../lib/api';
 import {
   muted, soft, ink, line, surface, surface2, accent, green,
@@ -24,21 +25,27 @@ const TABS: Array<{ id: Tab; label: string }> = [
  * while a recorded meeting is still being processed.
  */
 export function MeetingDetailPanel({
-  meeting, members, onChange,
+  meeting, members, onChange, onSelectMeeting,
 }: {
   meeting: MeetingRow | null;
   members: MemberRow[];
   onChange: () => void;
+  onSelectMeeting?: (id: string) => void;
 }): JSX.Element {
   const [tab, setTab] = useState<Tab>('overview');
   const [detail, setDetail] = useState<MeetingDetail | null>(null);
+  const [tasks, setTasks] = useState<MeetingTask[]>([]);
+  const [linked, setLinked] = useState<LinkedMeeting[]>([]);
   const meetingId = meeting?.id ?? null;
 
   useEffect(() => {
-    setDetail(null);
+    setDetail(null); setTasks([]); setLinked([]);
     if (!meetingId) return;
     let live = true;
-    void api.getMeeting(meetingId).then((r) => { if (live) setDetail(r.meeting); }).catch(() => {});
+    void api.getMeeting(meetingId).then((r) => {
+      if (!live) return;
+      setDetail(r.meeting); setTasks(r.tasks); setLinked(r.linked_meetings);
+    }).catch(() => {});
     return () => { live = false; };
   }, [meetingId]);
 
@@ -96,9 +103,9 @@ export function MeetingDetailPanel({
 
       {/* body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {tab === 'overview' && <Overview meeting={meeting} summary={detail?.summary ?? null} tStatus={tStatus} />}
+        {tab === 'overview' && <Overview meeting={meeting} summary={detail?.summary ?? null} tStatus={tStatus} tasks={tasks} linked={linked} onSelectMeeting={onSelectMeeting} />}
         {tab === 'transcript' && <TranscriptTab meetingId={meeting.id} tStatus={tStatus} />}
-        {tab === 'doc' && <DocTab docId={docId} tStatus={tStatus} />}
+        {tab === 'doc' && <DocTab docId={docId} preDocId={detail?.pre_meeting_doc_id ?? null} tStatus={tStatus} />}
         {tab === 'people' && <People meeting={meeting} members={members} onChange={onChange} />}
       </div>
     </div>
@@ -112,7 +119,10 @@ function transcriptHint(tStatus: string): { title: string; body: string } {
   return { title: 'No transcript yet', body: 'Once a recorded meeting ends, its full transcript appears here.' };
 }
 
-function Overview({ meeting, summary, tStatus }: { meeting: MeetingRow; summary: MeetingSummary | null; tStatus: string }): JSX.Element {
+function Overview({ meeting, summary, tStatus, tasks, linked, onSelectMeeting }: {
+  meeting: MeetingRow; summary: MeetingSummary | null; tStatus: string;
+  tasks: MeetingTask[]; linked: LinkedMeeting[]; onSelectMeeting?: (id: string) => void;
+}): JSX.Element {
   const hasSummary = !!summary && (summary.keyPoints.length > 0 || summary.decisions.length > 0 || summary.actionItems.length > 0);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -131,6 +141,38 @@ function Overview({ meeting, summary, tStatus }: { meeting: MeetingRow; summary:
           />
         )}
       </section>
+
+      {tasks.length > 0 && (
+        <section>
+          <Label>Tasks created</Label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {tasks.map((t) => (
+              <div key={t.id} style={{ fontSize: 12.5, color: ink, display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                <span style={{ color: t.status === 'done' ? green : muted }}>{t.status === 'done' ? '●' : '○'}</span>
+                <span style={{ flex: 1 }}>{t.title}{t.assignee ? <span style={{ color: muted }}> — {t.assignee}</span> : null}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {linked.length > 0 && (
+        <section>
+          <Label>Related meetings</Label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {linked.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => onSelectMeeting?.(m.id)}
+                style={{ textAlign: 'left', background: 'transparent', border: 'none', cursor: onSelectMeeting ? 'pointer' : 'default', padding: '2px 0', fontSize: 12.5, color: accent }}
+              >
+                {m.title || 'Untitled meeting'}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       {meeting.meeting_url && (
         <section>
           <Label>Meeting link</Label>
@@ -196,24 +238,36 @@ function TranscriptTab({ meetingId, tStatus }: { meetingId: string; tStatus: str
   );
 }
 
-function DocTab({ docId, tStatus }: { docId: string | null; tStatus: string }): JSX.Element {
-  if (!docId) {
+function DocTab({ docId, preDocId, tStatus }: { docId: string | null; preDocId: string | null; tStatus: string }): JSX.Element {
+  if (!docId && !preDocId) {
     return (
       <EmptyState
         icon="📄"
-        title={tStatus === 'pending' ? 'Writing notes…' : 'No post-meeting doc yet'}
+        title={tStatus === 'pending' ? 'Writing notes…' : 'No meeting docs yet'}
         body={tStatus === 'pending'
           ? 'Mnema is writing the Post-Meeting Notes — summary, decisions and action items — from the transcript.'
-          : 'When a recorded meeting ends, Mnema writes a Post-Meeting Notes doc and links it here.'}
+          : 'A pre-meeting brief is filed when you admit a meeting, and Post-Meeting Notes when it ends.'}
       />
     );
   }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <p style={{ fontSize: 12.5, color: soft, lineHeight: 1.5, margin: 0 }}>
-        Mnema filed the Post-Meeting Notes — summary, decisions, action items and the full transcript — in this meeting's folder.
-      </p>
-      <a href={`/app/content/${docId}`} style={{ ...btn, textDecoration: 'none', alignSelf: 'flex-start' }}>Open Post-Meeting Notes →</a>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {preDocId && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <p style={{ fontSize: 12.5, color: soft, lineHeight: 1.5, margin: 0 }}>
+            Pre-meeting brief — context, the previous meeting, and a suggested agenda.
+          </p>
+          <a href={`/app/content/${preDocId}`} style={{ ...ghost, textDecoration: 'none', alignSelf: 'flex-start' }}>Open Pre-Meeting Brief →</a>
+        </div>
+      )}
+      {docId && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <p style={{ fontSize: 12.5, color: soft, lineHeight: 1.5, margin: 0 }}>
+            Post-Meeting Notes — summary, decisions, tasks created, and the full transcript.
+          </p>
+          <a href={`/app/content/${docId}`} style={{ ...btn, textDecoration: 'none', alignSelf: 'flex-start' }}>Open Post-Meeting Notes →</a>
+        </div>
+      )}
     </div>
   );
 }
