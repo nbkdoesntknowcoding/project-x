@@ -33,7 +33,20 @@ export const calendarRoutes: FastifyPluginAsync = async (app) => {
     if (!calendarConfigured()) return reply.code(503).send({ error: 'calendar_not_configured' });
     try { await requireRole(req, 'viewer'); } catch (e) { if (guard(e, reply)) return; throw e; }
     const state = signState({ sub: req.auth.sub, tenant: req.auth.tenant_id });
-    return reply.redirect(consentUrl(state));
+    const url = consentUrl(state);
+    // Navigate to Google WITHOUT a referrer. A plain 302 carries
+    // Referer: mnema.theboringpeople.in, which makes Google ignore the active
+    // session and drop to its sign-in form (that form then 400s). A
+    // referrer-less navigation resolves the session and shows the account
+    // chooser instead — same behaviour as typing the URL into the address bar.
+    return reply
+      .header('Referrer-Policy', 'no-referrer')
+      .type('text/html')
+      .send(
+        `<!doctype html><meta name="referrer" content="no-referrer">` +
+        `<script>location.replace(${JSON.stringify(url)})</script>` +
+        `<noscript><a href="${url.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">Continue to Google</a></noscript>`,
+      );
   });
 
   // ── Google redirects back here ─────────────────────────────────────────────
