@@ -773,6 +773,10 @@ export const flows = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    // Phase: flow sharing (0042) — when set, any authenticated Mnema user with
+    // the link can view the published flow read-only.
+    shareToken: text('share_token'),
+    sharedAt:   timestamp('shared_at', { withTimezone: true }),
   },
   (table) => ({
     workspaceSlugUnique: unique('flows_workspace_id_slug_key').on(table.workspaceId, table.slug),

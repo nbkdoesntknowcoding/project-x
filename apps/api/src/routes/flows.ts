@@ -2,6 +2,8 @@ import { and, count, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
+import { config } from '../config/env.js';
+import { db } from '../db/index.js';
 import { flows, flowVersions, flowNodes, flowEdges, users } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { renderNodeContent, topologicalWalk } from '../lib/flows/walk.js';
@@ -918,5 +920,93 @@ export const flowsRoutes: FastifyPluginAsync = async (app) => {
 
     if (!result) return reply.code(404).send({ error: 'flow_not_found' });
     return reply.send(result);
+  });
+
+  // -------------------------------------------------------------------
+  // POST /api/flows/:id/share — enable a share link (any Mnema user can view)
+  // -------------------------------------------------------------------
+  app.post<{ Params: { id: string } }>('/api/flows/:id/share', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const result = await withTenant(req.auth.tenant_id, async (tx) => {
+      const flow = await resolveFlow(tx, req.params.id);
+      if (!flow) return { error: 'flow_not_found' as const };
+      const cur = await tx.select({ t: flows.shareToken }).from(flows).where(eq(flows.id, flow.id)).limit(1);
+      let token = cur[0]?.t ?? null;
+      if (!token) {
+        token = nanoid(20);
+        await tx.update(flows).set({ shareToken: token, sharedAt: new Date() }).where(eq(flows.id, flow.id));
+      }
+      return { token };
+    });
+    if ('error' in result) return reply.code(404).send(result);
+    return reply.send({
+      share_token: result.token,
+      url: `${config.WEB_BASE_URL}/app/flows/shared/${result.token}`,
+    });
+  });
+
+  // -------------------------------------------------------------------
+  // DELETE /api/flows/:id/share — revoke the share link
+  // -------------------------------------------------------------------
+  app.delete<{ Params: { id: string } }>('/api/flows/:id/share', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const result = await withTenant(req.auth.tenant_id, async (tx) => {
+      const flow = await resolveFlow(tx, req.params.id);
+      if (!flow) return { error: 'flow_not_found' as const };
+      await tx.update(flows).set({ shareToken: null, sharedAt: null }).where(eq(flows.id, flow.id));
+      return { ok: true };
+    });
+    if ('error' in result) return reply.code(404).send(result);
+    return reply.send(result);
+  });
+
+  // -------------------------------------------------------------------
+  // GET /api/flows/shared/:token — read-only published flow for ANY Mnema user.
+  // Cross-tenant by design: the unguessable token is the grant. Auth required
+  // (must be a logged-in Mnema account) but workspace membership is NOT. Uses
+  // the shared db client (owner role bypasses tenant RLS) to read across tenants.
+  // -------------------------------------------------------------------
+  app.get<{ Params: { token: string } }>('/api/flows/shared/:token', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const token = req.params.token;
+    if (!token || token.length > 64) return reply.code(400).send({ error: 'bad_token' });
+
+    const fl = await db
+      .select({
+        name: flows.name,
+        description: flows.description,
+        publishedVersionId: flows.publishedVersionId,
+      })
+      .from(flows)
+      .where(and(eq(flows.shareToken, token), isNull(flows.deletedAt)))
+      .limit(1);
+    if (!fl[0]) return reply.code(404).send({ error: 'not_found' });
+
+    const versionId = fl[0].publishedVersionId;
+    if (!versionId) {
+      return reply.send({ name: fl[0].name, description: fl[0].description, published: false, nodes: [], edges: [] });
+    }
+
+    const nodes = await db
+      .select({
+        client_node_id: flowNodes.clientNodeId,
+        kind: flowNodes.kind,
+        title: flowNodes.title,
+        position_x: flowNodes.positionX,
+        position_y: flowNodes.positionY,
+        data: flowNodes.data,
+      })
+      .from(flowNodes)
+      .where(eq(flowNodes.flowVersionId, versionId));
+    const edges = await db
+      .select({
+        from_node_id: flowEdges.fromNodeId,
+        to_node_id: flowEdges.toNodeId,
+        from_socket: flowEdges.fromSocket,
+      })
+      .from(flowEdges)
+      .where(eq(flowEdges.flowVersionId, versionId));
+
+    return reply.send({ name: fl[0].name, description: fl[0].description, published: true, nodes, edges });
   });
 };
