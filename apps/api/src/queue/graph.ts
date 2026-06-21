@@ -41,16 +41,24 @@ export function enqueueExtractDoc(
   );
 }
 
+/**
+ * Remove any existing job with this id, then add fresh. BullMQ ignores add()
+ * when a job with the same jobId already exists in ANY state (incl.
+ * completed/failed) — so a parked terminal job silently swallows every
+ * re-trigger. Removing first guarantees a re-trigger always runs.
+ */
+async function replaceJob(jobId: string, name: string, data: GraphJobData, delayMs = 0): Promise<void> {
+  const existing = await graphQueue.getJob(jobId);
+  if (existing) await existing.remove().catch(() => { /* race / already gone */ });
+  await graphQueue.add(name, data, { jobId, delay: delayMs });
+}
+
 /** Enqueue a full graph rebuild for a workspace. */
 export function enqueueFullBuild(
   workspaceId: string,
   mode: 'normal' | 'deep' = 'normal',
 ): void {
-  void graphQueue.add(
-    'full-build',
-    { type: 'full-build', workspaceId, mode },
-    { jobId: `full-build-${workspaceId}` },
-  );
+  void replaceJob(`full-build-${workspaceId}`, 'full-build', { type: 'full-build', workspaceId, mode });
 }
 
 /** Enqueue a cluster job (debounced by workspace — only one runs at a time). */
@@ -59,14 +67,5 @@ export function enqueueCluster(
   generateReport = false,
   delayMs = 0,
 ): void {
-  void graphQueue.add(
-    'cluster',
-    { type: 'cluster', workspaceId, generateReport },
-    {
-      jobId: `cluster-${workspaceId}`,
-      delay: delayMs,
-      // If a cluster job already exists for this workspace, replace it
-      // with the newer one so we don't pile up redundant jobs.
-    },
-  );
+  void replaceJob(`cluster-${workspaceId}`, 'cluster', { type: 'cluster', workspaceId, generateReport }, delayMs);
 }
