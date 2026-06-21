@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   bigserial,
   boolean,
   customType,
@@ -275,6 +276,13 @@ export const participantAliases = pgTable(
  * bot can upsert it. organizer_user_id = the act-as key's creator (who the host
  * resolves to). Used to surface unrecognized attendees for post-meeting mapping.
  */
+/** Extracted post-meeting summary stored on meetings.summary (Phase 2). */
+export interface MeetingSummary {
+  keyPoints: string[];
+  decisions: string[];
+  actionItems: Array<{ text: string; owner?: string | null }>;
+}
+
 export const meetings = pgTable(
   'meetings',
   {
@@ -301,6 +309,10 @@ export const meetings = pgTable(
     postMeetingDocId: uuid('post_meeting_doc_id'),
     preMeetingDocId:  uuid('pre_meeting_doc_id'),
     status:           text('status').default('scheduled'),
+    // Phase 2 (migration 0045) — post-meeting transcript + extracted summary.
+    summary:          jsonb('summary').$type<MeetingSummary>(),
+    // 'none' (default) | 'pending' | 'ready' | 'failed'
+    transcriptStatus: text('transcript_status').default('none'),
   },
   (table) => ({
     workspaceIdx:   index('meetings_workspace_idx').on(table.workspaceId),
@@ -335,6 +347,31 @@ export const meetingParticipants = pgTable(
   (table) => ({
     uniqueParticipant: unique('meeting_participants_uq').on(table.meetingId, table.recallParticipantId),
     meetingIdx:        index('meeting_participants_meeting_idx').on(table.meetingId),
+  }),
+);
+
+/**
+ * Post-meeting transcript turns (Phase 2, migration 0045). One row per utterance,
+ * ordered by `seq`. Populated by the meeting-end worker from Recall's async
+ * transcript. `speaker` is the Recall display name; `participantId` links to the
+ * resolved roster row when we can match it.
+ */
+export const meetingTranscripts = pgTable(
+  'meeting_transcripts',
+  {
+    id:            uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    meetingId:     uuid('meeting_id').notNull()
+                   .references(() => meetings.id, { onDelete: 'cascade' }),
+    seq:           integer('seq').notNull(),
+    speaker:       text('speaker'),
+    participantId: uuid('participant_id').references(() => meetingParticipants.id, { onDelete: 'set null' }),
+    text:          text('text').notNull(),
+    tsMs:          bigint('ts_ms', { mode: 'number' }),
+    createdAt:     timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    meetingSeqUq: unique('meeting_transcripts_meeting_seq_uq').on(table.meetingId, table.seq),
+    meetingIdx:   index('meeting_transcripts_meeting_idx').on(table.meetingId),
   }),
 );
 

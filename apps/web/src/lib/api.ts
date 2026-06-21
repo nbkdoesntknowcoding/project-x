@@ -195,6 +195,39 @@ export interface MeetingRow {
   calendar_event_id: string | null;
   participant_count: number;
   unresolved_count: number;
+  // Phase 2 — post-meeting data availability (present after the API redeploys).
+  transcript_status?: string | null; // 'none' | 'pending' | 'ready' | 'failed'
+  post_meeting_doc_id?: string | null;
+  has_summary?: boolean;
+}
+
+export interface MeetingSummary {
+  keyPoints: string[];
+  decisions: string[];
+  actionItems: Array<{ text: string; owner?: string | null }>;
+}
+
+export interface MeetingDetail {
+  id: string;
+  title: string | null;
+  meeting_url: string | null;
+  started_at: string;
+  ended_at: string | null;
+  scheduled_start_at: string | null;
+  scheduled_end_at: string | null;
+  status: string | null;
+  admitted: boolean | null;
+  summary: MeetingSummary | null;
+  transcript_status: string;
+  post_meeting_doc_id: string | null;
+  meeting_folder_id: string | null;
+}
+
+export interface TranscriptTurn {
+  seq: number;
+  speaker: string | null;
+  text: string;
+  tsMs: number | null;
 }
 
 export interface MeetingParticipantRow {
@@ -296,6 +329,9 @@ export const api = {
 
   // Phase 2b — meetings + post-meeting identity mapping
   listMeetings: (): Promise<{ meetings: MeetingRow[] }> => apiFetch('/api/meetings'),
+  getMeeting: (id: string): Promise<{ meeting: MeetingDetail }> => apiFetch(`/api/meetings/${id}`),
+  getMeetingTranscript: (id: string): Promise<{ status: string; turns: TranscriptTurn[] }> =>
+    apiFetch(`/api/meetings/${id}/transcript`),
   // Phase C — calendar linking + admit/dispatch
   calendarStatus: (): Promise<{ connected: boolean; configured: boolean }> => apiFetch('/api/calendar/status'),
   calendarSync: (): Promise<{ ok: true; created: number; updated: number; total: number }> =>

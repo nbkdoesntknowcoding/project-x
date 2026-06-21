@@ -146,6 +146,12 @@ const envSchema = z.object({
   // act-as behaves as before (no roster validation).
   RECALL_WEBHOOK_SECRET: z.string().startsWith('whsec_').optional(),
 
+  // Recall.ai REST credentials — used server-side by the meeting-end worker to
+  // create + fetch the post-meeting transcript (Phase 2). Same key the
+  // meeting-bot uses. Optional: when unset, transcript capture is skipped.
+  RECALL_API_KEY: z.string().min(1).optional(),
+  RECALL_REGION:  z.string().min(1).default('ap-northeast-1'),
+
   // Cloudflare R2 (DOCX/PDF attachment storage — optional; upload/export routes
   // return 503 if not configured rather than crashing the whole server)
   R2_ACCOUNT_ID:        z.string().min(1).optional(),

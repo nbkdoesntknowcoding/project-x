@@ -17,6 +17,7 @@ import { db } from '../../db/index.js';
 import { meetingParticipants, meetings } from '../../db/schema.js';
 import { resolveApiKey } from '../../lib/api-keys.js';
 import { resolveAttendee } from '../../lib/meeting-identity.js';
+import { enqueueMeetingEnd } from '../../queue/meeting-end.js';
 
 const bodySchema = z.object({
   recall_bot_id: z.string().min(1),
@@ -88,6 +89,10 @@ export const meetingParticipantsRoutes: FastifyPluginAsync = async (app) => {
           set: { name, email, isHost: p.is_host ?? false, resolvedUserId },
         });
     }
+
+    // Meeting just ended → kick off post-meeting processing (transcript →
+    // summary → Post-Meeting Notes doc). Idempotent + retryable in the worker.
+    if (ended) enqueueMeetingEnd(meeting.id, key.workspaceId, recall_bot_id);
 
     return { ok: true, meeting_id: meeting.id };
   });

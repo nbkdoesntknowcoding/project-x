@@ -1,5 +1,8 @@
 import { type JSX, useEffect, useState } from 'react';
-import { api, type MeetingRow, type MeetingParticipantRow, type MemberRow } from '../../lib/api';
+import {
+  api, type MeetingRow, type MeetingParticipantRow, type MemberRow,
+  type MeetingDetail, type MeetingSummary, type TranscriptTurn,
+} from '../../lib/api';
 import {
   muted, soft, ink, line, surface, surface2, accent, green,
   btn, ghost, fmtDateTime, durationLabel, statusOf,
@@ -16,8 +19,9 @@ const TABS: Array<{ id: Tab; label: string }> = [
 /**
  * Right-hand detail panel for the selected meeting. Header carries the
  * contextual actions (Admit / Ignore / Send bot / Join); tabs expose the
- * meeting's data. Transcript / Doc / Key-points light up in Phase 2 once the
- * recording + summarization backend lands — Phase 1 shows their empty states.
+ * meeting's data. Overview / Transcript / Doc bind to the Phase 2 backend
+ * (transcript + summary + auto-written doc) and show status-aware empty states
+ * while a recorded meeting is still being processed.
  */
 export function MeetingDetailPanel({
   meeting, members, onChange,
@@ -27,6 +31,16 @@ export function MeetingDetailPanel({
   onChange: () => void;
 }): JSX.Element {
   const [tab, setTab] = useState<Tab>('overview');
+  const [detail, setDetail] = useState<MeetingDetail | null>(null);
+  const meetingId = meeting?.id ?? null;
+
+  useEffect(() => {
+    setDetail(null);
+    if (!meetingId) return;
+    let live = true;
+    void api.getMeeting(meetingId).then((r) => { if (live) setDetail(r.meeting); }).catch(() => {});
+    return () => { live = false; };
+  }, [meetingId]);
 
   if (!meeting) {
     return (
@@ -41,6 +55,8 @@ export function MeetingDetailPanel({
   const st = statusOf(meeting);
   const when = meeting.scheduled_start_at || meeting.started_at;
   const dur = durationLabel(meeting);
+  const tStatus = detail?.transcript_status ?? meeting.transcript_status ?? 'none';
+  const docId = detail?.post_meeting_doc_id ?? meeting.post_meeting_doc_id ?? null;
 
   return (
     <div style={panel}>
@@ -80,26 +96,40 @@ export function MeetingDetailPanel({
 
       {/* body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {tab === 'overview' && <Overview meeting={meeting} />}
-        {tab === 'transcript' && <EmptyState icon="🎙" title="No transcript yet" body="Once meeting recording is enabled, the full transcript of this meeting will appear here." />}
-        {tab === 'doc' && <EmptyState icon="📄" title="No post-meeting doc yet" body="When a recorded meeting ends, Mnema writes a Post-Meeting Notes doc — summary, decisions and action items — and links it here." />}
+        {tab === 'overview' && <Overview meeting={meeting} summary={detail?.summary ?? null} tStatus={tStatus} />}
+        {tab === 'transcript' && <TranscriptTab meetingId={meeting.id} tStatus={tStatus} />}
+        {tab === 'doc' && <DocTab docId={docId} tStatus={tStatus} />}
         {tab === 'people' && <People meeting={meeting} members={members} onChange={onChange} />}
       </div>
     </div>
   );
 }
 
-function Overview({ meeting }: { meeting: MeetingRow }): JSX.Element {
+function transcriptHint(tStatus: string): { title: string; body: string } {
+  if (tStatus === 'pending') return { title: 'Processing…', body: 'The recording is being transcribed — this usually takes a minute or two after the meeting ends.' };
+  if (tStatus === 'failed') return { title: 'No transcript', body: "We couldn't get a transcript for this meeting." };
+  if (tStatus === 'ready') return { title: 'Nothing here', body: 'No turns were captured for this meeting.' };
+  return { title: 'No transcript yet', body: 'Once a recorded meeting ends, its full transcript appears here.' };
+}
+
+function Overview({ meeting, summary, tStatus }: { meeting: MeetingRow; summary: MeetingSummary | null; tStatus: string }): JSX.Element {
+  const hasSummary = !!summary && (summary.keyPoints.length > 0 || summary.decisions.length > 0 || summary.actionItems.length > 0);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <section>
         <Label>Key points</Label>
-        <EmptyState
-          inline
-          icon="✨"
-          title="No key points yet"
-          body="Key points, decisions and action items are extracted automatically after a recorded meeting ends."
-        />
+        {hasSummary ? (
+          <SummaryView summary={summary!} />
+        ) : (
+          <EmptyState
+            inline
+            icon="✨"
+            title={tStatus === 'pending' ? 'Processing…' : 'No key points yet'}
+            body={tStatus === 'pending'
+              ? 'Key points, decisions and action items are being extracted from the recording.'
+              : 'Key points, decisions and action items are extracted automatically after a recorded meeting ends.'}
+          />
+        )}
       </section>
       {meeting.meeting_url && (
         <section>
@@ -109,6 +139,81 @@ function Overview({ meeting }: { meeting: MeetingRow }): JSX.Element {
           </a>
         </section>
       )}
+    </div>
+  );
+}
+
+function SummaryView({ summary }: { summary: MeetingSummary }): JSX.Element {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {summary.keyPoints.length > 0 && (
+        <ul style={listStyle}>{summary.keyPoints.map((k, i) => <li key={i} style={liStyle}>{k}</li>)}</ul>
+      )}
+      {summary.decisions.length > 0 && (
+        <div>
+          <Label>Decisions</Label>
+          <ul style={listStyle}>{summary.decisions.map((d, i) => <li key={i} style={liStyle}>{d}</li>)}</ul>
+        </div>
+      )}
+      {summary.actionItems.length > 0 && (
+        <div>
+          <Label>Action items</Label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {summary.actionItems.map((a, i) => (
+              <div key={i} style={{ fontSize: 12.5, color: ink, display: 'flex', gap: 8 }}>
+                <span style={{ color: green }}>○</span>
+                <span>{a.text}{a.owner ? <span style={{ color: muted }}> — {a.owner}</span> : null}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TranscriptTab({ meetingId, tStatus }: { meetingId: string; tStatus: string }): JSX.Element {
+  const [turns, setTurns] = useState<TranscriptTurn[] | null>(null);
+  useEffect(() => {
+    setTurns(null);
+    void api.getMeetingTranscript(meetingId).then((r) => setTurns(r.turns)).catch(() => setTurns([]));
+  }, [meetingId]);
+
+  if (turns === null) return <p style={{ color: muted, fontSize: 13 }}>Loading…</p>;
+  if (turns.length === 0) {
+    const h = transcriptHint(tStatus);
+    return <EmptyState inline icon="🎙" title={h.title} body={h.body} />;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {turns.map((t) => (
+        <div key={t.seq}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: soft }}>{t.speaker || 'Speaker'}</div>
+          <div style={{ fontSize: 12.5, color: ink, lineHeight: 1.5 }}>{t.text}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DocTab({ docId, tStatus }: { docId: string | null; tStatus: string }): JSX.Element {
+  if (!docId) {
+    return (
+      <EmptyState
+        icon="📄"
+        title={tStatus === 'pending' ? 'Writing notes…' : 'No post-meeting doc yet'}
+        body={tStatus === 'pending'
+          ? 'Mnema is writing the Post-Meeting Notes — summary, decisions and action items — from the transcript.'
+          : 'When a recorded meeting ends, Mnema writes a Post-Meeting Notes doc and links it here.'}
+      />
+    );
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <p style={{ fontSize: 12.5, color: soft, lineHeight: 1.5, margin: 0 }}>
+        Mnema filed the Post-Meeting Notes — summary, decisions, action items and the full transcript — in this meeting's folder.
+      </p>
+      <a href={`/app/content/${docId}`} style={{ ...btn, textDecoration: 'none', alignSelf: 'flex-start' }}>Open Post-Meeting Notes →</a>
     </div>
   );
 }
@@ -234,6 +339,9 @@ function EmptyState({ icon, title, body, inline }: { icon: string; title: string
     </div>
   );
 }
+
+const listStyle: React.CSSProperties = { margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 6 };
+const liStyle: React.CSSProperties = { fontSize: 12.5, color: ink, lineHeight: 1.5 };
 
 const panel: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', minHeight: 420,

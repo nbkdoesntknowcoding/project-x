@@ -10,7 +10,7 @@
  * any matching unresolved attendee. Reads are viewer+; mapping is editor+ (it's an
  * identity assertion that grants that name the mapped user's access).
  */
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config/env.js';
@@ -18,6 +18,7 @@ import { db } from '../db/index.js';
 import {
   meetingParticipants,
   meetings,
+  meetingTranscripts,
   participantAliases,
   users,
   workspaceMembers,
@@ -69,6 +70,7 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
     const rows = await db.execute(sql`
       SELECT m.id, m.title, m.meeting_url, m.started_at, m.ended_at,
              m.scheduled_start_at, m.scheduled_end_at, m.status, m.admitted, m.calendar_event_id,
+             m.transcript_status, m.post_meeting_doc_id, (m.summary IS NOT NULL) AS has_summary,
              count(mp.id)::int AS participant_count,
              count(mp.id) FILTER (WHERE mp.resolved_user_id IS NULL)::int AS unresolved_count
       FROM meetings m
@@ -78,6 +80,66 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
       ORDER BY COALESCE(m.scheduled_start_at, m.started_at) DESC
       LIMIT 100`);
     return reply.send({ meetings: rows });
+  });
+
+  // ── GET /api/meetings/:id ──────────────────────────────────────────────────
+  // Full detail for one meeting: summary (key points / decisions / action items),
+  // transcript availability, and the linked post-meeting doc/folder. Viewer+.
+  app.get('/api/meetings/:id', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params as { id: string };
+    if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
+    try { await requireRole(req, 'viewer'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
+
+    const meeting = await db.query.meetings.findFirst({
+      where: and(eq(meetings.id, id), eq(meetings.workspaceId, req.auth.tenant_id)),
+    });
+    if (!meeting) return reply.code(404).send({ error: 'not_found' });
+
+    return reply.send({
+      meeting: {
+        id: meeting.id,
+        title: meeting.title,
+        meeting_url: meeting.meetingUrl,
+        started_at: meeting.startedAt,
+        ended_at: meeting.endedAt,
+        scheduled_start_at: meeting.scheduledStartAt,
+        scheduled_end_at: meeting.scheduledEndAt,
+        status: meeting.status,
+        admitted: meeting.admitted,
+        summary: meeting.summary ?? null,
+        transcript_status: meeting.transcriptStatus ?? 'none',
+        post_meeting_doc_id: meeting.postMeetingDocId,
+        meeting_folder_id: meeting.meetingFolderId,
+      },
+    });
+  });
+
+  // ── GET /api/meetings/:id/transcript ───────────────────────────────────────
+  // Transcript turns, ordered. Visible to any workspace member (viewer+).
+  app.get('/api/meetings/:id/transcript', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params as { id: string };
+    if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
+    try { await requireRole(req, 'viewer'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
+
+    const meeting = await db.query.meetings.findFirst({
+      where: and(eq(meetings.id, id), eq(meetings.workspaceId, req.auth.tenant_id)),
+    });
+    if (!meeting) return reply.code(404).send({ error: 'not_found' });
+
+    const turns = await db
+      .select({
+        seq: meetingTranscripts.seq,
+        speaker: meetingTranscripts.speaker,
+        text: meetingTranscripts.text,
+        tsMs: meetingTranscripts.tsMs,
+      })
+      .from(meetingTranscripts)
+      .where(eq(meetingTranscripts.meetingId, id))
+      .orderBy(asc(meetingTranscripts.seq));
+
+    return reply.send({ status: meeting.transcriptStatus ?? 'none', turns });
   });
 
   // ── GET /api/meetings/:id/participants ─────────────────────────────────────

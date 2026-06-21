@@ -16,6 +16,7 @@ import { startRetryWorker } from './retry/worker.js';
 import { startCronWorkers } from './cron.js';
 import { startPdfGenerationWorker } from './pdf-generation/worker.js';
 import { startGraphWorker } from './graph/worker.js';
+import { startMeetingEndWorker } from './meeting-end/worker.js';
 
 const embeddings = startEmbeddingsWorker();
 // eslint-disable-next-line no-console
@@ -52,6 +53,10 @@ const graphWorker = startGraphWorker();
 // eslint-disable-next-line no-console
 console.log('[workers] knowledge-graph worker started');
 
+const meetingEndWorker = startMeetingEndWorker();
+// eslint-disable-next-line no-console
+console.log('[workers] meeting-end worker started');
+
 const shutdown = async (signal: string): Promise<void> => {
   // eslint-disable-next-line no-console
   console.log(`[workers] ${signal} received, draining and shutting down`);
@@ -62,6 +67,7 @@ const shutdown = async (signal: string): Promise<void> => {
   await cronWorkers.close();
   if (pdfWorker) await pdfWorker.close();
   await graphWorker.close();
+  await meetingEndWorker.close();
   process.exit(0);
 };
 
