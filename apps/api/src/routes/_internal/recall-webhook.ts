@@ -20,6 +20,7 @@ import { db } from '../../db/index.js';
 import { meetingParticipants, meetings } from '../../db/schema.js';
 import { resolveAttendee } from '../../lib/meeting-identity.js';
 import { verifyRecallRequest } from '../../lib/recall-verify.js';
+import { enqueueMeetingEnd } from '../../queue/meeting-end.js';
 
 function extractEmail(p: Record<string, unknown>): string | null {
   const email = p.email as string | undefined;
@@ -52,6 +53,26 @@ export const recallWebhookRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const event = (body.event as string) ?? '';
+
+    // Robustness path: if Recall is configured (in the dashboard) to post
+    // recording/transcript completion here, use it as a second trigger for
+    // post-meeting processing alongside the bot's own ended:true report. Safe to
+    // fire twice — the worker is idempotent and the queue dedupes by meeting.
+    if (event === 'recording.done' || event === 'transcript.done' || event === 'bot.done') {
+      const d = (body.data as Record<string, unknown>) ?? {};
+      const nested = (d.data as Record<string, unknown> | undefined) ?? {};
+      const botId =
+        ((d.bot as { id?: string } | undefined)?.id) ??
+        ((nested.bot as { id?: string } | undefined)?.id) ??
+        ((d.recording as { bot_id?: string } | undefined)?.bot_id) ??
+        null;
+      if (botId) {
+        const m = await db.query.meetings.findFirst({ where: eq(meetings.recallBotId, botId) });
+        if (m) enqueueMeetingEnd(m.id, m.workspaceId, botId);
+      }
+      return reply.code(200).send({ ok: true });
+    }
+
     if (!event.startsWith('participant_events.')) return reply.code(200).send({ ok: true });
 
     const d = (body.data as Record<string, unknown>) ?? {};

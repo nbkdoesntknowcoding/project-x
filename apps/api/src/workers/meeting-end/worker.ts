@@ -12,7 +12,7 @@
  */
 import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import OpenAI from 'openai';
 import { config } from '../../config/env.js';
@@ -21,7 +21,7 @@ import { docs, folders, meetings, meetingTranscripts, type MeetingSummary } from
 import { contentHash, emptyYjsState } from '../../lib/yjs.js';
 import {
   recallEnabled, getBotRecording, createAsyncTranscript, getTranscriptArtifact, downloadTranscript,
-  type TranscriptTurn,
+  deleteBotMedia, type TranscriptTurn,
 } from '../../lib/recall.js';
 import { MEETING_END_QUEUE_NAME, type MeetingEndJobData } from '../../queue/meeting-end.js';
 
@@ -144,38 +144,50 @@ export function startMeetingEndWorker(): Worker<MeetingEndJobData> {
       if (!recallBotId || !recallEnabled()) return;
 
       // ── 1. Transcript ──────────────────────────────────────────────────────
-      await db.update(meetings).set({ transcriptStatus: 'pending' }).where(eq(meetings.id, meetingId));
+      // Idempotent: if a retry runs after we've already stored the transcript
+      // (and possibly purged Recall's media), reuse the stored turns instead of
+      // hitting Recall again.
+      const stored = await db
+        .select({ seq: meetingTranscripts.seq, speaker: meetingTranscripts.speaker, text: meetingTranscripts.text, tsMs: meetingTranscripts.tsMs })
+        .from(meetingTranscripts)
+        .where(eq(meetingTranscripts.meetingId, meetingId))
+        .orderBy(asc(meetingTranscripts.seq));
 
-      const rec = await getBotRecording(recallBotId);
-      if (!rec) throw new Error(`no recording for bot ${recallBotId} yet`);          // retry
-      if (!rec.recordingDone) throw new Error(`recording ${rec.recordingId} not done`); // retry
+      let turns: TranscriptTurn[] = stored.map((t) => ({ speaker: t.speaker, text: t.text, tsMs: t.tsMs }));
 
-      let transcriptId = rec.transcriptId;
-      if (!transcriptId) transcriptId = await createAsyncTranscript(rec.recordingId);
+      if (turns.length === 0) {
+        await db.update(meetings).set({ transcriptStatus: 'pending' }).where(eq(meetings.id, meetingId));
 
-      let turns: TranscriptTurn[] = [];
-      let transcriptStatus: 'ready' | 'failed' = 'failed';
-      let downloadUrl: string | null = null;
-      for (let i = 0; i < 12; i++) {
-        const art = await getTranscriptArtifact(transcriptId);
-        if (art.statusCode === 'done') { downloadUrl = art.downloadUrl; break; }
-        if (art.statusCode === 'failed' || art.statusCode === 'error') { transcriptStatus = 'failed'; break; }
-        await sleep(12_000);
+        const rec = await getBotRecording(recallBotId);
+        if (!rec) throw new Error(`no recording for bot ${recallBotId} yet`);          // retry
+        if (!rec.recordingDone) throw new Error(`recording ${rec.recordingId} not done`); // retry
+
+        let transcriptId = rec.transcriptId;
+        if (!transcriptId) transcriptId = await createAsyncTranscript(rec.recordingId);
+
+        let transcriptStatus: 'ready' | 'failed' = 'failed';
+        let downloadUrl: string | null = null;
+        for (let i = 0; i < 12; i++) {
+          const art = await getTranscriptArtifact(transcriptId);
+          if (art.statusCode === 'done') { downloadUrl = art.downloadUrl; break; }
+          if (art.statusCode === 'failed' || art.statusCode === 'error') { transcriptStatus = 'failed'; break; }
+          await sleep(12_000);
+        }
+        if (downloadUrl) {
+          turns = await downloadTranscript(downloadUrl);
+          transcriptStatus = 'ready';
+        } else if (transcriptStatus !== 'failed') {
+          throw new Error('transcript still processing'); // retry — same transcriptId resumes
+        }
+
+        if (turns.length) {
+          await db.delete(meetingTranscripts).where(eq(meetingTranscripts.meetingId, meetingId));
+          await db.insert(meetingTranscripts).values(
+            turns.map((t, i) => ({ meetingId, seq: i, speaker: t.speaker, text: t.text, tsMs: t.tsMs })),
+          );
+        }
+        await db.update(meetings).set({ transcriptStatus }).where(eq(meetings.id, meetingId));
       }
-      if (downloadUrl) {
-        turns = await downloadTranscript(downloadUrl);
-        transcriptStatus = 'ready';
-      } else if (transcriptStatus !== 'failed') {
-        throw new Error('transcript still processing'); // retry — same transcriptId resumes
-      }
-
-      if (turns.length) {
-        await db.delete(meetingTranscripts).where(eq(meetingTranscripts.meetingId, meetingId)); // idempotent re-run
-        await db.insert(meetingTranscripts).values(
-          turns.map((t, i) => ({ meetingId, seq: i, speaker: t.speaker, text: t.text, tsMs: t.tsMs })),
-        );
-      }
-      await db.update(meetings).set({ transcriptStatus }).where(eq(meetings.id, meetingId));
 
       // ── 2. Summary ─────────────────────────────────────────────────────────
       let summary: MeetingSummary | null = null;
@@ -194,6 +206,10 @@ export function startMeetingEndWorker(): Worker<MeetingEndJobData> {
       await db.update(meetings).set({ meetingFolderId: folderId }).where(eq(meetings.id, meetingId));
       const docId = await writePostMeetingDoc(workspaceId, folderId, meeting, summary, turns);
       await db.update(meetings).set({ postMeetingDocId: docId }).where(eq(meetings.id, meetingId));
+
+      // All artifacts persisted → purge Recall's stored video + audio so nothing
+      // is retained anywhere; Mnema keeps only the transcript text. Best-effort.
+      if (turns.length) await deleteBotMedia(recallBotId);
     },
     {
       connection,

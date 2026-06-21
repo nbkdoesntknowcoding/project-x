@@ -42,6 +42,20 @@ export function recallEnabled(): boolean {
   return !!config.RECALL_API_KEY;
 }
 
+/**
+ * Permanently delete all of a bot's recording media (video + audio) stored by
+ * Recall. We call this once the transcript text is safely persisted, so no
+ * video/audio is retained anywhere — Mnema keeps only the transcript. Best
+ * effort: never throws (a 404/409 just means it's already gone).
+ */
+export async function deleteBotMedia(botId: string): Promise<void> {
+  try {
+    await recallFetch(`/bot/${botId}/delete_media/`, { method: 'POST' });
+  } catch {
+    /* already deleted / not ready — non-fatal */
+  }
+}
+
 /** Find the most-complete recording for a bot, and any transcript already on it. */
 export async function getBotRecording(botId: string): Promise<BotRecording | null> {
   const bot = (await recallFetch(`/bot/${botId}/`)) as { recordings?: Array<Record<string, unknown>> };
