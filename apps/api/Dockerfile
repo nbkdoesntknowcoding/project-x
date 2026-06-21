@@ -50,6 +50,8 @@ COPY apps/api/drizzle ./apps/api/drizzle
 
 # Static templates (not emitted by tsc — copy from source)
 COPY apps/api/src/templates ./apps/api/dist/templates
+# Email HTML templates (inliner reads dist/emails/html/*.html at runtime)
+COPY apps/api/src/emails/html ./apps/api/dist/emails/html
 
 EXPOSE 8080
 ENV NODE_ENV=production

@@ -35,6 +35,8 @@ RUN pnpm install --frozen-lockfile --prod
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/packages/shared ./packages/shared
 COPY --from=builder /app/packages/schema/dist ./packages/schema/dist
+# Email HTML templates (inliner reads dist/emails/html/*.html at runtime)
+COPY apps/api/src/emails/html ./apps/api/dist/emails/html
 
 ENV NODE_ENV=production
 
