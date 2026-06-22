@@ -2,7 +2,7 @@ import { type JSX, useMemo, useState } from 'react';
 import type { MeetingRow } from '../../lib/api';
 import {
   muted, soft, ink, line, surface, surface2, accent, green,
-  meetingDate, isLive, fmtTime, dayKey, sameDay, addDays,
+  meetingDate, isLive, hasContent, fmtTime, dayKey, sameDay, addDays,
 } from './shared';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -101,21 +101,24 @@ export function MeetingCalendar({
 function Chip({ meeting, selected, onSelect }: { meeting: MeetingRow; selected: boolean; onSelect: (id: string) => void }): JSX.Element {
   const ignored = meeting.status === 'ignored';
   const live = isLive(meeting);
+  const recorded = hasContent(meeting);
   return (
     <button
       onClick={() => onSelect(meeting.id)}
-      title={meeting.title || 'Untitled meeting'}
+      title={`${meeting.title || 'Untitled meeting'}${recorded ? ' · recorded (transcript + notes)' : ''}`}
       style={{
         ...chipBase,
         background: selected ? accent : surface,
-        border: `0.5px solid ${selected ? accent : line}`,
+        border: `0.5px solid ${selected ? accent : (recorded ? `${green}66` : line)}`,
         color: selected ? '#0A0B0D' : (ignored ? muted : ink),
         opacity: ignored ? 0.6 : 1,
       }}
     >
-      {live && <span style={{ width: 5, height: 5, borderRadius: 999, background: selected ? '#0A0B0D' : green, flexShrink: 0, boxShadow: selected ? 'none' : `0 0 0 2px ${green}33` }} />}
+      {live
+        ? <span style={{ width: 5, height: 5, borderRadius: 999, background: selected ? '#0A0B0D' : green, flexShrink: 0, boxShadow: selected ? 'none' : `0 0 0 2px ${green}33` }} />
+        : recorded && <span title="recorded" style={{ fontSize: 9, flexShrink: 0, color: selected ? '#0A0B0D' : green }}>●</span>}
       <span style={{ fontSize: 9.5, opacity: 0.7, flexShrink: 0 }}>{fmtTime(meetingDate(meeting))}</span>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meeting.title || 'Untitled'}</span>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meeting.title || 'Meeting'}</span>
     </button>
   );
 }

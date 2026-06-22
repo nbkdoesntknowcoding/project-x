@@ -29,6 +29,11 @@ export function isLive(m: MeetingRow): boolean {
   return m.status === 'live' || (!!m.started_at && !m.ended_at && m.status !== 'scheduled' && m.status !== 'ignored');
 }
 
+/** A meeting the bot actually recorded — has a transcript, notes doc, or extracted summary. */
+export function hasContent(m: MeetingRow): boolean {
+  return m.transcript_status === 'ready' || !!m.post_meeting_doc_id || !!m.has_summary;
+}
+
 export interface StatusBadge { label: string; color: string }
 export function statusOf(m: MeetingRow): StatusBadge {
   if (m.status === 'ignored') return { label: 'Ignored', color: muted };

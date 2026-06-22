@@ -1,6 +1,6 @@
 import { type JSX, useEffect, useState } from 'react';
 import { api, type MeetingRow, type MemberRow } from '../../lib/api';
-import { muted, soft, ink, line, surface, btn, ghost, meetingDate } from './shared';
+import { muted, soft, ink, line, surface, btn, ghost, meetingDate, hasContent } from './shared';
 import { MeetingCalendar } from './MeetingCalendar';
 import { MeetingDetailPanel } from './MeetingDetailPanel';
 
@@ -21,8 +21,10 @@ export function MeetingsPage(): JSX.Element {
         const [m, mem] = await Promise.all([api.listMeetings(), api.listMembers()]);
         setMeetings(m.meetings);
         setMembers(mem.members);
-        // Default-select the latest meeting (listMeetings is ordered newest-first).
-        setSelectedId((cur) => cur ?? m.meetings[0]?.id ?? null);
+        // Default-select the latest meeting that actually has a RECORDING (transcript/doc/
+        // notes), so the panel opens on real content — not an empty scheduled calendar slot.
+        const recorded = m.meetings.find(hasContent);
+        setSelectedId((cur) => cur ?? recorded?.id ?? m.meetings[0]?.id ?? null);
       } finally {
         setLoading(false);
       }

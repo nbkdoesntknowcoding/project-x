@@ -283,6 +283,15 @@ export function startMeetingEndWorker(): Worker<MeetingEndJobData> {
         } catch (err) { console.error('[meeting-end] summarise failed:', err); } // eslint-disable-line no-console
       }
 
+      // Give the meeting a real title (calendar-less bot meetings have none, so they show
+      // as "Untitled"). Prefer the first key point; fall back to a dated label.
+      if (!meeting.title) {
+        const t = (summary?.keyPoints?.[0]?.replace(/\s+/g, ' ').trim().slice(0, 70))
+          || `Meeting — ${fmtDate(meeting.startedAt)}`;
+        await db.update(meetings).set({ title: t }).where(eq(meetings.id, meetingId));
+        meeting.title = t;
+      }
+
       // ── 3. Tasks from action items ───────────────────────────────────────────
       const createdTasks = await createMeetingTasks(meeting, summary);
 
