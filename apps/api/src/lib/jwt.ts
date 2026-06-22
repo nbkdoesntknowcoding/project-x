@@ -6,11 +6,11 @@ const secret = new TextEncoder().encode(config.JWT_SECRET);
 
 type SignableClaims = Omit<JwtClaims, 'iat' | 'exp' | 'iss' | 'aud'>;
 
-export async function signJwt(claims: SignableClaims): Promise<string> {
+export async function signJwt(claims: SignableClaims, opts?: { expiresIn?: string }): Promise<string> {
   return await new SignJWT({ ...claims })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('1h')
+    .setExpirationTime(opts?.expiresIn ?? '1h')
     .setIssuer(config.JWT_ISSUER)
     .setAudience(config.JWT_AUDIENCE)
     .sign(secret);

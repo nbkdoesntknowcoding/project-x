@@ -111,3 +111,27 @@ export async function getPendingJoinSession(
 export function clearPendingJoinSession(cookies: AstroCookies): void {
   cookies.delete(PENDING_JOIN_COOKIE, { path: '/' });
 }
+
+// ── Impersonation origin (admin center) ─────────────────────────────────────
+// While a staff member impersonates a user, their REAL session is stashed here so
+// "Return to admin" can restore it without a re-login. Sealed; same lifetime as a
+// session. Never sent to the API — purely a web-side restore buffer.
+const ADMIN_ORIGIN_COOKIE = 'boppl_admin_origin';
+
+export async function setAdminOrigin(cookies: AstroCookies, data: SessionData): Promise<void> {
+  const sealed = await sealData(data, { password: getPassword() });
+  cookies.set(ADMIN_ORIGIN_COOKIE, sealed, {
+    httpOnly: true, secure: false, sameSite: 'lax', path: '/', maxAge: 60 * 60,
+  });
+}
+
+export async function getAdminOrigin(cookies: AstroCookies): Promise<SessionData | null> {
+  const value = cookies.get(ADMIN_ORIGIN_COOKIE)?.value;
+  if (!value) return null;
+  try { return await unsealData<SessionData>(value, { password: getPassword() }); }
+  catch { return null; }
+}
+
+export function clearAdminOrigin(cookies: AstroCookies): void {
+  cookies.delete(ADMIN_ORIGIN_COOKIE, { path: '/' });
+}

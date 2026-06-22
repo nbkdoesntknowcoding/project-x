@@ -42,6 +42,20 @@ export function AdminDashboard(): JSX.Element {
   }
   useEffect(() => { void loadAll(); }, []);
 
+  async function impersonate(w: AdminWorkspace) {
+    if (!w.owner_id) { alert('This workspace has no owner to impersonate.'); return; }
+    if (!confirm(`Enter "${w.name}" as ${w.owner_email}? You'll act as them for 30 minutes (audited). A banner will show, and you can return anytime.`)) return;
+    setBusy(w.id);
+    try {
+      const res = await fetch('/api/admin/impersonate', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ user_id: w.owner_id, workspace_id: w.id }),
+      });
+      if (!res.ok) { alert('Could not start impersonation.'); return; }
+      window.location.href = '/app/content';
+    } finally { setBusy(null); }
+  }
+
   async function toggleSuspend(w: AdminWorkspace) {
     const next = !w.suspended;
     if (!confirm(`${next ? 'Suspend' : 'Reactivate'} "${w.name}"? ${next ? 'Its members will be blocked from the app.' : ''}`)) return;
@@ -98,7 +112,11 @@ export function AdminDashboard(): JSX.Element {
               <td style={{ ...td, color: soft }}>{w.owner_email ?? '—'}</td>
               <td style={td}>{w.members}</td>
               <td style={{ ...td, color: muted }}>{fmtDate(w.created_at)}</td>
-              <td style={{ ...td, textAlign: 'right' }}>
+              <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                <button disabled={busy === w.id || !w.owner_id} onClick={() => impersonate(w)}
+                  style={smallBtn(accent)} title="Act as this workspace's owner (30 min, audited)">
+                  Enter
+                </button>{' '}
                 <button disabled={busy === w.id} onClick={() => toggleSuspend(w)}
                   style={smallBtn(w.suspended ? accent : '#ef4444')}>
                   {busy === w.id ? '…' : w.suspended ? 'Reactivate' : 'Suspend'}

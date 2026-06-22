@@ -4,6 +4,7 @@ import fp from 'fastify-plugin';
 import type { JwtClaims } from '@boppl/shared';
 import { verifyJwt } from '../lib/jwt.js';
 import { tenantScopeStore } from '../db/with-tenant.js';
+import { isWorkspaceSuspended } from '../lib/suspended.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -68,6 +69,17 @@ export const authPlugin: FastifyPluginAsync = fp(async (app) => {
     try {
       const claims = await verifyJwt(token);
       req.auth = claims;
+      // Admin-suspended workspaces are actually blocked here (not just flagged).
+      // Exempt /api/auth/* so a suspended user can still switch workspace / log out,
+      // and /api/admin/* so staff are never locked out of the admin center.
+      if (
+        claims.tenant_id &&
+        !url.startsWith('/api/auth/') &&
+        !url.startsWith('/api/admin/') &&
+        (await isWorkspaceSuspended(claims.tenant_id))
+      ) {
+        return reply.code(403).send({ error: 'workspace_suspended', reason: 'This workspace has been suspended.' });
+      }
       // Stage B: set the request-scoped user id so withTenant() inside REST
       // handlers inherits app.user_id → per-user project-membership RLS, the same
       // boundary the MCP path enforces. enterWith (not run) because a preHandler

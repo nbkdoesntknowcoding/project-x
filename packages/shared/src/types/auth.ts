@@ -16,4 +16,11 @@ export interface SessionData {
   workos_user_id: string;
   access_token: string;
   jwt: string;
+  /** Present only while a staff member is impersonating another user (admin center). */
+  impersonating?: {
+    by_user_id: string;
+    by_email: string;
+    target_email: string;
+    until: number; // epoch ms
+  };
 }

@@ -18,9 +18,12 @@ import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
 import { db } from '../../db/index.js';
-import { adminAuditLog, licenses, users, workspaces } from '../../db/schema.js';
+import { adminAuditLog, licenses, users, workspaceMembers, workspaces } from '../../db/schema.js';
 import { requireAdmin, logAdminAction } from '../../lib/admin.js';
-import { RoleError } from '../../lib/role.js';
+import { bustSuspendedCache } from '../../lib/suspended.js';
+import { signJwt } from '../../lib/jwt.js';
+import { scopesForRole } from '../../lib/scopes.js';
+import { RoleError, requireRole } from '../../lib/role.js';
 import { graphQueue } from '../../queue/graph.js';
 import { meetingEndQueue } from '../../queue/meeting-end.js';
 
@@ -55,7 +58,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
              (w.settings->>'suspended')::boolean AS suspended,
              (SELECT count(*)::int FROM workspace_members wm WHERE wm.workspace_id = w.id) AS members,
              (SELECT u.email FROM workspace_members wm JOIN users u ON u.id = wm.user_id
-              WHERE wm.workspace_id = w.id AND wm.role = 'owner' ORDER BY wm.joined_at LIMIT 1) AS owner_email
+              WHERE wm.workspace_id = w.id AND wm.role = 'owner' ORDER BY wm.joined_at LIMIT 1) AS owner_email,
+             (SELECT wm.user_id FROM workspace_members wm
+              WHERE wm.workspace_id = w.id AND wm.role = 'owner' ORDER BY wm.joined_at LIMIT 1) AS owner_id
       FROM workspaces w ORDER BY w.created_at DESC`);
     return reply.send({ workspaces: rows });
   });
@@ -69,6 +74,29 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return reply.send({ users: rows });
   });
 
+  // ── impersonation ───────────────────────────────────────────────────────────
+  // Mint a SHORT-LIVED (30m) JWT for a target user in a target workspace. The web
+  // layer stashes the admin's own session and swaps in this token, shows a banner,
+  // and offers one-click return. Read-mostly is enforced web-side + by audit.
+  app.post('/api/admin/impersonate', async (req, reply) => {
+    const me = gate(req, reply); if (!me) return;
+    const p = z.object({ user_id: z.string().uuid(), workspace_id: z.string().uuid() }).safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: 'validation' });
+    const [m] = await db
+      .select({ role: workspaceMembers.role, email: users.email, name: users.displayName })
+      .from(workspaceMembers)
+      .innerJoin(users, eq(users.id, workspaceMembers.userId))
+      .where(and(eq(workspaceMembers.userId, p.data.user_id), eq(workspaceMembers.workspaceId, p.data.workspace_id)))
+      .limit(1);
+    if (!m) return reply.code(400).send({ error: 'not_a_member' });
+    const jwt = await signJwt(
+      { sub: p.data.user_id, tenant_id: p.data.workspace_id, scopes: scopesForRole(m.role), email: m.email },
+      { expiresIn: '30m' },
+    );
+    await logAdminAction(req, { action: 'user.impersonate', targetType: 'user', targetId: p.data.user_id, payload: { workspace_id: p.data.workspace_id, target_email: m.email } });
+    return reply.send({ jwt, user_id: p.data.user_id, email: m.email, name: m.name, workspace_id: p.data.workspace_id, until: Date.now() + 30 * 60 * 1000 });
+  });
+
   async function setSuspended(req: import('fastify').FastifyRequest, reply: FastifyReply, id: string, suspended: boolean) {
     if (!gate(req, reply)) return;
     if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
@@ -78,6 +106,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     await db.execute(sql`
       UPDATE workspaces SET settings = jsonb_set(coalesce(settings,'{}'::jsonb), '{suspended}', ${suspended}::text::jsonb), updated_at = now()
       WHERE id = ${id}::uuid`);
+    bustSuspendedCache();
     await logAdminAction(req, { action: suspended ? 'workspace.suspend' : 'workspace.reactivate', targetType: 'workspace', targetId: id });
     return reply.send({ ok: true, suspended });
   }
@@ -198,6 +227,29 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     await applyLicense(id, p.data.workspace_id, lic.planTier, (lic.entitlements ?? {}) as Record<string, unknown>);
     await logAdminAction(req, { action: 'license.assign', targetType: 'license', targetId: id, payload: { workspace_id: p.data.workspace_id } });
     return reply.send({ ok: true });
+  });
+
+  // ── redemption (workspace OWNER, not admin) ──────────────────────────────────
+  // A workspace owner redeems an issued key → binds + applies it to their workspace.
+  app.post('/api/licenses/redeem', async (req, reply) => {
+    try { await requireRole(req, 'owner'); }
+    catch (e) { if (e instanceof RoleError) return reply.code(e.status).send({ error: e.reason }); throw e; }
+    const p = z.object({ key: z.string().min(1) }).safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: 'validation' });
+    const tenant = req.auth!.tenant_id;
+    const [lic] = await db.select().from(licenses).where(eq(licenses.licenseKey, p.data.key.trim())).limit(1);
+    if (!lic) return reply.code(404).send({ error: 'invalid_key' });
+    if (lic.status === 'revoked' || lic.status === 'expired' || lic.status === 'suspended') {
+      return reply.code(400).send({ error: `key_${lic.status}` });
+    }
+    if (lic.redeemedAt && lic.workspaceId && lic.workspaceId !== tenant) {
+      return reply.code(400).send({ error: 'already_redeemed' });
+    }
+    await db.update(licenses).set({
+      workspaceId: tenant, redeemedBy: req.auth!.sub, redeemedAt: new Date(), status: 'active', updatedAt: new Date(),
+    }).where(eq(licenses.id, lic.id));
+    await applyLicense(lic.id, tenant, lic.planTier, (lic.entitlements ?? {}) as Record<string, unknown>);
+    return reply.send({ ok: true, plan: lic.planTier, seats: lic.seats });
   });
 };
 

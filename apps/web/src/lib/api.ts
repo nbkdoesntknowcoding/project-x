@@ -267,7 +267,7 @@ export interface MeetingParticipantRow {
 // ── Internal admin center types ────────────────────────────────────────────────
 export interface AdminWorkspace {
   id: string; name: string; slug: string; plan: string; mode: string;
-  created_at: string; suspended: boolean | null; members: number; owner_email: string | null;
+  created_at: string; suspended: boolean | null; members: number; owner_email: string | null; owner_id: string | null;
 }
 export interface AdminUser {
   id: string; email: string; display_name: string | null;
@@ -308,6 +308,9 @@ export const adminApi = {
 };
 
 export const api = {
+  // Redeem a license key on the current workspace (owner only).
+  redeemLicense: (key: string): Promise<{ ok: boolean; plan: string; seats: number }> =>
+    apiFetch('/api/licenses/redeem', { method: 'POST', body: { key } }),
   listDocs: (): Promise<{ docs: DocSummary[] }> => apiFetch('/api/docs'),
   createDoc: (body: DocCreatePayload): Promise<{ doc: DocFull }> =>
     apiFetch('/api/docs', { method: 'POST', body }),

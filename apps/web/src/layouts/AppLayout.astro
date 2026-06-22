@@ -7,6 +7,7 @@ import { DevSearch } from '../components/dev/DevSearch';
 import { WorkspaceModeToggle } from '../components/app/WorkspaceModeToggle';
 import { DocPreviewHost } from '../components/preview/DocPreviewHost';
 import { isAdminEmail } from '../lib/admin';
+import { ImpersonationBanner } from '../components/admin/ImpersonationBanner';
 
 interface Props {
   title: string;
@@ -20,6 +21,7 @@ const pathname = Astro.url.pathname + Astro.url.search;
 const auth = Astro.locals.auth;
 const userInitial = (email?.[0] ?? auth?.email?.[0] ?? 'U').toUpperCase();
 const isAdmin = isAdminEmail(email ?? auth?.email);
+const imp = auth?.impersonating;
 
 const apiUrl =
   (import.meta.env.PUBLIC_API_URL as string | undefined) ?? 'http://localhost:8080';
@@ -215,6 +217,8 @@ if (auth) {
     /* Sidebar React component reset — override its own layout assumptions */
     .ap-sidebar > aside { width: 100% !important; height: 100% !important; }
   </style>
+
+  {imp && <ImpersonationBanner byEmail={imp.by_email} targetEmail={imp.target_email} until={imp.until} client:load />}
 
   <div class={`app-shell${hasToolbar ? ' has-toolbar' : ''}`}>
 
