@@ -7,6 +7,9 @@ export interface JwtClaims {
   exp: number;
   iss: string;
   aud: string;
+  /** True when this token was minted for an admin impersonation session. Sensitive
+   *  mutations (api keys, members, invitations, billing) are blocked while set. */
+  imp?: boolean;
 }
 
 export interface SessionData {

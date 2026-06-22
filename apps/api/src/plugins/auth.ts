@@ -34,6 +34,22 @@ const PUBLIC_ROUTES = new Set<string>([
   '/api/invitations/lookup',
 ]);
 
+// While impersonating (req.auth.imp), these mutations are blocked — a support
+// session is read-mostly. Matched against the path; mutating methods only.
+const IMPERSONATION_BLOCKED: RegExp[] = [
+  /^\/api\/api-keys/,        // create/revoke API keys
+  /^\/api\/mcp-tokens/,      // MCP tokens
+  /^\/api\/members\//,       // change roles / remove members
+  /^\/api\/invitations/,     // invite / revoke
+  /^\/api\/billing\//,       // subscribe / change-plan / payment
+  /^\/api\/razorpay\//,      // payments
+];
+
+function isBlockedWhileImpersonating(method: string, url: string): boolean {
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return false;
+  return IMPERSONATION_BLOCKED.some((re) => re.test(url));
+}
+
 function extractBearer(header: string | undefined): string | null {
   if (!header) return null;
   const match = /^Bearer\s+(.+)$/.exec(header);
@@ -79,6 +95,10 @@ export const authPlugin: FastifyPluginAsync = fp(async (app) => {
         (await isWorkspaceSuspended(claims.tenant_id))
       ) {
         return reply.code(403).send({ error: 'workspace_suspended', reason: 'This workspace has been suspended.' });
+      }
+      // Read-mostly impersonation: block destructive/account mutations.
+      if (claims.imp && isBlockedWhileImpersonating(req.method, url)) {
+        return reply.code(403).send({ error: 'impersonation_read_only', reason: 'This action is disabled while impersonating.' });
       }
       // Stage B: set the request-scoped user id so withTenant() inside REST
       // handlers inherits app.user_id → per-user project-membership RLS, the same

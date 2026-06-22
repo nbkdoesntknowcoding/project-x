@@ -276,6 +276,16 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {}, isAdmin =
               <span className="sb-label">Licenses</span>
             </span>
           </a>
+          <a href="/app/admin/board" className={`sb-row${currentPath.startsWith('/app/admin/board') ? ' active' : ''}`}>
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="11" rx="1"/><rect x="17" y="4" width="4" height="14" rx="1"/>
+                </svg>
+              </span>
+              <span className="sb-label">Ops board</span>
+            </span>
+          </a>
           <a href="/app/admin/logs" className={`sb-row${currentPath.startsWith('/app/admin/logs') ? ' active' : ''}`}>
             <span className="sb-l">
               <span className="sb-icon">

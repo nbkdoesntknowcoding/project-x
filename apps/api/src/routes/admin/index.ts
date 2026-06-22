@@ -90,7 +90,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       .limit(1);
     if (!m) return reply.code(400).send({ error: 'not_a_member' });
     const jwt = await signJwt(
-      { sub: p.data.user_id, tenant_id: p.data.workspace_id, scopes: scopesForRole(m.role), email: m.email },
+      { sub: p.data.user_id, tenant_id: p.data.workspace_id, scopes: scopesForRole(m.role), email: m.email, imp: true },
       { expiresIn: '30m' },
     );
     await logAdminAction(req, { action: 'user.impersonate', targetType: 'user', targetId: p.data.user_id, payload: { workspace_id: p.data.workspace_id, target_email: m.email } });

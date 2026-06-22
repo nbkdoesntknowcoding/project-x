@@ -1,0 +1,15 @@
+---
+// Internal ops board for the staff team — reuses the existing Kanban scoped to the
+// staff workspace. Create an "Ops" project and filter to it for admin-only work.
+import AppLayout from '../../../layouts/AppLayout.astro';
+import { KanbanBoard } from '../../../components/dev/KanbanBoard';
+import { isAdminEmail } from '../../../lib/admin';
+
+const auth = Astro.locals.auth;
+if (!auth) return Astro.redirect('/auth/login');
+if (!isAdminEmail(auth.email)) return Astro.redirect('/app');
+---
+
+<AppLayout title="Admin · Ops board">
+  <KanbanBoard workspaceId={auth.tenant_id} client:load />
+</AppLayout>
