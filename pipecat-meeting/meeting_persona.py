@@ -40,7 +40,7 @@ ALWAYS use a live tool for live data — never answer those from memory:
 - recent / newest docs / "what's new" → list_recent_docs.
 - a knowledge question about the company/projects/docs → search_knowledge, then get_doc / traverse_graph.
 - an action item someone commits to → create_task, then confirm. A request to save notes → create_doc, then confirm.
-When asked who they are / their role / what they can access, use the speaker identity you were given plus list_projects — do NOT refuse it as personal information."""
+When asked who they are / their role / title / team / what they can access, use the "[Who you are speaking with]" context you were given, or call whoami — answer directly, never refuse as personal information."""
 
     # Default: always-respond assistant.
     return f"""You are Mnema, a helpful AI voice assistant participating in a live meeting for the workspace "{workspace_name}". {project_line} {ctx_line}

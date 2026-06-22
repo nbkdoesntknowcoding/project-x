@@ -269,6 +269,7 @@ class RAGContext(FrameProcessor):
         super().__init__()
         self._mnema = mnema
         self._state = state
+        self._identity_str: str | None = None  # cached whoami (role/team/access)
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -285,22 +286,27 @@ class RAGContext(FrameProcessor):
         await self.push_frame(frame, direction)
 
     async def _inject_identity(self, direction: FrameDirection) -> None:
-        """Tell the LLM who it's talking to, so 'who am I / what's my role' work. The bot
-        answers with the access of the resolved participant (host → the organizer)."""
+        """Tell the LLM WHO it's talking to AND their org role/team/access, so 'who am I /
+        what's my role' work and the bot HOLDS that context. Fetched once via the server
+        `whoami` tool (the bot acts as the resolved speaker), then cached + re-stated each
+        turn so it stays in recent context."""
+        if self._identity_str is not None:
+            return  # fetched + injected once already; the whoami tool covers later asks
+        self._identity_str = ""
         try:
-            asker = current_asker(self._state)
-        except Exception:  # noqa: BLE001
+            res = await asyncio.wait_for(self._mnema.call("whoami", {}), timeout=2.5)
+            self._identity_str = ((res or {}).get("content") or "").strip()
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[identity] whoami failed: %s", e)
+        if not self._identity_str:
             return
-        name = (asker.get("name") or "").strip()
-        if not name:
-            return
+        logger.info("[identity] %s", self._identity_str[:80])
         await self.push_frame(
             LLMMessagesAppendFrame(
                 messages=[{"role": "system", "content": (
-                    f"You are speaking with {name}, a participant in this meeting. If they ask "
-                    f"\"who am I\", their name, role, team, or what they have access to, that is "
-                    f"who they mean — use list_projects / the knowledge base to answer about "
-                    f"{name} and their work; do not refuse as 'personal information'."
+                    f"[Who you are speaking with] {self._identity_str} When they ask who they "
+                    f"are, their role, title, team, or what they can access, answer from this "
+                    f"directly — never refuse it as personal information."
                 )}],
                 run_llm=False,
             ),

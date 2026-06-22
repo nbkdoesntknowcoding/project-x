@@ -222,6 +222,11 @@ async def list_projects(mcp: MnemaMCP, args: dict) -> dict:
     return await mcp.call("list_projects", {})
 
 
+async def whoami(mcp: MnemaMCP, args: dict) -> dict:
+    """Identity + org role of the current speaker (name, title, role, team, access)."""
+    return await mcp.call("whoami", {})
+
+
 async def list_recent_docs(mcp: MnemaMCP, args: dict) -> dict:
     """Newest-first docs — for 'latest / recent docs' questions. Pass project_id to scope."""
     payload: dict = {"limit": int(args.get("limit", 10))}
@@ -275,6 +280,7 @@ _TOOLS = {
     "create_doc": create_doc,
     "search_knowledge": search_knowledge,
     "list_projects": list_projects,
+    "whoami": whoami,
     "list_recent_docs": list_recent_docs,
     "list_project_tasks": list_project_tasks,
     "get_doc": get_doc,

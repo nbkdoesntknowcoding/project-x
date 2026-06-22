@@ -35,6 +35,14 @@ MNEMA_TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "whoami",
+            "description": "Who you are currently talking to: their name, job title, org role, team, department and workspace access. Call this whenever someone asks who they are, what their role/title/team is, or what they can access.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_recent_docs",
             "description": "List the most recently updated docs (newest first). Use for 'latest', 'recent', or 'what's new' questions instead of search. Pass project_id to scope to one project.",
             "parameters": {
