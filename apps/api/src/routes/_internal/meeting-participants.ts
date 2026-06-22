@@ -60,7 +60,11 @@ export const meetingParticipantsRoutes: FastifyPluginAsync = async (app) => {
       })
       .onConflictDoUpdate({
         target: meetings.recallBotId,
+        // recallBotId is a no-op self-assignment that guarantees a non-empty SET — a
+        // mid-meeting roster report carries neither meeting_url nor ended, and an empty
+        // `DO UPDATE SET` is invalid SQL (was 500-ing every roster update).
         set: {
+          recallBotId: recall_bot_id,
           ...(meeting_url ? { meetingUrl: meeting_url } : {}),
           ...(ended ? { endedAt: new Date() } : {}),
         },
