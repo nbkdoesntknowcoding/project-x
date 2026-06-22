@@ -9,6 +9,8 @@ export const NODE_COLORS_HEX: Record<string, number> = {
   decision:  0xf0997b,  // orange
   project:   0xe879f9,  // pink
   rationale: 0xf0997b,  // orange
+  meeting:   0x22d3ee,  // cyan
+  person:    0xfda4af,  // rose
 };
 
 // CSS strings for UI elements outside the 3D scene
@@ -22,6 +24,8 @@ export const NODE_COLORS_CSS: Record<string, string> = {
   decision:  '#f0997b',
   project:   '#e879f9',
   rationale: '#f0997b',
+  meeting:   '#22d3ee',
+  person:    '#fda4af',
 };
 
 // God-nodes: white core → supernova-bright with bloom

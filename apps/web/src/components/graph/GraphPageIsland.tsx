@@ -69,11 +69,12 @@ function GraphEmptyState({ onBuild }: { onBuild: () => void }) {
 }
 
 // Entity types + human-readable labels for the combined legend/filter panel.
-const LEGEND_TYPES = ['doc','flow','flow_step','task','concept','decision','project','rationale','session'];
+const LEGEND_TYPES = ['doc','flow','flow_step','task','concept','decision','project','rationale','session','meeting','person'];
 const LEGEND_LABELS: Record<string, string> = {
   doc: 'Document', flow: 'Workflow', flow_step: 'Workflow Step',
   task: 'Task', concept: 'Concept', decision: 'Decision',
   project: 'Project', rationale: 'Why Note', session: 'Agent Session',
+  meeting: 'Meeting', person: 'Person',
 };
 
 // ── Main island ───────────────────────────────────────────────────────────────
