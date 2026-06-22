@@ -57,14 +57,12 @@ class BotState:
         self.participants: dict[str, dict] = {}
         self.active_speaker_id: str | None = None
         self.last_speaker_id: str | None = None
-        # Addressing gate: whether the most recent finalized user utterance was
-        # directed at the bot ("Mnema, …"). Set by the pipeline's address tracker,
-        # read by SilentGate as a deterministic backstop so the bot never speaks on
-        # a turn it wasn't addressed in — independent of the LLM's own judgement.
-        self.last_addressed: bool = False
-        # Conversation window: monotonic time until which the bot stays "engaged" after
-        # being addressed, so follow-up questions are answered WITHOUT re-saying the wake
-        # word. Refreshed on each reply; lapses back to wake-word-required after a pause.
+        # Addressing gate (conversation window): monotonic time until which the bot stays
+        # "engaged". Opened/refreshed by the pipeline whenever a finalized utterance
+        # addresses the bot by name ("Mnema, …"). While open, the bot answers (incl.
+        # follow-ups without re-saying the name); when it lapses, the bot goes silent until
+        # addressed again. A time window (not a per-turn flag) so it survives STT splitting
+        # one address into several segments and VAD splitting it into several turns.
         self.engaged_until: float = 0.0
 
 

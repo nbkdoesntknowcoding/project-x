@@ -56,7 +56,6 @@ from pipecat.frames.frames import (
     LLMFullResponseStartFrame,
     LLMFullResponseEndFrame,
     LLMMessagesAppendFrame,
-    UserStartedSpeakingFrame,
 )
 
 from meeting_persona import build_meeting_persona, SILENT_TOKEN
@@ -152,14 +151,11 @@ class NoiseGate(FrameProcessor):
 
 
 class SilentGate(FrameProcessor):
-    """Deterministic addressing gate — the bot speaks ONLY on a turn it was addressed in.
-
-    `state.last_addressed` is LATCHED True by RAGContext when any segment of the current
-    user turn addresses the bot ("Mnema, …"); a single utterance often arrives as several
-    final STT segments, so we must not let a later segment clear it. This gate resets the
-    latch at the next turn start (UserStartedSpeakingFrame) and, per LLM response, drops
-    the whole reply unless the turn was addressed. It does NOT depend on the LLM emitting a
-    sentinel, and it leaves the latch intact across tool-call follow-ups within a turn.
+    """Deterministic addressing gate — the bot speaks only while it's "engaged", i.e. it
+    was addressed by name within the last MEETING_ENGAGE_WINDOW_S (the window lives on
+    BotState, opened by RAGContext). Using a time window rides over STT/VAD fragmentation
+    (the wake word and the question often land in different segments/turns) and needs no
+    sentinel from the LLM. In non-strict mode it's a pass-through.
     """
 
     def __init__(self, state) -> None:
@@ -170,29 +166,16 @@ class SilentGate(FrameProcessor):
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
-        if isinstance(frame, UserStartedSpeakingFrame):
-            # New user turn — require it to be (re-)addressed before we'll speak again.
-            self._state.last_addressed = False
-            await self.push_frame(frame, direction)
-            return
-
         if isinstance(frame, LLMFullResponseStartFrame):
-            now = time.monotonic()
-            # Addressed now, OR still inside the follow-up window from a recent address.
-            addressed = self._state.last_addressed or now < self._state.engaged_until
-            self._drop = _STRICT and not addressed
-            if self._drop:
-                logger.info("[silentgate] suppressed reply (turn not addressed)")
-            else:
-                # Refresh the conversation window so the next question lands too.
-                self._state.engaged_until = now + _ENGAGE_WINDOW
-                logger.info("[silentgate] speaking (engaged %ds)", int(_ENGAGE_WINDOW))
+            engaged = time.monotonic() < self._state.engaged_until
+            self._drop = _STRICT and not engaged
+            logger.info("[silentgate] %s", "suppressed (not addressed)" if self._drop else "speaking (engaged)")
             await self.push_frame(frame, direction)
             return
 
         if isinstance(frame, LLMTextFrame):
             if self._drop:
-                return  # not addressed → stay silent
+                return  # not engaged → stay silent
             await self.push_frame(frame, direction)
             return
 
@@ -215,12 +198,13 @@ class RAGContext(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, TranscriptionFrame):
             text = (frame.text or "").strip()
-            # LATCH addressed for the whole turn. A single utterance often arrives as
-            # several final STT segments ("hey mnema" / "what's the status") — only the
-            # first carries the wake word, so we must never clear the latch here. The
-            # gate resets it at the next turn start.
+            # Any segment that addresses the bot OPENS/REFRESHES the engagement window.
+            # A single spoken address often arrives as several STT segments across several
+            # VAD turns ("Nema." / "hey can you hear me"); only one carries the wake word,
+            # so a time window (vs a per-turn flag) is what reliably keeps the bot engaged.
             if text and _addressed(text):
-                self._state.last_addressed = True
+                self._state.engaged_until = time.monotonic() + _ENGAGE_WINDOW
+                logger.info("[rag] addressed — engaged %ds", int(_ENGAGE_WINDOW))
                 await self._inject(text, direction)
         await self.push_frame(frame, direction)
 
