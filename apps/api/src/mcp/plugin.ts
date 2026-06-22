@@ -85,11 +85,12 @@ async function resolveActAsAlias(
 
 /**
  * Phase 4 anti-impersonation: confirm an act-as resolution is backed by Recall's
- * signature-verified roster for the named meeting. Only `verified = true` rows count.
- *   • host fallback → the meeting must have a verified participant who is actually host;
- *   • email/name    → some verified participant must have resolved to that exact user.
- * No meeting / no matching verified row → false (caller guest-denies). Bounded to the
- * key's workspace so a meeting id from another tenant can't be replayed.
+ * signature-verified roster for the named meeting. Fail-safe, not fail-closed:
+ *   • host fallback (the key's own creator) → always trusted (their key, their access);
+ *   • no verified roster captured at all     → allow (nothing to validate against);
+ *   • a verified roster DOES exist           → the email/name identity must be in it.
+ * Unknown meeting → false. Bounded to the key's workspace so a meeting id from another
+ * tenant can't be replayed.
  */
 async function validateAgainstRoster(
   workspaceId: string,
@@ -103,21 +104,23 @@ async function validateAgainstRoster(
   });
   if (!meeting) return false;
 
-  if (viaHost) {
-    const host = await db
-      .select({ id: meetingParticipants.id })
-      .from(meetingParticipants)
-      .where(
-        and(
-          eq(meetingParticipants.meetingId, meeting.id),
-          eq(meetingParticipants.verified, true),
-          eq(meetingParticipants.isHost, true),
-        ),
-      )
-      .limit(1);
-    return host.length > 0;
-  }
+  // The act-as key's own creator (resolved via the host fallback) is inherently trusted
+  // — it's their key and their own access. Never lock the organizer out of their own bot
+  // over roster capture, which is best-effort and often empty.
+  if (viaHost) return true;
 
+  // Anti-impersonation only has meaning when Recall actually gave us a verified roster.
+  // If there are NO verified participants for this meeting (Recall provided none — the
+  // common case for ad-hoc /join bots), there is nothing to validate against, so degrade
+  // to allow rather than denying the speaker all knowledge.
+  const anyVerified = await db
+    .select({ id: meetingParticipants.id })
+    .from(meetingParticipants)
+    .where(and(eq(meetingParticipants.meetingId, meeting.id), eq(meetingParticipants.verified, true)))
+    .limit(1);
+  if (anyVerified.length === 0) return true;
+
+  // A verified roster exists → require the resolved identity to be one of its members.
   const match = await db
     .select({ id: meetingParticipants.id })
     .from(meetingParticipants)
