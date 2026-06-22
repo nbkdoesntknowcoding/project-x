@@ -79,9 +79,20 @@ from recall_io import (
 MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
 
 # "Mnema" + common speech-to-text mishearings — used to decide when the bot is addressed.
-_WAKE_WORDS = frozenset(("mnema", "nima", "neema", "nema", "nemo", "nimo", "mneme", "menma", "namo", "amnema"))
+# STT renders the name wildly (Nama, Nema, Nima, Neema, Nemo, Namah, Kneema …), so we ALSO
+# accept anything matching the phonetic shape n/mn + vowel(s) + m + vowel(s) via _WAKE_RE,
+# which covers the variants without matching ordinary words like "name"/"no"/"mama".
+_WAKE_WORDS = frozenset((
+    "mnema", "nima", "neema", "nema", "nemo", "nimo", "mneme", "menma", "namo", "amnema",
+    "nama", "naima", "namah", "nemma", "nyema", "kneema", "knema", "neemah", "nemah",
+))
+_WAKE_RE = re.compile(r"m?n[aeiy][aeiy]?m[aiouh]*")
 # Fillers/greetings people naturally put before a vocative ("so Mnema", "um Mnema").
 _GREETINGS = ("hey", "ok", "okay", "hi", "hello", "yo", "so", "um", "uh", "erm", "yeah", "alright", "and")
+
+
+def _is_wake(tok: str) -> bool:
+    return tok in _WAKE_WORDS or bool(_WAKE_RE.fullmatch(tok))
 
 # Addressed-only ("speak only when spoken to") is the default. Set MEETING_REQUIRE_ADDRESS=0
 # to go back to the legacy always-respond mode.
@@ -99,11 +110,11 @@ def _addressed(text: str) -> bool:
     tokens = re.findall(r"[a-z]+", text.lower())
     if not tokens:
         return False
-    if tokens[0] in _WAKE_WORDS:                       # "Mnema, …" (vocative, first word)
+    if _is_wake(tokens[0]):                            # "Mnema, …" (vocative, first word)
         return True
     # a filler/greeting immediately followed by the wake word ("hey/so/um Mnema …")
     for i in range(len(tokens) - 1):
-        if tokens[i] in _GREETINGS and tokens[i + 1] in _WAKE_WORDS:
+        if tokens[i] in _GREETINGS and _is_wake(tokens[i + 1]):
             return True
     return False
 
