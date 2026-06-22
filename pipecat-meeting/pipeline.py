@@ -71,6 +71,7 @@ from recall_io import (
     register_output_ws,
     unregister_output_ws,
     report_roster,
+    current_asker,
     RECALL_INPUT_SAMPLE_RATE,
     OUTPUT_SAMPLE_RATE,
 )
@@ -86,6 +87,14 @@ _WAKE_WORDS = frozenset((
     "nama", "naima", "namah", "nemma", "nyema", "kneema", "knema", "neemah", "nemah",
 ))
 _WAKE_RE = re.compile(r"m?n[aeiy][aeiy]?m[aiouh]*")
+# "Live" questions whose answer is the current board/state, NOT a stored doc. For these we
+# skip the doc-RAG injection (which can surface a stale snapshot like "no tasks in
+# progress") and let the LLM call the live tools (list_project_tasks / list_recent_docs).
+_LIVE_DATA_RE = re.compile(
+    r"\b(task|tasks|in[- ]?progress|pending|backlog|to[- ]?do|status|latest|recent|sprint|"
+    r"assigned|what'?s new|what is new|board|who('?s| is) (working|assigned)|deadline|due)\b",
+    re.I,
+)
 # Fillers/greetings people naturally put before a vocative ("so Mnema", "um Mnema").
 _GREETINGS = ("hey", "ok", "okay", "hi", "hello", "yo", "so", "um", "uh", "erm", "yeah", "alright", "and")
 
@@ -257,8 +266,35 @@ class RAGContext(FrameProcessor):
                 if addressed:
                     self._state.engaged_until = now + _ENGAGE_WINDOW
                     logger.info("[gate] engaged (%s): %s", "wake" if wake else "classified", text[:60])
-                    await self._inject(text, direction)
+                    await self._inject_identity(direction)
+                    # For "live" questions (tasks/status/latest) DON'T inject stored docs —
+                    # they go stale; force the LLM to use the live tools instead.
+                    if not _LIVE_DATA_RE.search(text):
+                        await self._inject(text, direction)
         await self.push_frame(frame, direction)
+
+    async def _inject_identity(self, direction: FrameDirection) -> None:
+        """Tell the LLM who it's talking to, so 'who am I / what's my role' work. The bot
+        answers with the access of the resolved participant (host → the organizer)."""
+        try:
+            asker = current_asker(self._state)
+        except Exception:  # noqa: BLE001
+            return
+        name = (asker.get("name") or "").strip()
+        if not name:
+            return
+        await self.push_frame(
+            LLMMessagesAppendFrame(
+                messages=[{"role": "system", "content": (
+                    f"You are speaking with {name}, a participant in this meeting. If they ask "
+                    f"\"who am I\", their name, role, team, or what they have access to, that is "
+                    f"who they mean — use list_projects / the knowledge base to answer about "
+                    f"{name} and their work; do not refuse as 'personal information'."
+                )}],
+                run_llm=False,
+            ),
+            direction,
+        )
 
     async def _inject(self, query: str, direction: FrameDirection) -> None:
         # Search across everything the bot can access; results are project-labelled, so
@@ -285,9 +321,11 @@ class RAGContext(FrameProcessor):
             # Prefix each snippet with its project so the model never mixes projects.
             blocks.append(f"[project: {proj} | {head}]\n{(h.get('snippet') or '').strip()}")
         content = (
-            "[Context from the knowledge base — each item is labelled with its project; "
-            "only use items from the project being asked about; use naturally, don't mention "
-            "you looked it up]\n\n" + "\n\n---\n\n".join(blocks)
+            "[Background reference from the knowledge base — each item is labelled with its "
+            "project. These are stored DOCS and may be OUT OF DATE. For anything about current "
+            "tasks, status, what's in progress, the latest, or assignments, IGNORE these and "
+            "call the live tools (list_project_tasks / list_recent_docs / list_projects). Use "
+            "naturally, don't mention you looked it up]\n\n" + "\n\n---\n\n".join(blocks)
         )
         await self.push_frame(
             LLMMessagesAppendFrame(
