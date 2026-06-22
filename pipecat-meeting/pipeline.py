@@ -274,6 +274,11 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
             sample_rate=RECALL_INPUT_SAMPLE_RATE,
             channels=1,
             interim_results=True,
+            # THE actual fix for wake detection: Nova-3 keyterm prompting biases STT toward
+            # the bot's made-up name, so it transcribes "Mnema" instead of guessing
+            # Nava/Neva/Rima/Nama. Without this no wake-word list can catch the random
+            # phonetic spellings. Configurable/extendable via MEETING_WAKE_KEYTERMS.
+            keyterm=[k.strip() for k in os.environ.get("MEETING_WAKE_KEYTERMS", "Mnema").split(",") if k.strip()],
         ),
     )
 
