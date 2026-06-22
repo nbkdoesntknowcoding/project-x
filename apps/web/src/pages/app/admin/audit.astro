@@ -1,0 +1,19 @@
+---
+import AppLayout from '../../../layouts/AppLayout.astro';
+import { AdminAudit } from '../../../components/admin/AdminAudit';
+import { isAdminEmail } from '../../../lib/admin';
+
+const auth = Astro.locals.auth;
+if (!auth) return Astro.redirect('/auth/login');
+if (!isAdminEmail(auth.email)) return Astro.redirect('/app');
+---
+
+<AppLayout title="Admin · Audit log">
+  <div style="padding:28px 32px;">
+    <h1 style="margin:0 0 6px;font:500 22px/1.15 var(--sans);letter-spacing:-0.02em;color:var(--ink);">Audit log</h1>
+    <p style="margin:0 0 24px;font-size:13px;color:var(--ink-soft);max-width:42rem;">
+      Every admin action — license changes, suspensions, log views — recorded immutably.
+    </p>
+    <AdminAudit client:load />
+  </div>
+</AppLayout>

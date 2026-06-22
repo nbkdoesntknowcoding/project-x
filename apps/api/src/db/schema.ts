@@ -1539,3 +1539,53 @@ export const graphReports = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
 );
+
+// ── Internal admin center (migration 0047) ──────────────────────────────────────
+
+/** A license: a plan tier + seats + entitlements, optionally bound to a workspace
+ *  and/or carrying a redeemable key. Admin-managed. */
+export const licenses = pgTable(
+  'licenses',
+  {
+    id:           uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId:  uuid('workspace_id').references(() => workspaces.id, { onDelete: 'set null' }),
+    planTier:     text('plan_tier').notNull().default('free'),
+    seats:        integer('seats').notNull().default(1),
+    entitlements: jsonb('entitlements').notNull().default(sql`'{}'::jsonb`),
+    licenseKey:   text('license_key').unique(),
+    // active | trial | expiring | expired | suspended | revoked
+    status:       text('status').notNull().default('active'),
+    startsAt:     timestamp('starts_at', { withTimezone: true }),
+    expiresAt:    timestamp('expires_at', { withTimezone: true }),
+    issuedBy:     uuid('issued_by').references(() => users.id, { onDelete: 'set null' }),
+    redeemedBy:   uuid('redeemed_by').references(() => users.id, { onDelete: 'set null' }),
+    redeemedAt:   timestamp('redeemed_at', { withTimezone: true }),
+    notes:        text('notes'),
+    createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:    timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    workspaceIdx: index('licenses_workspace_idx').on(table.workspaceId),
+    statusIdx:    index('licenses_status_idx').on(table.status),
+  }),
+);
+
+/** Append-only record of every admin action (license changes, suspensions,
+ *  impersonations, log views). No delete path. */
+export const adminAuditLog = pgTable(
+  'admin_audit_log',
+  {
+    id:          uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    actorEmail:  text('actor_email').notNull(),
+    action:      text('action').notNull(),
+    targetType:  text('target_type'),
+    targetId:    text('target_id'),
+    payload:     jsonb('payload'),
+    ip:          text('ip'),
+    createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    createdIdx: index('admin_audit_created_idx').on(table.createdAt),
+  }),
+);

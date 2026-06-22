@@ -198,6 +198,13 @@ const envSchema = z.object({
   // POSTs /join here when an admitted meeting is starting soon.
   MEETING_BOT_INTERNAL_URL:   z.string().url().default('http://meeting-bot:3001'),
   MNEMA_MEETING_BOT_API_KEY:  z.string().min(1).optional(),
+
+  // Internal admin center — staff-only. Access is gated to this email domain, plus an
+  // optional comma-separated allowlist for exceptions. The internal log-streamer sidecar
+  // (Docker-socket access) is reached at LOG_STREAMER_URL.
+  ADMIN_EMAIL_DOMAIN: z.string().min(1).default('theboringpeople.in'),
+  ADMIN_EMAILS:       z.string().optional(),
+  LOG_STREAMER_URL:   z.string().url().default('http://log-streamer:9000'),
 });
 
 const parsed = envSchema.safeParse(process.env);

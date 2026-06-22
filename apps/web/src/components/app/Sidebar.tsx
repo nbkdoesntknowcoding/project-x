@@ -10,9 +10,10 @@ interface Props {
     instruction?: number;
     snippet?: number;
   };
+  isAdmin?: boolean;
 }
 
-export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) {
+export function Sidebar({ currentPath, workspaceMode, typeCounts = {}, isAdmin = false }: Props) {
   const typeParam = currentPath.includes('?')
     ? new URLSearchParams(currentPath.split('?')[1]).get('type')
     : null;
@@ -36,6 +37,7 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
   const isOnOptimize  = currentPath.startsWith('/app/optimize');
   const isOnTeam      = currentPath.startsWith('/app/team');
   const isOnGraph     = currentPath.startsWith('/app/graph');
+  const isOnAdmin     = currentPath.startsWith('/app/admin');
   const isOnMeetings  = currentPath.startsWith('/app/meetings');
 
   const isDevProject = workspaceMode === 'dev_project';
@@ -249,6 +251,53 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {} }: Props) 
           </span>
         </a>
       </div>
+
+      {/* ── ADMIN (staff only) ───────────────────── */}
+      {isAdmin && (
+        <div className="sb-section">
+          <div className="sb-section-head"><span>Admin</span></div>
+          <a href="/app/admin" className={`sb-row${isOnAdmin && !currentPath.startsWith('/app/admin/licenses') && !currentPath.startsWith('/app/admin/logs') && !currentPath.startsWith('/app/admin/audit') ? ' active' : ''}`}>
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2l8 4v6c0 4-3 7-8 10-5-3-8-6-8-10V6z"/>
+                </svg>
+              </span>
+              <span className="sb-label">Dashboard</span>
+            </span>
+          </a>
+          <a href="/app/admin/licenses" className={`sb-row${currentPath.startsWith('/app/admin/licenses') ? ' active' : ''}`}>
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+              </span>
+              <span className="sb-label">Licenses</span>
+            </span>
+          </a>
+          <a href="/app/admin/logs" className={`sb-row${currentPath.startsWith('/app/admin/logs') ? ' active' : ''}`}>
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 4h16M4 9h16M4 14h10M4 19h7"/>
+                </svg>
+              </span>
+              <span className="sb-label">Live logs</span>
+            </span>
+          </a>
+          <a href="/app/admin/audit" className={`sb-row${currentPath.startsWith('/app/admin/audit') ? ' active' : ''}`}>
+            <span className="sb-l">
+              <span className="sb-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+              </span>
+              <span className="sb-label">Audit log</span>
+            </span>
+          </a>
+        </div>
+      )}
 
       {/* ── CONNECTIONS ──────────────────────────── */}
       <div className="sb-section">

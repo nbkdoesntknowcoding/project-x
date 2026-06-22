@@ -1,0 +1,19 @@
+---
+import AppLayout from '../../../layouts/AppLayout.astro';
+import { AdminDashboard } from '../../../components/admin/AdminDashboard';
+import { isAdminEmail } from '../../../lib/admin';
+
+const auth = Astro.locals.auth;
+if (!auth) return Astro.redirect('/auth/login');
+if (!isAdminEmail(auth.email)) return Astro.redirect('/app');
+---
+
+<AppLayout title="Admin · Dashboard">
+  <div style="padding:28px 32px;">
+    <h1 style="margin:0 0 6px;font:500 22px/1.15 var(--sans);letter-spacing:-0.02em;color:var(--ink);">Admin Center</h1>
+    <p style="margin:0 0 24px;font-size:13px;color:var(--ink-soft);max-width:42rem;">
+      System health, every workspace and user, and usage across Mnema. Staff only.
+    </p>
+    <AdminDashboard client:load />
+  </div>
+</AppLayout>

@@ -118,6 +118,21 @@ services:
       - oo_cache:/var/lib/onlyoffice
     networks: [internal]
 
+  # Live-logs sidecar for the admin center. The ONLY container with Docker-socket
+  # access (read-only). Internal-network only — no published port; the api proxies
+  # to it (http://log-streamer:9000) after re-checking staff access, with secret
+  # redaction at this layer.
+  log-streamer:
+    build:
+      context: log-streamer
+      dockerfile: Dockerfile
+    <<: *restart
+    environment:
+      COMPOSE_PROJECT: mnema-prod
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [internal]
+
 networks:
   internal:
     driver: bridge

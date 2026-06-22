@@ -264,6 +264,49 @@ export interface MeetingParticipantRow {
   resolvedName: string | null;
 }
 
+// ── Internal admin center types ────────────────────────────────────────────────
+export interface AdminWorkspace {
+  id: string; name: string; slug: string; plan: string; mode: string;
+  created_at: string; suspended: boolean | null; members: number; owner_email: string | null;
+}
+export interface AdminUser {
+  id: string; email: string; display_name: string | null;
+  created_at: string; last_login_at: string | null; workspaces: number;
+}
+export interface AdminLicense {
+  id: string; workspace_id: string | null; workspace_name: string | null;
+  plan_tier: string; seats: number; entitlements: Record<string, unknown>;
+  license_key: string | null; status: string; starts_at: string | null;
+  expires_at: string | null; redeemed_at: string | null; notes: string | null; created_at: string;
+}
+export interface AdminAuditEntry {
+  id: string; actor_email: string; action: string;
+  target_type: string | null; target_id: string | null; payload: unknown; ip: string | null; created_at: string;
+}
+export interface AdminHealth { db: boolean; queues: Record<string, unknown>; time: string; }
+export interface AdminUsage { totals: Record<string, number>; per_workspace: Array<Record<string, unknown>>; }
+
+export const adminApi = {
+  workspaces: (): Promise<{ workspaces: AdminWorkspace[] }> => apiFetch('/api/admin/workspaces'),
+  users: (): Promise<{ users: AdminUser[] }> => apiFetch('/api/admin/users'),
+  suspend: (id: string): Promise<{ ok: boolean; suspended: boolean }> =>
+    apiFetch(`/api/admin/workspaces/${id}/suspend`, { method: 'POST' }),
+  reactivate: (id: string): Promise<{ ok: boolean; suspended: boolean }> =>
+    apiFetch(`/api/admin/workspaces/${id}/reactivate`, { method: 'POST' }),
+  health: (): Promise<AdminHealth> => apiFetch('/api/admin/health'),
+  usage: (): Promise<AdminUsage> => apiFetch('/api/admin/usage'),
+  audit: (): Promise<{ entries: AdminAuditEntry[] }> => apiFetch('/api/admin/audit'),
+  licenses: (): Promise<{ licenses: AdminLicense[] }> => apiFetch('/api/admin/licenses'),
+  createLicense: (body: {
+    plan_tier: string; seats: number; entitlements?: Record<string, unknown>;
+    expires_at?: string | null; workspace_id?: string | null; generate_key?: boolean; notes?: string;
+  }): Promise<{ license: AdminLicense }> => apiFetch('/api/admin/licenses', { method: 'POST', body }),
+  updateLicense: (id: string, body: { status?: string; seats?: number; expires_at?: string | null; notes?: string }):
+    Promise<{ license: AdminLicense }> => apiFetch(`/api/admin/licenses/${id}`, { method: 'PATCH', body }),
+  assignLicense: (id: string, workspace_id: string): Promise<{ ok: boolean }> =>
+    apiFetch(`/api/admin/licenses/${id}/assign`, { method: 'POST', body: { workspace_id } }),
+};
+
 export const api = {
   listDocs: (): Promise<{ docs: DocSummary[] }> => apiFetch('/api/docs'),
   createDoc: (body: DocCreatePayload): Promise<{ doc: DocFull }> =>
