@@ -17,6 +17,7 @@ Pipecat 1.2.1 (pinned). Imports verified against the installed package.
 """
 import os
 import re
+import time
 import asyncio
 import logging
 
@@ -85,6 +86,9 @@ _GREETINGS = ("hey", "ok", "okay", "hi", "hello", "yo", "so", "um", "uh", "erm",
 # Addressed-only ("speak only when spoken to") is the default. Set MEETING_REQUIRE_ADDRESS=0
 # to go back to the legacy always-respond mode.
 _STRICT = os.environ.get("MEETING_REQUIRE_ADDRESS", "1") != "0"
+# After being addressed, stay engaged this many seconds so follow-up questions are
+# answered without repeating "Mnema". Refreshed on each reply.
+_ENGAGE_WINDOW = float(os.environ.get("MEETING_ENGAGE_WINDOW_S", "30"))
 
 
 def _addressed(text: str) -> bool:
@@ -162,9 +166,16 @@ class SilentGate(FrameProcessor):
             return
 
         if isinstance(frame, LLMFullResponseStartFrame):
-            self._drop = _STRICT and not self._state.last_addressed
+            now = time.monotonic()
+            # Addressed now, OR still inside the follow-up window from a recent address.
+            addressed = self._state.last_addressed or now < self._state.engaged_until
+            self._drop = _STRICT and not addressed
             if self._drop:
                 logger.info("[silentgate] suppressed reply (turn not addressed)")
+            else:
+                # Refresh the conversation window so the next question lands too.
+                self._state.engaged_until = now + _ENGAGE_WINDOW
+                logger.info("[silentgate] speaking (engaged %ds)", int(_ENGAGE_WINDOW))
             await self.push_frame(frame, direction)
             return
 

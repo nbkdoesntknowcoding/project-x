@@ -62,6 +62,10 @@ class BotState:
         # read by SilentGate as a deterministic backstop so the bot never speaks on
         # a turn it wasn't addressed in — independent of the LLM's own judgement.
         self.last_addressed: bool = False
+        # Conversation window: monotonic time until which the bot stays "engaged" after
+        # being addressed, so follow-up questions are answered WITHOUT re-saying the wake
+        # word. Refreshed on each reply; lapses back to wake-word-required after a pause.
+        self.engaged_until: float = 0.0
 
 
 def _extract_email(p: dict):
