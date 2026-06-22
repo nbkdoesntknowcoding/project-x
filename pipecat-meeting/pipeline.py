@@ -55,6 +55,7 @@ from pipecat.frames.frames import (
     LLMFullResponseStartFrame,
     LLMFullResponseEndFrame,
     LLMMessagesAppendFrame,
+    UserStartedSpeakingFrame,
 )
 
 from meeting_persona import build_meeting_persona, SILENT_TOKEN
@@ -136,57 +137,41 @@ class NoiseGate(FrameProcessor):
 
 
 class SilentGate(FrameProcessor):
-    """Suppress the persona's [SILENT] sentinel before it reaches TTS, so the bot
-    actually stays quiet when not addressed (rather than synthesizing "[SILENT]").
+    """Deterministic addressing gate — the bot speaks ONLY on a turn it was addressed in.
 
-    Decides per LLM response from the first non-whitespace content: if it starts the
-    sentinel ("[SILENT…"), drop the whole response; otherwise flush what was buffered
-    and pass the rest through token-by-token (preserves streaming for real replies).
-    Only LLMTextFrames are gated — tool-call frames and everything else pass through.
+    `state.last_addressed` is LATCHED True by RAGContext when any segment of the current
+    user turn addresses the bot ("Mnema, …"); a single utterance often arrives as several
+    final STT segments, so we must not let a later segment clear it. This gate resets the
+    latch at the next turn start (UserStartedSpeakingFrame) and, per LLM response, drops
+    the whole reply unless the turn was addressed. It does NOT depend on the LLM emitting a
+    sentinel, and it leaves the latch intact across tool-call follow-ups within a turn.
     """
 
     def __init__(self, state) -> None:
         super().__init__()
         self._state = state
-        self._buf = ""
-        self._decided: bool | None = None  # None=undecided, True=silent, False=speak
+        self._drop = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
+        if isinstance(frame, UserStartedSpeakingFrame):
+            # New user turn — require it to be (re-)addressed before we'll speak again.
+            self._state.last_addressed = False
+            await self.push_frame(frame, direction)
+            return
+
         if isinstance(frame, LLMFullResponseStartFrame):
-            self._buf = ""
-            # Deterministic backstop: in addressed-only mode, if the triggering turn
-            # wasn't addressed to the bot, suppress the ENTIRE reply regardless of what
-            # the LLM produced. This is what actually keeps it quiet during human talk.
-            self._decided = True if (_STRICT and not self._state.last_addressed) else None
-            if self._decided is True:
+            self._drop = _STRICT and not self._state.last_addressed
+            if self._drop:
                 logger.info("[silentgate] suppressed reply (turn not addressed)")
             await self.push_frame(frame, direction)
             return
 
         if isinstance(frame, LLMTextFrame):
-            if self._decided is True:
-                return  # silent — drop
-            if self._decided is False:
-                await self.push_frame(frame, direction)
-                return
-            # Undecided: accumulate until we can tell.
-            self._buf += frame.text
-            stripped = self._buf.lstrip()
-            if not stripped:
-                return  # whitespace only so far — wait
-            if stripped[0] == "[":
-                if stripped.startswith(SILENT_TOKEN):
-                    self._decided = True
-                    logger.info("[silentgate] suppressed reply (not addressed)")
-                    return
-                if SILENT_TOKEN.startswith(stripped):
-                    return  # still could become the sentinel — wait for more
-            # Real speech — emit what we buffered, then stream the rest.
-            self._decided = False
-            logger.info("[silentgate] speaking: %s", stripped[:80])
-            await self.push_frame(LLMTextFrame(self._buf), direction)
+            if self._drop:
+                return  # not addressed → stay silent
+            await self.push_frame(frame, direction)
             return
 
         await self.push_frame(frame, direction)
@@ -208,11 +193,12 @@ class RAGContext(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, TranscriptionFrame):
             text = (frame.text or "").strip()
-            # Record whether this turn addressed the bot — SilentGate reads it to decide
-            # whether the reply is allowed to be spoken at all.
-            is_addr = bool(text) and _addressed(text)
-            self._state.last_addressed = is_addr
-            if is_addr:
+            # LATCH addressed for the whole turn. A single utterance often arrives as
+            # several final STT segments ("hey mnema" / "what's the status") — only the
+            # first carries the wake word, so we must never clear the latch here. The
+            # gate resets it at the next turn start.
+            if text and _addressed(text):
+                self._state.last_addressed = True
                 await self._inject(text, direction)
         await self.push_frame(frame, direction)
 
