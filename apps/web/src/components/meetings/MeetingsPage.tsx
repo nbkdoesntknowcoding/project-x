@@ -1,5 +1,5 @@
 import { type JSX, useEffect, useState } from 'react';
-import { api, type MeetingRow, type MemberRow } from '../../lib/api';
+import { api, type MeetingRow, type MemberRow, type ProjectLite } from '../../lib/api';
 import { muted, soft, ink, line, surface, btn, ghost, meetingDate, hasContent } from './shared';
 import { MeetingCalendar } from './MeetingCalendar';
 import { MeetingDetailPanel } from './MeetingDetailPanel';
@@ -12,15 +12,19 @@ import { MeetingDetailPanel } from './MeetingDetailPanel';
 export function MeetingsPage(): JSX.Element {
   const [meetings, setMeetings] = useState<MeetingRow[]>([]);
   const [members, setMembers] = useState<MemberRow[]>([]);
+  const [projects, setProjects] = useState<ProjectLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
       try {
-        const [m, mem] = await Promise.all([api.listMeetings(), api.listMembers()]);
+        const [m, mem, proj] = await Promise.all([
+          api.listMeetings(), api.listMembers(), api.listMeetingProjects().catch(() => ({ projects: [] })),
+        ]);
         setMeetings(m.meetings);
         setMembers(mem.members);
+        setProjects(proj.projects);
         // Default-select the latest meeting that actually has a RECORDING (transcript/doc/
         // notes), so the panel opens on real content — not an empty scheduled calendar slot.
         const recorded = m.meetings.find(hasContent);
@@ -55,7 +59,7 @@ export function MeetingsPage(): JSX.Element {
             onSelect={setSelectedId}
             initialMonth={selected ? meetingDate(selected) : latest}
           />
-          <MeetingDetailPanel meeting={selected} members={members} onChange={refresh} onSelectMeeting={setSelectedId} />
+          <MeetingDetailPanel meeting={selected} members={members} projects={projects} onChange={refresh} onSelectMeeting={setSelectedId} />
         </div>
       )}
     </div>

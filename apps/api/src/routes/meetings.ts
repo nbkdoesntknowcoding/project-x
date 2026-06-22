@@ -16,16 +16,20 @@ import { z } from 'zod';
 import { config } from '../config/env.js';
 import { db } from '../db/index.js';
 import {
+  docs,
+  folders,
   meetingParticipants,
   meetings,
   meetingTranscripts,
   participantAliases,
+  projects,
   tasks,
   users,
   workspaceMembers,
 } from '../db/schema.js';
 import { requireRole, RoleError } from '../lib/role.js';
 import { enqueuePreBrief } from '../queue/meeting-end.js';
+import { syncMeetingNode } from '../lib/graph/meeting-graph.js';
 
 /**
  * Ask the meeting-bot controller to send the Mnema bot into a meeting. Returns
@@ -112,6 +116,12 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
           .from(meetings).where(and(eq(meetings.workspaceId, req.auth.tenant_id), inArray(meetings.id, linkedIds)))
       : [];
 
+    let projectName: string | null = null;
+    if (meeting.projectId) {
+      const [p] = await db.select({ name: projects.name }).from(projects).where(eq(projects.id, meeting.projectId)).limit(1);
+      projectName = p?.name ?? null;
+    }
+
     return reply.send({
       meeting: {
         id: meeting.id,
@@ -128,6 +138,8 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
         post_meeting_doc_id: meeting.postMeetingDocId,
         pre_meeting_doc_id: meeting.preMeetingDocId,
         meeting_folder_id: meeting.meetingFolderId,
+        project_id: meeting.projectId,
+        project_name: projectName,
       },
       tasks: taskRows.map((t) => ({ id: t.id, title: t.title, status: t.status, assignee: t.assigneeName || t.assigneeEmail || null })),
       linked_meetings: linked,
@@ -305,5 +317,43 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
 
     const ok = await dispatchBot(meeting);
     return ok ? reply.send({ ok: true }) : reply.code(502).send({ error: 'bot_dispatch_failed' });
+  });
+
+  // ── POST /api/meetings/:id/project ─────────────────────────────────────────
+  // Link (or unlink, project_id=null) a meeting to a project. Cascades the project
+  // onto the meeting's notes/brief docs, its folder, and the tasks it created, and
+  // refreshes the knowledge-graph edges so the meeting sits with that project. Editor+.
+  app.post('/api/meetings/:id/project', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const { id } = req.params as { id: string };
+    if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
+    try { await requireRole(req, 'editor'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
+
+    const parsed = z.object({ project_id: z.string().uuid().nullable() }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'validation' });
+    const projectId = parsed.data.project_id;
+    const tenant = req.auth.tenant_id;
+
+    const meeting = await db.query.meetings.findFirst({ where: and(eq(meetings.id, id), eq(meetings.workspaceId, tenant)) });
+    if (!meeting) return reply.code(404).send({ error: 'not_found' });
+
+    if (projectId) {
+      const [p] = await db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, projectId), eq(projects.workspaceId, tenant))).limit(1);
+      if (!p) return reply.code(400).send({ error: 'invalid_project' });
+    }
+
+    await db.update(meetings).set({ projectId }).where(eq(meetings.id, id));
+    // Cascade the project onto everything the meeting produced, so its notes + tasks
+    // live in that project (and the graph + project views pick them up).
+    if (meeting.postMeetingDocId) await db.update(docs).set({ projectId }).where(eq(docs.id, meeting.postMeetingDocId));
+    if (meeting.preMeetingDocId) await db.update(docs).set({ projectId }).where(eq(docs.id, meeting.preMeetingDocId));
+    if (meeting.meetingFolderId) await db.update(folders).set({ projectId }).where(eq(folders.id, meeting.meetingFolderId));
+    await db.update(tasks).set({ projectId }).where(and(eq(tasks.meetingId, id), eq(tasks.workspaceId, tenant)));
+
+    // Refresh the meeting's graph edges immediately (meeting → project, etc.).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    try { await syncMeetingNode(db as any, tenant, id); } catch { /* non-fatal */ }
+
+    return reply.send({ ok: true, project_id: projectId });
   });
 };

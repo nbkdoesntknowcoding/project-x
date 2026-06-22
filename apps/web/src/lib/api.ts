@@ -222,6 +222,15 @@ export interface MeetingDetail {
   post_meeting_doc_id: string | null;
   pre_meeting_doc_id: string | null;
   meeting_folder_id: string | null;
+  project_id: string | null;
+  project_name: string | null;
+}
+
+export interface ProjectLite {
+  id: string;
+  name: string;
+  slug: string;
+  color: string | null;
 }
 
 export interface MeetingTask {
@@ -346,6 +355,9 @@ export const api = {
   listMeetings: (): Promise<{ meetings: MeetingRow[] }> => apiFetch('/api/meetings'),
   getMeeting: (id: string): Promise<{ meeting: MeetingDetail; tasks: MeetingTask[]; linked_meetings: LinkedMeeting[] }> =>
     apiFetch(`/api/meetings/${id}`),
+  listMeetingProjects: (): Promise<{ projects: ProjectLite[] }> => apiFetch('/api/projects'),
+  setMeetingProject: (id: string, projectId: string | null): Promise<{ ok: true; project_id: string | null }> =>
+    apiFetch(`/api/meetings/${id}/project`, { method: 'POST', body: { project_id: projectId } }),
   getMeetingTranscript: (id: string): Promise<{ status: string; turns: TranscriptTurn[] }> =>
     apiFetch(`/api/meetings/${id}/transcript`),
   // Phase C — calendar linking + admit/dispatch

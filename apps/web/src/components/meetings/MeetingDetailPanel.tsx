@@ -2,7 +2,7 @@ import { type JSX, useEffect, useState } from 'react';
 import {
   api, type MeetingRow, type MeetingParticipantRow, type MemberRow,
   type MeetingDetail, type MeetingSummary, type TranscriptTurn,
-  type MeetingTask, type LinkedMeeting,
+  type MeetingTask, type LinkedMeeting, type ProjectLite,
 } from '../../lib/api';
 import {
   muted, soft, ink, line, surface, surface2, accent, green,
@@ -25,10 +25,11 @@ const TABS: Array<{ id: Tab; label: string }> = [
  * while a recorded meeting is still being processed.
  */
 export function MeetingDetailPanel({
-  meeting, members, onChange, onSelectMeeting,
+  meeting, members, projects, onChange, onSelectMeeting,
 }: {
   meeting: MeetingRow | null;
   members: MemberRow[];
+  projects: ProjectLite[];
   onChange: () => void;
   onSelectMeeting?: (id: string) => void;
 }): JSX.Element {
@@ -36,6 +37,7 @@ export function MeetingDetailPanel({
   const [detail, setDetail] = useState<MeetingDetail | null>(null);
   const [tasks, setTasks] = useState<MeetingTask[]>([]);
   const [linked, setLinked] = useState<LinkedMeeting[]>([]);
+  const [reload, setReload] = useState(0);
   const meetingId = meeting?.id ?? null;
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function MeetingDetailPanel({
       setDetail(r.meeting); setTasks(r.tasks); setLinked(r.linked_meetings);
     }).catch(() => {});
     return () => { live = false; };
-  }, [meetingId]);
+  }, [meetingId, reload]);
 
   if (!meeting) {
     return (
@@ -81,6 +83,13 @@ export function MeetingDetailPanel({
           {meeting.participant_count} attendee{meeting.participant_count !== 1 ? 's' : ''}
           {meeting.unresolved_count > 0 && <span style={{ color: accent }}>{' · '}{meeting.unresolved_count} to map</span>}
         </div>
+        <ProjectSelect
+          meetingId={meeting.id}
+          projects={projects}
+          current={detail?.project_id ?? null}
+          currentName={detail?.project_name ?? null}
+          onChanged={() => { setReload((n) => n + 1); onChange(); }}
+        />
         <Actions meeting={meeting} onChange={onChange} />
       </div>
 
@@ -268,6 +277,32 @@ function DocTab({ docId, preDocId, tStatus }: { docId: string | null; preDocId: 
           <a href={`/app/content/${docId}`} style={{ ...btn, textDecoration: 'none', alignSelf: 'flex-start' }}>Open Post-Meeting Notes →</a>
         </div>
       )}
+    </div>
+  );
+}
+
+function ProjectSelect({ meetingId, projects, current, onChanged }: {
+  meetingId: string; projects: ProjectLite[]; current: string | null; currentName?: string | null; onChanged: () => void;
+}): JSX.Element {
+  const [busy, setBusy] = useState(false);
+  async function change(pid: string) {
+    setBusy(true);
+    try { await api.setMeetingProject(meetingId, pid || null); onChanged(); }
+    finally { setBusy(false); }
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+      <span style={{ fontSize: 11, color: muted, flexShrink: 0 }}>Project</span>
+      <select
+        value={current ?? ''}
+        disabled={busy}
+        onChange={(e) => { void change(e.target.value); }}
+        title="Link this meeting (its notes + tasks) to a project"
+        style={{ flex: 1, padding: '5px 8px', borderRadius: 7, fontSize: 12, border: `0.5px solid ${line}`, background: surface, color: current ? ink : muted, maxWidth: 240 }}
+      >
+        <option value="">— No project —</option>
+        {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
     </div>
   );
 }
