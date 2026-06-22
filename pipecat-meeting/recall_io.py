@@ -57,6 +57,9 @@ class BotState:
         self.participants: dict[str, dict] = {}
         self.active_speaker_id: str | None = None
         self.last_speaker_id: str | None = None
+        # The bot's OWN participant id (it joins as "Mnema"). Tracked so we never attribute
+        # speech/identity to the bot itself ("who am I → you're Mnema").
+        self.bot_participant_id: str | None = None
         # Addressing gate (conversation window): monotonic time until which the bot stays
         # "engaged". Opened/refreshed by the pipeline whenever a finalized utterance
         # addresses the bot by name ("Mnema, …"). While open, the bot answers (incl.
@@ -204,6 +207,12 @@ class RecallSerializer(FrameSerializer):
         if event in ("participant_events.join", "participant_events.update"):
             existing = st.participants.get(pid, {})
             name = p.get("name") or existing.get("name")
+            # Identify the bot's OWN participant (Recall flags it, or it's named "Mnema")
+            # and never track it as a speaker/asker.
+            if p.get("is_current_user") or (name and name.strip().lower() == "mnema"):
+                st.bot_participant_id = pid
+                st.participants.pop(pid, None)
+                return
             email = _extract_email(p) or existing.get("email")
             is_host = p.get("is_host")
             if is_host is None:
@@ -215,6 +224,8 @@ class RecallSerializer(FrameSerializer):
             )
             schedule_roster_report(st)
         elif event == "participant_events.speech_on":
+            if pid == st.bot_participant_id:
+                return  # the bot's own TTS — not a human asker
             st.active_speaker_id = pid
             st.last_speaker_id = pid
         elif event == "participant_events.speech_off":

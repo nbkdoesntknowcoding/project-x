@@ -292,6 +292,43 @@ def register_mnema_tools(llm, mcp: MnemaMCP) -> None:
         llm.register_function(name, _make_handler(name, fn, mcp))
 
 
+_MAX_ITEMS = 12        # max list rows kept in a tool result
+_MAX_FIELD = 200       # max chars per string field (descriptions etc.)
+
+
+def _trim_for_context(result):
+    """Shrink big tool results before they enter the meeting LLM context. Dumping 20 full
+    task objects (with long descriptions) made the model context balloon every turn and the
+    bot lag badly. Keep structure + the key fields; drop redundant structuredContent."""
+    if not isinstance(result, dict):
+        return result
+    out = {}
+    has_summary = isinstance(result.get("content"), str)
+    for k, v in result.items():
+        # The voice bot only needs the human-readable "content" summary, not the full
+        # structured objects alongside it.
+        if k == "structuredContent" and has_summary:
+            continue
+        if isinstance(v, list):
+            rows = []
+            for item in v[:_MAX_ITEMS]:
+                if isinstance(item, dict):
+                    rows.append({
+                        ik: (iv[:_MAX_FIELD] + "…" if isinstance(iv, str) and len(iv) > _MAX_FIELD else iv)
+                        for ik, iv in item.items()
+                    })
+                else:
+                    rows.append(item)
+            out[k] = rows
+            if len(v) > _MAX_ITEMS:
+                out[k + "_note"] = f"showing first {_MAX_ITEMS} of {len(v)}"
+        elif isinstance(v, str) and len(v) > 1500:
+            out[k] = v[:1500] + "…"
+        else:
+            out[k] = v
+    return out
+
+
 def _make_handler(name, fn, mcp: MnemaMCP):
     async def handler(params):  # params: FunctionCallParams
         args = dict(params.arguments or {})
@@ -300,5 +337,5 @@ def _make_handler(name, fn, mcp: MnemaMCP):
         except Exception as e:  # noqa: BLE001
             logger.exception("[mnema-tool] %s failed: %s", name, e)
             result = {"success": False, "error": str(e)}
-        await params.result_callback(result)
+        await params.result_callback(_trim_for_context(result))
     return handler

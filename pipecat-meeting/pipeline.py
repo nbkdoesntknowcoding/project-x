@@ -109,7 +109,7 @@ _STRICT = os.environ.get("MEETING_REQUIRE_ADDRESS", "1") != "0"
 # STT splitting one utterance into several segments + the LLM/tool round-trip for THAT
 # turn. It is NOT a conversation timer: each new turn is re-judged by the classifier, so a
 # real back-and-forth continues naturally and lapses the moment the talk isn't for the bot.
-_ENGAGE_WINDOW = float(os.environ.get("MEETING_ENGAGE_WINDOW_S", "12"))
+_ENGAGE_WINDOW = float(os.environ.get("MEETING_ENGAGE_WINDOW_S", "20"))
 # Fast model that judges, per turn, whether the user is talking TO the bot.
 _CLASSIFIER_MODEL = os.environ.get("MEETING_CLASSIFIER_MODEL", "gpt-4o-mini")
 
@@ -223,8 +223,13 @@ class SilentGate(FrameProcessor):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, LLMFullResponseStartFrame):
-            engaged = time.monotonic() < self._state.engaged_until
+            now = time.monotonic()
+            engaged = now < self._state.engaged_until
             self._drop = _STRICT and not engaged
+            if not self._drop:
+                # Active conversation → refresh the window so follow-ups keep landing
+                # without re-saying the name. It lapses only after replies stop.
+                self._state.engaged_until = now + _ENGAGE_WINDOW
             logger.info("[silentgate] %s", "suppressed (not addressed)" if self._drop else "speaking (engaged)")
             await self.push_frame(frame, direction)
             return
@@ -254,23 +259,18 @@ class RAGContext(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, TranscriptionFrame):
             text = (frame.text or "").strip()
-            if text:
-                now = time.monotonic()
-                wake = _addressed(text)
-                # Dynamic addressee detection: a wake word always engages; otherwise a fast
-                # classifier judges whether THIS turn is for the bot (question/request/
-                # follow-up) vs the humans talking to each other. Re-judged every turn, so a
-                # real back-and-forth keeps going without re-saying the name and it stays
-                # quiet during normal conversation — no fixed conversation timer.
-                addressed = wake or (_STRICT and await _classify_addressed(text, now < self._state.engaged_until))
-                if addressed:
-                    self._state.engaged_until = now + _ENGAGE_WINDOW
-                    logger.info("[gate] engaged (%s): %s", "wake" if wake else "classified", text[:60])
-                    await self._inject_identity(direction)
-                    # For "live" questions (tasks/status/latest) DON'T inject stored docs —
-                    # they go stale; force the LLM to use the live tools instead.
-                    if not _LIVE_DATA_RE.search(text):
-                        await self._inject(text, direction)
+            if text and _addressed(text):
+                # Wake word → enter the conversation. Engagement is STICKY (SilentGate
+                # refreshes the window on every reply), so once you say "Mnema" you can keep
+                # asking follow-ups without repeating it; it only lapses after you actually
+                # stop getting answers. Predictable + low-latency (no per-turn classifier).
+                self._state.engaged_until = time.monotonic() + _ENGAGE_WINDOW
+                logger.info("[gate] engaged (wake): %s", text[:60])
+                await self._inject_identity(direction)
+                # For "live" questions (tasks/status/latest) DON'T inject stored docs — they
+                # go stale; force the LLM to use the live tools instead.
+                if not _LIVE_DATA_RE.search(text):
+                    await self._inject(text, direction)
         await self.push_frame(frame, direction)
 
     async def _inject_identity(self, direction: FrameDirection) -> None:
