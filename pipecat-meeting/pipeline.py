@@ -96,9 +96,56 @@ def _is_wake(tok: str) -> bool:
 # Addressed-only ("speak only when spoken to") is the default. Set MEETING_REQUIRE_ADDRESS=0
 # to go back to the legacy always-respond mode.
 _STRICT = os.environ.get("MEETING_REQUIRE_ADDRESS", "1") != "0"
-# After being addressed, stay engaged this many seconds so follow-up questions are
-# answered without repeating "Mnema". Refreshed on each reply.
-_ENGAGE_WINDOW = float(os.environ.get("MEETING_ENGAGE_WINDOW_S", "30"))
+# Short window (seconds) an "addressed" decision stays valid — only long enough to bridge
+# STT splitting one utterance into several segments + the LLM/tool round-trip for THAT
+# turn. It is NOT a conversation timer: each new turn is re-judged by the classifier, so a
+# real back-and-forth continues naturally and lapses the moment the talk isn't for the bot.
+_ENGAGE_WINDOW = float(os.environ.get("MEETING_ENGAGE_WINDOW_S", "12"))
+# Fast model that judges, per turn, whether the user is talking TO the bot.
+_CLASSIFIER_MODEL = os.environ.get("MEETING_CLASSIFIER_MODEL", "gpt-4o-mini")
+
+_CLASSIFY_SYS = (
+    "You are the attention gate for a voice assistant named Mnema that sits silently in a "
+    "live meeting between humans. Given the latest thing someone said, decide if it is "
+    "directed AT Mnema — i.e. a question, request, or command for the assistant, or a "
+    "direct follow-up to what Mnema just said — versus the people in the room talking to "
+    "EACH OTHER. Most meeting talk is between the humans and is NOT for Mnema. When unsure, "
+    "answer NO. Reply with exactly one word: YES or NO."
+)
+
+_classifier_client = None
+
+
+def _get_classifier():
+    global _classifier_client
+    if _classifier_client is None:
+        from openai import AsyncOpenAI
+        _classifier_client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    return _classifier_client
+
+
+async def _classify_addressed(text: str, recently_engaged: bool) -> bool:
+    """Ask the fast model whether `text` is directed at the bot. Fail-closed (NO) on any
+    error/timeout so a classifier hiccup never makes the bot blurt into the room — the
+    deterministic wake word still works as the manual override."""
+    try:
+        hint = ("The user has just been talking with Mnema, so a bare follow-up question "
+                "is probably still for Mnema." if recently_engaged
+                else "There is no recent exchange with Mnema.")
+        res = await asyncio.wait_for(
+            _get_classifier().chat.completions.create(
+                model=_CLASSIFIER_MODEL, max_tokens=1, temperature=0,
+                messages=[
+                    {"role": "system", "content": _CLASSIFY_SYS},
+                    {"role": "user", "content": f"{hint}\nLatest utterance: \"{text}\"\nDirected at Mnema?"},
+                ],
+            ),
+            timeout=2.0,
+        )
+        return (res.choices[0].message.content or "").strip().lower().startswith("y")
+    except Exception as e:  # noqa: BLE001 — never block the meeting on the gate
+        logger.warning("[classify] failed (defaulting to NO): %s", e)
+        return False
 
 
 def _addressed(text: str) -> bool:
@@ -198,14 +245,19 @@ class RAGContext(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, TranscriptionFrame):
             text = (frame.text or "").strip()
-            # Any segment that addresses the bot OPENS/REFRESHES the engagement window.
-            # A single spoken address often arrives as several STT segments across several
-            # VAD turns ("Nema." / "hey can you hear me"); only one carries the wake word,
-            # so a time window (vs a per-turn flag) is what reliably keeps the bot engaged.
-            if text and _addressed(text):
-                self._state.engaged_until = time.monotonic() + _ENGAGE_WINDOW
-                logger.info("[rag] addressed — engaged %ds", int(_ENGAGE_WINDOW))
-                await self._inject(text, direction)
+            if text:
+                now = time.monotonic()
+                wake = _addressed(text)
+                # Dynamic addressee detection: a wake word always engages; otherwise a fast
+                # classifier judges whether THIS turn is for the bot (question/request/
+                # follow-up) vs the humans talking to each other. Re-judged every turn, so a
+                # real back-and-forth keeps going without re-saying the name and it stays
+                # quiet during normal conversation — no fixed conversation timer.
+                addressed = wake or (_STRICT and await _classify_addressed(text, now < self._state.engaged_until))
+                if addressed:
+                    self._state.engaged_until = now + _ENGAGE_WINDOW
+                    logger.info("[gate] engaged (%s): %s", "wake" if wake else "classified", text[:60])
+                    await self._inject(text, direction)
         await self.push_frame(frame, direction)
 
     async def _inject(self, query: str, direction: FrameDirection) -> None:
