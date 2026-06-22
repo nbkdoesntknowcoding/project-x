@@ -57,6 +57,11 @@ class BotState:
         self.participants: dict[str, dict] = {}
         self.active_speaker_id: str | None = None
         self.last_speaker_id: str | None = None
+        # Addressing gate: whether the most recent finalized user utterance was
+        # directed at the bot ("Mnema, …"). Set by the pipeline's address tracker,
+        # read by SilentGate as a deterministic backstop so the bot never speaks on
+        # a turn it wasn't addressed in — independent of the LLM's own judgement.
+        self.last_addressed: bool = False
 
 
 def _extract_email(p: dict):

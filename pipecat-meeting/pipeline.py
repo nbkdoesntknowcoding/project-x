@@ -16,6 +16,7 @@ told to flush. Recall's realtime WS is input-only, so we never send audio over i
 Pipecat 1.2.1 (pinned). Imports verified against the installed package.
 """
 import os
+import re
 import asyncio
 import logging
 
@@ -76,12 +77,30 @@ from recall_io import (
 MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
 
 # "Mnema" + common speech-to-text mishearings — used to decide when the bot is addressed.
-_WAKE_WORDS = ("mnema", "nima", "neema", "nema", "nemo", "nimo", "mneme", "menma", "namo", "amnema")
+_WAKE_WORDS = frozenset(("mnema", "nima", "neema", "nema", "nemo", "nimo", "mneme", "menma", "namo", "amnema"))
+# Fillers/greetings people naturally put before a vocative ("so Mnema", "um Mnema").
+_GREETINGS = ("hey", "ok", "okay", "hi", "hello", "yo", "so", "um", "uh", "erm", "yeah", "alright", "and")
+
+# Addressed-only ("speak only when spoken to") is the default. Set MEETING_REQUIRE_ADDRESS=0
+# to go back to the legacy always-respond mode.
+_STRICT = os.environ.get("MEETING_REQUIRE_ADDRESS", "1") != "0"
 
 
 def _addressed(text: str) -> bool:
-    low = text.lower()
-    return any(w in low for w in _WAKE_WORDS)
+    """True only when the bot is *addressed* — the wake word is at the START of the
+    utterance (vocative: "Mnema, …"), or right after a greeting ("hey Mnema"). A wake
+    word later in a sentence (people talking ABOUT Mnema — "let's put this in Mnema")
+    does NOT count, which is what stops the bot replying to normal conversation."""
+    tokens = re.findall(r"[a-z]+", text.lower())
+    if not tokens:
+        return False
+    if tokens[0] in _WAKE_WORDS:                       # "Mnema, …" (vocative, first word)
+        return True
+    # a filler/greeting immediately followed by the wake word ("hey/so/um Mnema …")
+    for i in range(len(tokens) - 1):
+        if tokens[i] in _GREETINGS and tokens[i + 1] in _WAKE_WORDS:
+            return True
+    return False
 
 
 def _mnema_tools_schema() -> ToolsSchema:
@@ -126,8 +145,9 @@ class SilentGate(FrameProcessor):
     Only LLMTextFrames are gated — tool-call frames and everything else pass through.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, state) -> None:
         super().__init__()
+        self._state = state
         self._buf = ""
         self._decided: bool | None = None  # None=undecided, True=silent, False=speak
 
@@ -136,7 +156,12 @@ class SilentGate(FrameProcessor):
 
         if isinstance(frame, LLMFullResponseStartFrame):
             self._buf = ""
-            self._decided = None
+            # Deterministic backstop: in addressed-only mode, if the triggering turn
+            # wasn't addressed to the bot, suppress the ENTIRE reply regardless of what
+            # the LLM produced. This is what actually keeps it quiet during human talk.
+            self._decided = True if (_STRICT and not self._state.last_addressed) else None
+            if self._decided is True:
+                logger.info("[silentgate] suppressed reply (turn not addressed)")
             await self.push_frame(frame, direction)
             return
 
@@ -174,15 +199,20 @@ class RAGContext(FrameProcessor):
     Only fires when addressed (cheap + matches the silent-unless-addressed persona) and
     graceful-degrades on any error/timeout. Requires a live MNEMA_API_KEY."""
 
-    def __init__(self, mnema: MnemaMCP) -> None:
+    def __init__(self, mnema: MnemaMCP, state) -> None:
         super().__init__()
         self._mnema = mnema
+        self._state = state
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
         if isinstance(frame, TranscriptionFrame):
             text = (frame.text or "").strip()
-            if text and _addressed(text):
+            # Record whether this turn addressed the bot — SilentGate reads it to decide
+            # whether the reply is allowed to be spoken at all.
+            is_addr = bool(text) and _addressed(text)
+            self._state.last_addressed = is_addr
+            if is_addr:
                 await self._inject(text, direction)
         await self.push_frame(frame, direction)
 
@@ -303,10 +333,10 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         stt,
         NoiseGate(),            # drop sub-3-char STT noise before it reaches the LLM
         TurnMetricsEarly(metrics),  # stamp end-of-user-speech
-        RAGContext(mnema),      # when addressed, inject knowledge-graph context
+        RAGContext(mnema, state),  # track addressing + inject KG context when addressed
         aggregators.user(),     # VAD here → barge-in detection
         llm,
-        SilentGate(),           # suppress the [SILENT] sentinel before TTS
+        SilentGate(state),      # speak only when the turn addressed the bot
         tts,
         TurnMetricsLate(metrics),   # stamp LLM/TTS milestones → log p50/p95
         web_out,                # stream PCM to the Output Media page; interrupt on barge-in
