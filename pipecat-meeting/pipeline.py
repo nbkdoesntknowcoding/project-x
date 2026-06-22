@@ -207,37 +207,52 @@ class NoiseGate(FrameProcessor):
 
 
 class SilentGate(FrameProcessor):
-    """Deterministic addressing gate — the bot speaks only while it's "engaged", i.e. it
-    was addressed by name within the last MEETING_ENGAGE_WINDOW_S (the window lives on
-    BotState, opened by RAGContext). Using a time window rides over STT/VAD fragmentation
-    (the wake word and the question often land in different segments/turns) and needs no
-    sentinel from the LLM. In non-strict mode it's a pass-through.
+    """The MODEL decides whether to answer (it understands the whole conversation): the
+    persona answers when addressed and emits SILENT_TOKEN to stay quiet during clear
+    human-to-human side-talk. This gate just suppresses a SILENT_TOKEN reply before it
+    reaches TTS, streaming a real reply token-by-token otherwise. A recent wake word forces
+    a spoken answer (override). No timers, no fixed window. Pass-through in non-strict mode.
     """
 
     def __init__(self, state) -> None:
         super().__init__()
         self._state = state
-        self._drop = False
+        self._buf = ""
+        self._decided: bool | None = None  # None=undecided, True=silent, False=speak
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, LLMFullResponseStartFrame):
-            now = time.monotonic()
-            engaged = now < self._state.engaged_until
-            self._drop = _STRICT and not engaged
-            if not self._drop:
-                # Active conversation → refresh the window so follow-ups keep landing
-                # without re-saying the name. It lapses only after replies stop.
-                self._state.engaged_until = now + _ENGAGE_WINDOW
-            logger.info("[silentgate] %s", "suppressed (not addressed)" if self._drop else "speaking (engaged)")
+            self._buf = ""
+            # _decided: False = speak, True = drop, None = let the model's first tokens
+            # decide. Non-strict mode or a just-heard wake word → force speak; otherwise
+            # undecided until we see whether the reply starts with the silence sentinel.
+            speak_now = (not _STRICT) or (time.monotonic() < self._state.force_until)
+            self._decided = False if speak_now else None
             await self.push_frame(frame, direction)
             return
 
         if isinstance(frame, LLMTextFrame):
-            if self._drop:
-                return  # not engaged → stay silent
-            await self.push_frame(frame, direction)
+            if self._decided is True:
+                return  # model chose silence — drop
+            if self._decided is False:
+                await self.push_frame(frame, direction)
+                return
+            # Undecided: buffer the leading text just long enough to spot the sentinel.
+            self._buf += frame.text
+            stripped = self._buf.lstrip().lower()
+            if not stripped:
+                return
+            if stripped.startswith(SILENT_TOKEN):
+                self._decided = True
+                logger.info("[silentgate] model chose silence")
+                return
+            if SILENT_TOKEN.startswith(stripped):
+                return  # could still become the sentinel — wait for more
+            self._decided = False
+            logger.info("[silentgate] speaking: %s", stripped[:60])
+            await self.push_frame(LLMTextFrame(self._buf), direction)
             return
 
         await self.push_frame(frame, direction)
@@ -259,18 +274,14 @@ class RAGContext(FrameProcessor):
         await super().process_frame(frame, direction)
         if isinstance(frame, TranscriptionFrame):
             text = (frame.text or "").strip()
-            if text and _addressed(text):
-                # Wake word → enter the conversation. Engagement is STICKY (SilentGate
-                # refreshes the window on every reply), so once you say "Mnema" you can keep
-                # asking follow-ups without repeating it; it only lapses after you actually
-                # stop getting answers. Predictable + low-latency (no per-turn classifier).
-                self._state.engaged_until = time.monotonic() + _ENGAGE_WINDOW
-                logger.info("[gate] engaged (wake): %s", text[:60])
+            if text:
+                # The model decides whether to answer (SilentGate + persona). Here we only
+                # (a) flag a clear wake word so "Mnema, …" can never be wrongly silenced, and
+                # (b) tell the model who is speaking so it can answer "who am I / my role".
+                if _addressed(text):
+                    self._state.force_until = time.monotonic() + 6.0
+                    logger.info("[gate] wake word: %s", text[:60])
                 await self._inject_identity(direction)
-                # For "live" questions (tasks/status/latest) DON'T inject stored docs — they
-                # go stale; force the LLM to use the live tools instead.
-                if not _LIVE_DATA_RE.search(text):
-                    await self._inject(text, direction)
         await self.push_frame(frame, direction)
 
     async def _inject_identity(self, direction: FrameDirection) -> None:

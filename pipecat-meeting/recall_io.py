@@ -60,13 +60,11 @@ class BotState:
         # The bot's OWN participant id (it joins as "Mnema"). Tracked so we never attribute
         # speech/identity to the bot itself ("who am I → you're Mnema").
         self.bot_participant_id: str | None = None
-        # Addressing gate (conversation window): monotonic time until which the bot stays
-        # "engaged". Opened/refreshed by the pipeline whenever a finalized utterance
-        # addresses the bot by name ("Mnema, …"). While open, the bot answers (incl.
-        # follow-ups without re-saying the name); when it lapses, the bot goes silent until
-        # addressed again. A time window (not a per-turn flag) so it survives STT splitting
-        # one address into several segments and VAD splitting it into several turns.
-        self.engaged_until: float = 0.0
+        # The model itself decides each turn whether to answer (it emits a silence sentinel
+        # for human-to-human side-talk). `force_until` is only a short safety override: when
+        # a clear wake word ("Mnema, …") was just heard, force a spoken answer even if the
+        # model second-guesses itself. No conversation timer — understanding drives it.
+        self.force_until: float = 0.0
 
 
 def _extract_email(p: dict):
