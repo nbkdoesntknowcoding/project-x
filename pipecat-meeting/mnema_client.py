@@ -67,9 +67,6 @@ class MnemaMCP:
             asker = current_asker(self._state)
             email = (asker.get("email") or "").strip()
             name = (asker.get("name") or "").strip()
-            is_host = bool(asker.get("is_host"))
-            # Always send name + host alongside email so the server can fall back
-            # (email → alias → host→organizer) within one resolution.
             headers: dict = {}
             key_parts = []
             if email:
@@ -78,9 +75,14 @@ class MnemaMCP:
             if name:
                 headers["X-Mnema-Act-As-Name"] = name
                 key_parts.append(f"n:{name.lower()}")
-            if is_host:
-                headers["X-Mnema-Act-As-Host"] = "true"
-                key_parts.append("host")
+            # ALWAYS assert host as the final fallback. The server resolves in order
+            # email → saved-name alias → host (= this bot's organizer / key creator) →
+            # guest. So a recognised speaker still scopes to THEM, but an unidentified
+            # speaker (no participant events / no alias) resolves to the organizer instead
+            # of being guest-denied with zero knowledge. It's the organizer's own bot key,
+            # so the organizer's access is its rightful default.
+            headers["X-Mnema-Act-As-Host"] = "true"
+            key_parts.append("host")
             # Phase 4: name the meeting so the server can validate the asserted identity
             # against Recall's tamper-proof roster for THIS meeting.
             if self._state.bot_id:
