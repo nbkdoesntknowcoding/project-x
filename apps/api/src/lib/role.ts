@@ -88,10 +88,11 @@ export async function requireRole(
 // ── Stage B5: per-project roles ────────────────────────────────────────────
 //
 // Mirrors the workspace helpers above but for `project_members`. The effective
-// model matches the RLS predicate `app_can_see_project` (migration 0028):
-//   • workspace owner/editor (and the reserved 'admin') are workspace admins →
-//     they implicitly have the highest project role on EVERY project, even
-//     without a project_members row. This is the intentional admin bypass.
+// model matches the RLS predicate `app_can_see_project` (migrations 0049/0051):
+//   • workspace owner/admin are workspace admins → they implicitly have the
+//     highest project role on EVERY project, even without a project_members row.
+//     (Editors were narrowed OUT of this bypass in 0051 — they are now
+//     project-bounded and gain a project only via membership or a doc_acl grant.)
 //   • otherwise the role comes from the user's project_members row (if any).
 // Project roles are a 3-rung ladder: viewer < editor < admin.
 

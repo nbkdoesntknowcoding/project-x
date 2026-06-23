@@ -78,6 +78,8 @@ export async function canAccess(
 
   // Fall through to workspace_role
   const wsRole = await getWorkspaceRole(db, userId, workspaceId);
-  const wsRoleMap: Record<string, number> = { owner: 3, editor: 2, viewer: 1 };
+  // H1 fix: 'admin' must rank with 'owner' (full access), matching the RLS
+  // app_is_workspace_admin() bypass. Omitting it 403'd admins on every doc.
+  const wsRoleMap: Record<string, number> = { owner: 3, admin: 3, editor: 2, viewer: 1 };
   return (wsRoleMap[wsRole] ?? 0) >= requiredRank;
 }

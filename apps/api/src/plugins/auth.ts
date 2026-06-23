@@ -37,12 +37,19 @@ const PUBLIC_ROUTES = new Set<string>([
 // While impersonating (req.auth.imp), these mutations are blocked — a support
 // session is read-mostly. Matched against the path; mutating methods only.
 const IMPERSONATION_BLOCKED: RegExp[] = [
-  /^\/api\/api-keys/,        // create/revoke API keys
-  /^\/api\/mcp-tokens/,      // MCP tokens
-  /^\/api\/members\//,       // change roles / remove members
-  /^\/api\/invitations/,     // invite / revoke
-  /^\/api\/billing\//,       // subscribe / change-plan / payment
-  /^\/api\/razorpay\//,      // payments
+  /^\/api\/api-keys/,                    // create/revoke API keys
+  /^\/api\/mcp-tokens/,                  // MCP tokens
+  /^\/api\/members\//,                   // change roles / remove members
+  /^\/api\/invitations/,                 // invite / revoke
+  /^\/api\/billing\//,                   // subscribe / change-plan / payment
+  /^\/api\/razorpay\//,                  // payments
+  // H3 fix: doc_acl / org-structure write paths. An impersonator must not be able
+  // to mint access grants. NOTE: this is a denylist — if it grows much further,
+  // invert to a read-only allowlist so new privileged routes can't be missed.
+  /^\/api\/org\/access/,                 // writes doc_acl grants
+  /^\/api\/org\/(teams|roles)/,          // org-structure mutations
+  /^\/api\/docs\/[^/]+\/request-access/, // file an access request
+  /^\/api\/docs\/access-requests\//,     // approve/deny → writes doc_acl
 ];
 
 function isBlockedWhileImpersonating(method: string, url: string): boolean {

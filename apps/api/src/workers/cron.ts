@@ -67,7 +67,7 @@ async function registerCronJobs(): Promise<void> {
     jobId: 'graph-weekly-deep',
   });
 
-  log.info('Cron jobs registered: stats@every-hour, optimization@02:00 UTC, retention@03:00 UTC, graph@04:00 UTC');
+  log.info('Cron jobs registered: stats@every-hour, optimization@02:00 UTC, retention@03:00 UTC, graph@04:00 UTC, expire-doc-acl@every-hour');
 }
 
 // ── Graph nightly cron processor ─────────────────────────────────────────────

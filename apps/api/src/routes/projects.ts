@@ -357,7 +357,7 @@ export const projectsRoutes: FastifyPluginAsync = async (app) => {
 
   // ── GET /api/projects/:id/members — list explicit project members ──────────
   // Any project member (viewer+) — and, via the admin bypass, any workspace
-  // owner/editor — can see who has been granted access.
+  // owner/admin (NOT editors, narrowed in migration 0051) — can see who has access.
   app.get('/api/projects/:id/members', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
     const { id } = req.params as { id: string };

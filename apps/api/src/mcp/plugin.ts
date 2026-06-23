@@ -3,6 +3,7 @@ import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import { requireOAuthBearer } from '../oauth/middleware/require-bearer.js';
 import { checkSubscriptionGate } from '../plugins/subscription.js';
+import { isWorkspaceSuspended } from '../lib/suspended.js';
 import { mcpConfig } from './config.js';
 // protectedResourceRoutes removed — well-known routes now live in oauth/routes/well-known.ts
 import { McpForbiddenError } from './scope.js';
@@ -232,6 +233,17 @@ async function handleMcpRequest(req: FastifyRequest, reply: FastifyReply): Promi
           billing_url: `${process.env.WEB_BASE_URL ?? 'https://mnema.theboringpeople.in'}/app/settings/billing`,
         },
       },
+      id: null,
+    });
+  }
+
+  // 3b. Suspension gate (M3 fix) — the REST auth plugin bails before its suspend
+  //     check for mcpRoute, so MCP/api-key traffic must re-check here. Otherwise a
+  //     suspended workspace's bot/agent keys keep full tool access.
+  if (await isWorkspaceSuspended(oauthCtx.workspaceId)) {
+    return reply.code(403).send({
+      jsonrpc: '2.0',
+      error: { code: -32004, message: 'Workspace is suspended. MCP access is disabled.' },
       id: null,
     });
   }

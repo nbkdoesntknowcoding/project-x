@@ -86,51 +86,6 @@ export async function applyOrgRolePolicies(
 }
 
 /**
- * FIX 5 — bulk-seed `principal_type='team'` doc_acl rows from an explicit policy
- * list. One team row applies to every current + future team member, because
- * app_acl_permits()/app_effective_permission() resolve `team` grants against the
- * caller's team_members at read time — no per-user fan-out needed. The single-cell
- * POST /api/org/access already writes team cells; this is the bulk/default path.
- * Idempotent (upsert), audited, runs under system privilege like the org-role path.
- */
-export async function applyTeamFolderPolicies(
-  teamId: string,
-  workspaceId: string,
-  policies: Array<{
-    resourceType: 'doc' | 'folder' | 'project';
-    resourceId: string;
-    permission: 'read' | 'write' | 'admin' | 'none';
-  }>,
-  actorUserId: string,
-): Promise<void> {
-  await withSystemPrivilege(async (tx) => {
-    for (const policy of policies) {
-      await tx.insert(docAcl).values({
-        workspaceId,
-        resourceType: policy.resourceType,
-        resourceId: policy.resourceId,
-        principalType: 'team',
-        principalId: teamId,
-        permission: policy.permission,
-        createdBy: actorUserId,
-      }).onConflictDoUpdate({
-        target: [docAcl.resourceType, docAcl.resourceId, docAcl.principalType, docAcl.principalId],
-        set: { permission: policy.permission, updatedAt: new Date() },
-      });
-
-      await tx.insert(iamAuditLog).values({
-        workspaceId,
-        actorUserId,
-        action: 'policy.created',
-        resourceType: policy.resourceType,
-        resourceId: policy.resourceId,
-        payload: { teamId, permission: policy.permission, source: 'team_policy_bulk' },
-      });
-    }
-  });
-}
-
-/**
  * Phase B (B2) — provision a user's org identity when they accept an invite that
  * carries an org_role. Creates user_org_profiles + team_members, applies the role's
  * folder policies, computes bot_display_name, and audits. Idempotent.

@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { nanoid } from 'nanoid';
 import { randomUUID } from 'node:crypto';
@@ -8,6 +8,7 @@ import { db } from '../db/index.js';
 import { attachments, docAccessRequests, docAcl, docs, folders, notifications, users } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
 import { canAccess } from '../lib/iam.js';
+import { getUserRole } from '../lib/role.js';
 import { contentHash, emptyYjsState } from '../lib/yjs.js';
 import { enforceFreeDocLimit } from '../plugins/free-limits.js';
 
@@ -120,15 +121,31 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
         .limit(100);
     });
 
-    // FIX 4: doc_acl post-filter on top of the RLS-narrowed set, so an explicit
-    // doc-level deny is honoured in the list too. Temporary: once doc-level RLS is
-    // wired this can be removed. O(n) over an already-bounded (<=100) result set.
-    const userId = req.auth.sub;
-    const tenantId = req.auth.tenant_id;
-    const checked = await Promise.all(
-      rows.map(async (d) => ((await canAccess(db, userId, tenantId, 'doc', d.id, 'read')) ? d : null)),
-    );
-    const visible = checked.filter((d): d is typeof rows[number] => d !== null);
+    // M4 fix: doc_acl post-filter as a SINGLE batch query (was an N+1 of per-doc
+    // canAccess). RLS already narrowed the set; this only drops docs where the caller
+    // holds an explicit, non-expired user-level 'none' deny (which RLS does not honor
+    // against project membership). Folder/project/team denies are still enforced on the
+    // single-doc GET path via canAccess.
+    const docIds = rows.map((d) => d.id);
+    let visible = rows;
+    if (docIds.length) {
+      const denied = await db
+        .select({ resourceId: docAcl.resourceId })
+        .from(docAcl)
+        .where(and(
+          eq(docAcl.workspaceId, req.auth.tenant_id),
+          eq(docAcl.resourceType, 'doc'),
+          inArray(docAcl.resourceId, docIds),
+          eq(docAcl.principalType, 'user'),
+          eq(docAcl.principalId, req.auth.sub),
+          eq(docAcl.permission, 'none'),
+          or(isNull(docAcl.expiresAt), gt(docAcl.expiresAt, new Date())),
+        ));
+      if (denied.length) {
+        const deniedIds = new Set(denied.map((r) => r.resourceId));
+        visible = rows.filter((d) => !deniedIds.has(d.id));
+      }
+    }
 
     return { docs: visible };
   });
@@ -432,7 +449,7 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
   // POST /api/docs/:docId/request-access — any member may ask for access to a doc
   // they can't see. We read the title + owner via the owner connection (bypasses
   // RLS intentionally — title + owner only, never content) to address the request.
-  app.post<{ Params: { docId: string }; Body: { message?: string; permission?: 'read' | 'write'; requestedFromId?: string } }>(
+  app.post<{ Params: { docId: string }; Body: { message?: string; permission?: 'read' | 'write' } }>(
     '/api/docs/:docId/request-access',
     async (req, reply) => {
       if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
@@ -447,7 +464,10 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
         .limit(1);
       if (!doc) return reply.code(404).send({ error: 'not_found' });
 
-      const recipientId = req.body?.requestedFromId ?? doc.createdBy;
+      // C1 fix: the recipient is ALWAYS the doc owner, derived server-side. Never
+      // trust a client-supplied requestedFromId — that allowed self-routing +
+      // self-approval to grant oneself access to any doc.
+      const recipientId = doc.createdBy;
       if (!recipientId) return reply.code(400).send({ error: 'no_recipient' });
 
       const [created] = await db.insert(docAccessRequests).values({
@@ -492,14 +512,41 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
 
       const [request] = await db.select().from(docAccessRequests).where(and(
         eq(docAccessRequests.id, requestId),
-        eq(docAccessRequests.requestedFromId, req.auth.sub), // only the recipient may resolve
+        eq(docAccessRequests.workspaceId, req.auth.tenant_id),
         eq(docAccessRequests.status, 'pending'),
       )).limit(1);
       if (!request) return reply.code(404).send({ error: 'not_found' });
 
+      // C1 fix: authorize from the DOC, not the request's (previously self-selectable)
+      // recipient field. Only the doc owner or a workspace owner/admin may resolve.
+      const [docRow] = await db.select({ createdBy: docs.createdBy })
+        .from(docs).where(and(eq(docs.id, request.docId), eq(docs.workspaceId, req.auth.tenant_id))).limit(1);
+      const callerRole = await getUserRole(req.auth.sub, req.auth.tenant_id);
+      const isDocOwner = !!docRow && docRow.createdBy === req.auth.sub;
+      const isWorkspaceAdmin = callerRole === 'owner' || callerRole === 'admin';
+      if (!isDocOwner && !isWorkspaceAdmin) {
+        return reply.code(403).send({ error: 'only_doc_owner_or_admin_can_approve' });
+      }
+
       const expiresAt = req.body?.expiresAt ? new Date(req.body.expiresAt) : null;
 
       if (action === 'approve') {
+        // Never clobber an explicit 'none' deny via the grant upsert.
+        const [deny] = await db.select({ id: docAcl.id }).from(docAcl).where(and(
+          eq(docAcl.resourceType, 'doc'),
+          eq(docAcl.resourceId, request.docId),
+          eq(docAcl.principalType, 'user'),
+          eq(docAcl.principalId, request.requesterId),
+          eq(docAcl.permission, 'none'),
+        )).limit(1);
+        if (deny) {
+          // Mark the request resolved (denied) so it doesn't linger as pending.
+          await db.update(docAccessRequests)
+            .set({ status: 'denied', resolvedBy: req.auth.sub, resolvedAt: new Date() })
+            .where(eq(docAccessRequests.id, requestId));
+          return reply.code(409).send({ error: 'access_explicitly_denied_by_policy' });
+        }
+
         await db.insert(docAcl).values({
           workspaceId: req.auth.tenant_id,
           resourceType: 'doc',

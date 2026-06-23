@@ -15,6 +15,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -779,9 +780,14 @@ export const docAccessRequests = pgTable(
     createdAt:       timestamp('created_at', { withTimezone: true }).defaultNow(),
   },
   (table) => ({
-    uniqueOpen:    unique('doc_access_requests_open_uq').on(table.docId, table.requesterId, table.status),
+    // M5 fix: partial unique — at most one PENDING request per (doc, requester);
+    // resolved (approved/denied) rows are unconstrained so re-requests never collide.
+    pendingUq:     uniqueIndex('doc_access_requests_pending_uq')
+                     .on(table.docId, table.requesterId)
+                     .where(sql`status = 'pending'`),
     workspaceIdx:  index('idx_access_requests_workspace').on(table.workspaceId),
-    pendingIdx:    index('idx_access_requests_pending').on(table.requestedFromId, table.status),
+    pendingIdx:    index('idx_access_requests_pending').on(table.requestedFromId, table.status)
+                     .where(sql`status = 'pending'`),
   }),
 );
 
