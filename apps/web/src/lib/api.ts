@@ -307,10 +307,32 @@ export const adminApi = {
     apiFetch(`/api/admin/licenses/${id}/assign`, { method: 'POST', body: { workspace_id } }),
 };
 
+export interface AccessRequest {
+  id: string;
+  doc_id: string;
+  doc_title: string | null;
+  status: 'pending' | 'approved' | 'denied';
+  permission: 'read' | 'write';
+  message: string | null;
+  created_at: string;
+  requester_name: string | null;
+  requester_email: string | null;
+  owner_name: string | null;
+  owner_email: string | null;
+}
+
 export const api = {
   // Redeem a license key on the current workspace (owner only).
   redeemLicense: (key: string): Promise<{ ok: boolean; plan: string; seats: number }> =>
     apiFetch('/api/licenses/redeem', { method: 'POST', body: { key } }),
+
+  // ── Document access requests ──────────────────────────────────────────────
+  requestDocAccess: (docId: string, body: { permission?: 'read' | 'write'; message?: string }): Promise<{ requested: boolean }> =>
+    apiFetch(`/api/docs/${docId}/request-access`, { method: 'POST', body }),
+  listAccessRequests: (box: 'incoming' | 'outgoing'): Promise<{ box: string; requests: AccessRequest[] }> =>
+    apiFetch(`/api/docs/access-requests?box=${box}`),
+  resolveAccessRequest: (id: string, body: { action: 'approve' | 'deny'; expiresAt?: string | null }): Promise<{ status: string }> =>
+    apiFetch(`/api/docs/access-requests/${id}`, { method: 'PATCH', body }),
   listDocs: (): Promise<{ docs: DocSummary[] }> => apiFetch('/api/docs'),
   createDoc: (body: DocCreatePayload): Promise<{ doc: DocFull }> =>
     apiFetch('/api/docs', { method: 'POST', body }),

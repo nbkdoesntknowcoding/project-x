@@ -1,7 +1,9 @@
 ---
 import type { DocFull } from '@boppl/shared';
 import DocLayout from '../../../layouts/DocLayout.astro';
+import AppLayout from '../../../layouts/AppLayout.astro';
 import { DocPage } from '../../../components/editor/DocPage';
+import { LockedDoc } from '../../../components/access/LockedDoc';
 
 const auth = Astro.locals.auth;
 if (!auth) {
@@ -24,17 +26,25 @@ const response = await fetch(`${apiUrl}/api/docs/${doc_id}`, {
 if (response.status === 404) {
   return new Response('Doc not found in your workspace', { status: 404 });
 }
-if (!response.ok) {
-  return new Response('Failed to load doc', { status: 500 });
-}
 
-const { doc } = (await response.json()) as { doc: DocFull };
+// 403 access_denied → the doc exists but the viewer can't see it. Render a locked
+// card with a "Request access" action instead of a hard error.
+let lockedTitle: string | null = null;
+let doc: DocFull | null = null;
+if (response.status === 403) {
+  const body = (await response.json().catch(() => ({}))) as { stub?: { title?: string } };
+  lockedTitle = body?.stub?.title ?? 'this document';
+} else if (!response.ok) {
+  return new Response('Failed to load doc', { status: 500 });
+} else {
+  ({ doc } = (await response.json()) as { doc: DocFull });
+}
 
 // Back navigation: respect ?back= param so folder context is preserved
 const rawBack = Astro.url.searchParams.get('back') ?? '';
 const backUrl = rawBack.startsWith('/app/') ? rawBack : '/app/content';
-const sourceAttachment = doc.sourceAttachment ?? null;
-const folder = doc.folder ?? null;
+const sourceAttachment = doc?.sourceAttachment ?? null;
+const folder = doc?.folder ?? null;
 
 // View routing:
 //   DOCX docs:  'edit' (default) → OnlyOffice | 'mnema' → ProseMirror editor
@@ -49,21 +59,26 @@ if (sourceAttachment?.format === 'docx') {
 }
 ---
 
-<DocLayout
-  title={doc.title || 'Untitled'}
-  docType={doc.type}
-  email={auth.email}
-  backUrl={backUrl}
-  sourceAttachment={sourceAttachment}
-  activeView={activeView}
-  folder={folder}
->
-  <DocPage
-    initialDoc={doc}
-    jwt={auth.jwt}
-    user={{ id: auth.user_id, email: auth.email }}
-    collabUrl={collabUrl}
+{lockedTitle ? (
+  <AppLayout title="Access required" email={auth.email}>
+    <LockedDoc docId={doc_id} title={lockedTitle} client:load />
+  </AppLayout>
+) : (
+  <DocLayout
+    title={doc!.title || 'Untitled'}
+    email={auth.email}
+    backUrl={backUrl}
+    sourceAttachment={sourceAttachment}
     activeView={activeView}
-    client:only="react"
-  />
-</DocLayout>
+    folder={folder}
+  >
+    <DocPage
+      initialDoc={doc!}
+      jwt={auth.jwt}
+      user={{ id: auth.user_id, email: auth.email }}
+      collabUrl={collabUrl}
+      activeView={activeView}
+      client:only="react"
+    />
+  </DocLayout>
+)}

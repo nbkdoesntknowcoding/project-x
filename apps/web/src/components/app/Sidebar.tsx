@@ -39,6 +39,7 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {}, isAdmin =
   const isOnGraph     = currentPath.startsWith('/app/graph');
   const isOnAdmin     = currentPath.startsWith('/app/admin');
   const isOnMeetings  = currentPath.startsWith('/app/meetings');
+  const isOnRequests  = currentPath.startsWith('/app/requests');
 
   const isDevProject = workspaceMode === 'dev_project';
 
@@ -157,6 +158,16 @@ export function Sidebar({ currentPath, workspaceMode, typeCounts = {}, isAdmin =
               </svg>
             </span>
             <span className="sb-label">Meetings</span>
+          </span>
+        </a>
+        <a href="/app/requests" className={`sb-row${isOnRequests ? ' active' : ''}`}>
+          <span className="sb-l">
+            <span className="sb-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 12l2 2 4-4"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 5c0 1.66 4 3 9 3s9-1.34 9-3-4-3-9-3-9 1.34-9 3z"/>
+              </svg>
+            </span>
+            <span className="sb-label">Access requests</span>
           </span>
         </a>
       </div>

@@ -1,4 +1,5 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import type { FastifyPluginAsync } from 'fastify';
 import { nanoid } from 'nanoid';
 import { randomUUID } from 'node:crypto';
@@ -581,4 +582,39 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ status: action === 'approve' ? 'approved' : 'denied' });
     },
   );
+
+  // GET /api/docs/access-requests?box=incoming|outgoing — list requests for the UI.
+  // incoming = requests routed to me (I'm the doc owner) → I approve/deny them.
+  // outgoing = requests I filed → I see their status.
+  app.get<{ Querystring: { box?: string } }>('/api/docs/access-requests', async (req, reply) => {
+    if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+    const box = req.query.box === 'outgoing' ? 'outgoing' : 'incoming';
+    const requester = alias(users, 'req_user');
+    const owner = alias(users, 'own_user');
+    const mine = box === 'outgoing' ? docAccessRequests.requesterId : docAccessRequests.requestedFromId;
+
+    const rows = await db
+      .select({
+        id: docAccessRequests.id,
+        doc_id: docAccessRequests.docId,
+        doc_title: docs.title,
+        status: docAccessRequests.status,
+        permission: docAccessRequests.permission,
+        message: docAccessRequests.message,
+        created_at: docAccessRequests.createdAt,
+        requester_name: requester.displayName,
+        requester_email: requester.email,
+        owner_name: owner.displayName,
+        owner_email: owner.email,
+      })
+      .from(docAccessRequests)
+      .leftJoin(docs, eq(docs.id, docAccessRequests.docId))
+      .leftJoin(requester, eq(requester.id, docAccessRequests.requesterId))
+      .leftJoin(owner, eq(owner.id, docAccessRequests.requestedFromId))
+      .where(and(eq(mine, req.auth.sub), eq(docAccessRequests.workspaceId, req.auth.tenant_id)))
+      .orderBy(desc(docAccessRequests.createdAt))
+      .limit(100);
+
+    return reply.send({ box, requests: rows });
+  });
 };
