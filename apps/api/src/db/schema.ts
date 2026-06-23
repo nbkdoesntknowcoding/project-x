@@ -748,6 +748,7 @@ export const docAcl = pgTable(
     principalId:   uuid('principal_id').notNull(),
     permission:    text('permission').notNull(),     // 'read' | 'write' | 'admin' | 'none'
     createdBy:     uuid('created_by').references(() => users.id),
+    expiresAt:     timestamp('expires_at', { withTimezone: true }), // FIX 6: NULL = permanent
     createdAt:     timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt:     timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
@@ -757,6 +758,30 @@ export const docAcl = pgTable(
     resourceIdx:  index('idx_doc_acl_resource').on(table.resourceType, table.resourceId),
     principalIdx: index('idx_doc_acl_principal').on(table.principalType, table.principalId),
     workspaceIdx: index('idx_doc_acl_workspace').on(table.workspaceId),
+  }),
+);
+
+/** FIX 6 — a person's request for access to a doc they can't see (0050). */
+export const docAccessRequests = pgTable(
+  'doc_access_requests',
+  {
+    id:              uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId:     uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    docId:           uuid('doc_id').notNull().references(() => docs.id, { onDelete: 'cascade' }),
+    requesterId:     uuid('requester_id').notNull().references(() => users.id),
+    requestedFromId: uuid('requested_from_id').references(() => users.id),
+    message:         text('message'),
+    permission:      text('permission').notNull().default('read'), // 'read' | 'write'
+    expiresAt:       timestamp('expires_at', { withTimezone: true }), // set by approver; NULL = permanent
+    status:          text('status').notNull().default('pending'),  // 'pending' | 'approved' | 'denied'
+    resolvedBy:      uuid('resolved_by').references(() => users.id),
+    resolvedAt:      timestamp('resolved_at', { withTimezone: true }),
+    createdAt:       timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    uniqueOpen:    unique('doc_access_requests_open_uq').on(table.docId, table.requesterId, table.status),
+    workspaceIdx:  index('idx_access_requests_workspace').on(table.workspaceId),
+    pendingIdx:    index('idx_access_requests_pending').on(table.requestedFromId, table.status),
   }),
 );
 

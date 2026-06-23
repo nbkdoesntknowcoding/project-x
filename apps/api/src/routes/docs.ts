@@ -5,8 +5,9 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { writeMarkdownIntoLiveDoc } from '../collab/writeback.js';
 import { db } from '../db/index.js';
-import { attachments, docs, folders } from '../db/schema.js';
+import { attachments, docAccessRequests, docAcl, docs, folders, notifications, users } from '../db/schema.js';
 import { withTenant } from '../db/with-tenant.js';
+import { canAccess } from '../lib/iam.js';
 import { contentHash, emptyYjsState } from '../lib/yjs.js';
 import { enforceFreeDocLimit } from '../plugins/free-limits.js';
 
@@ -119,7 +120,17 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
         .limit(100);
     });
 
-    return { docs: rows };
+    // FIX 4: doc_acl post-filter on top of the RLS-narrowed set, so an explicit
+    // doc-level deny is honoured in the list too. Temporary: once doc-level RLS is
+    // wired this can be removed. O(n) over an already-bounded (<=100) result set.
+    const userId = req.auth.sub;
+    const tenantId = req.auth.tenant_id;
+    const checked = await Promise.all(
+      rows.map(async (d) => ((await canAccess(db, userId, tenantId, 'doc', d.id, 'read')) ? d : null)),
+    );
+    const visible = checked.filter((d): d is typeof rows[number] => d !== null);
+
+    return { docs: visible };
   });
 
   // Phase 5: counts per content type. Lets the sidebar hide filter chips
@@ -271,6 +282,17 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
     if (!result) return reply.code(404).send({ error: 'not_found' });
     const { doc: row } = result;
 
+    // FIX 4: doc_acl enforcement at the REST layer (defence in depth — RLS catches
+    // DB reads, this catches an explicit doc-level deny). Returns a stub so the UI
+    // can offer "Request access" instead of a blank error.
+    const permitted = await canAccess(db, req.auth.sub, req.auth.tenant_id, 'doc', id, 'read');
+    if (!permitted) {
+      return reply.code(403).send({
+        error: 'access_denied',
+        stub: { id: row.id, title: row.title, owner_id: row.createdBy, created_at: row.createdAt },
+      });
+    }
+
     return {
       doc: {
         id: row.id,
@@ -405,4 +427,111 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
     if (!updated) return reply.code(404).send({ error: 'not_found' });
     return { doc: shapeForResponse(updated) };
   });
+
+  // ── FIX 6: access request flow ───────────────────────────────────────────────
+  // POST /api/docs/:docId/request-access — any member may ask for access to a doc
+  // they can't see. We read the title + owner via the owner connection (bypasses
+  // RLS intentionally — title + owner only, never content) to address the request.
+  app.post<{ Params: { docId: string }; Body: { message?: string; permission?: 'read' | 'write'; requestedFromId?: string } }>(
+    '/api/docs/:docId/request-access',
+    async (req, reply) => {
+      if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+      const { docId } = req.params;
+      if (!isUuid(docId)) return reply.code(400).send({ error: 'bad_id' });
+      const permission = req.body?.permission === 'write' ? 'write' : 'read';
+
+      const [doc] = await db
+        .select({ id: docs.id, title: docs.title, createdBy: docs.createdBy })
+        .from(docs)
+        .where(and(eq(docs.id, docId), eq(docs.workspaceId, req.auth.tenant_id)))
+        .limit(1);
+      if (!doc) return reply.code(404).send({ error: 'not_found' });
+
+      const recipientId = req.body?.requestedFromId ?? doc.createdBy;
+      if (!recipientId) return reply.code(400).send({ error: 'no_recipient' });
+
+      const [created] = await db.insert(docAccessRequests).values({
+        workspaceId: req.auth.tenant_id,
+        docId,
+        requesterId: req.auth.sub,
+        requestedFromId: recipientId,
+        message: req.body?.message ?? null,
+        permission,
+      }).onConflictDoNothing().returning({ id: docAccessRequests.id });
+
+      // Notify the recipient (actorId = the requester). Skip if the request was a
+      // duplicate (onConflictDoNothing returned nothing) or self-directed.
+      if (created && recipientId !== req.auth.sub) {
+        const [requester] = await db.select({ name: users.displayName, email: users.email })
+          .from(users).where(eq(users.id, req.auth.sub)).limit(1);
+        const who = requester?.name || requester?.email || 'A teammate';
+        await db.insert(notifications).values({
+          workspaceId: req.auth.tenant_id,
+          recipientId,
+          actorId: req.auth.sub,
+          kind: 'access_request',
+          title: `Access request: ${doc.title}`,
+          body: `${who} is requesting ${permission} access.`,
+          link: `/app/docs/${docId}`,
+        });
+      }
+      return reply.code(201).send({ requested: true });
+    },
+  );
+
+  // PATCH /api/docs/access-requests/:requestId — the recipient approves or denies.
+  // Approval writes a doc_acl grant (optionally time-limited) and notifies the asker.
+  app.patch<{ Params: { requestId: string }; Body: { action: 'approve' | 'deny'; expiresAt?: string | null } }>(
+    '/api/docs/access-requests/:requestId',
+    async (req, reply) => {
+      if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
+      const { requestId } = req.params;
+      if (!isUuid(requestId)) return reply.code(400).send({ error: 'bad_id' });
+      const action = req.body?.action;
+      if (action !== 'approve' && action !== 'deny') return reply.code(400).send({ error: 'bad_action' });
+
+      const [request] = await db.select().from(docAccessRequests).where(and(
+        eq(docAccessRequests.id, requestId),
+        eq(docAccessRequests.requestedFromId, req.auth.sub), // only the recipient may resolve
+        eq(docAccessRequests.status, 'pending'),
+      )).limit(1);
+      if (!request) return reply.code(404).send({ error: 'not_found' });
+
+      const expiresAt = req.body?.expiresAt ? new Date(req.body.expiresAt) : null;
+
+      if (action === 'approve') {
+        await db.insert(docAcl).values({
+          workspaceId: req.auth.tenant_id,
+          resourceType: 'doc',
+          resourceId: request.docId,
+          principalType: 'user',
+          principalId: request.requesterId,
+          permission: request.permission,
+          createdBy: req.auth.sub,
+          expiresAt,
+        }).onConflictDoUpdate({
+          target: [docAcl.resourceType, docAcl.resourceId, docAcl.principalType, docAcl.principalId],
+          set: { permission: request.permission, expiresAt, updatedAt: new Date() },
+        });
+
+        await db.insert(notifications).values({
+          workspaceId: req.auth.tenant_id,
+          recipientId: request.requesterId,
+          actorId: req.auth.sub,
+          kind: 'access_granted',
+          title: 'Access granted',
+          body: expiresAt
+            ? `You have ${request.permission} access until ${expiresAt.toISOString().slice(0, 10)}.`
+            : `You have permanent ${request.permission} access.`,
+          link: `/app/docs/${request.docId}`,
+        });
+      }
+
+      await db.update(docAccessRequests)
+        .set({ status: action === 'approve' ? 'approved' : 'denied', resolvedBy: req.auth.sub, resolvedAt: new Date() })
+        .where(eq(docAccessRequests.id, requestId));
+
+      return reply.send({ status: action === 'approve' ? 'approved' : 'denied' });
+    },
+  );
 };

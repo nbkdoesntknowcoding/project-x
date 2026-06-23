@@ -18,9 +18,9 @@ import { projectMembers, workspaceMembers } from '../db/schema.js';
  * and owner) but we never check for it in 4.1.
  */
 
-export type Role = 'owner' | 'editor' | 'viewer';
+export type Role = 'owner' | 'admin' | 'editor' | 'viewer';
 
-const ROLE_RANK: Record<Role, number> = { viewer: 0, editor: 1, owner: 2 };
+const ROLE_RANK: Record<Role, number> = { viewer: 0, editor: 1, admin: 2, owner: 3 };
 
 export class RoleError extends Error {
   constructor(
@@ -61,9 +61,9 @@ export async function getUserRole(
     .limit(1);
   const r = rows[0]?.role;
   if (!r) return null;
-  // The DB enum has 4 values (admin reserved); we narrow to the 3 we use.
-  if (r === 'owner' || r === 'editor' || r === 'viewer') return r;
-  // 'admin' or anything unexpected → treat as not a member for safety.
+  // All four workspace roles are now first-class (admin slots between editor and owner).
+  if (r === 'owner' || r === 'admin' || r === 'editor' || r === 'viewer') return r;
+  // Anything unexpected → treat as not a member for safety.
   return null;
 }
 
@@ -99,9 +99,10 @@ export type ProjectRole = 'viewer' | 'editor' | 'admin';
 
 const PROJECT_ROLE_RANK: Record<ProjectRole, number> = { viewer: 0, editor: 1, admin: 2 };
 
-/** True for workspace roles that see/manage every project (the RLS admin bypass). */
+/** True for workspace roles that see/manage every project (the RLS admin bypass).
+ *  Mirrors the DB `app_is_workspace_admin()` predicate, which is `IN ('owner','admin','editor')`. */
 function isWorkspaceAdminRole(role: Role | null): boolean {
-  return role === 'owner' || role === 'editor';
+  return role === 'owner' || role === 'admin' || role === 'editor';
 }
 
 /**

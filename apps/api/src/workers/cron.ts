@@ -35,6 +35,7 @@ const statsQueue        = new Queue('stats-refresh-cron',  { connection: redisCo
 const optimizationQueue = new Queue('optimization-cron',   { connection: redisConnection });
 const retentionQueue    = new Queue('retention-cron',      { connection: redisConnection });
 const graphCronQueue    = new Queue('graph-cron',          { connection: redisConnection });
+const expireAclQueue    = new Queue('expire-doc-acl-cron', { connection: redisConnection });
 
 async function registerCronJobs(): Promise<void> {
   await statsQueue.add('hourly-stats-refresh', {}, {
@@ -50,6 +51,11 @@ async function registerCronJobs(): Promise<void> {
   await retentionQueue.add('nightly-cleanup', {}, {
     repeat: { pattern: '0 3 * * *' },
     jobId: 'retention-nightly',
+  });
+
+  await expireAclQueue.add('hourly-expire-doc-acl', {}, {
+    repeat: { pattern: '0 * * * *' }, // every hour — FIX 6: purge expired doc_acl grants
+    jobId: 'expire-doc-acl-hourly',
   });
 
   await graphCronQueue.add('nightly-graph', {}, {
@@ -249,6 +255,18 @@ async function processRetentionCron(_job: Job): Promise<void> {
   }
 }
 
+// ── FIX 6: expire time-limited doc_acl grants ──────────────────────────────────
+async function processExpireDocAclCron(_job: Job): Promise<void> {
+  try {
+    const result = (await db.execute(
+      sql`DELETE FROM doc_acl WHERE expires_at IS NOT NULL AND expires_at < now()`,
+    )) as unknown as PgResult;
+    log.info({ deleted: result.count ?? 0 }, 'Expired doc_acl grants cleaned up');
+  } catch (err) {
+    log.error({ err }, 'expire-doc-acl cron failed');
+  }
+}
+
 // ── Worker startup ────────────────────────────────────────────────────────────
 
 export function startCronWorkers(): { close(): Promise<void> } {
@@ -277,10 +295,17 @@ export function startCronWorkers(): { close(): Promise<void> } {
     concurrency: 1,
   });
 
+  const conn5 = new IORedis(process.env.REDIS_URL ?? 'redis://localhost:6379', { maxRetriesPerRequest: null });
+  const expireAclWorker = new Worker('expire-doc-acl-cron', processExpireDocAclCron, {
+    connection: conn5,
+    concurrency: 1,
+  });
+
   statsWorker.on('failed', (job, err) => log.error({ jobId: job?.id, err }, 'Stats refresh cron failed'));
   optWorker.on('failed',   (job, err) => log.error({ jobId: job?.id, err }, 'Optimization cron job failed'));
   retWorker.on('failed',   (job, err) => log.error({ jobId: job?.id, err }, 'Retention cron job failed'));
   graphCronWorker.on('failed', (job, err) => log.error({ jobId: job?.id, err }, 'Graph cron failed'));
+  expireAclWorker.on('failed', (job, err) => log.error({ jobId: job?.id, err }, 'expire-doc-acl cron failed'));
 
   void registerCronJobs();
 
@@ -290,6 +315,7 @@ export function startCronWorkers(): { close(): Promise<void> } {
       await optWorker.close();
       await retWorker.close();
       await graphCronWorker.close();
+      await expireAclWorker.close();
     },
   };
 }
