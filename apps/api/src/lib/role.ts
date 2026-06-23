@@ -100,9 +100,11 @@ export type ProjectRole = 'viewer' | 'editor' | 'admin';
 const PROJECT_ROLE_RANK: Record<ProjectRole, number> = { viewer: 0, editor: 1, admin: 2 };
 
 /** True for workspace roles that see/manage every project (the RLS admin bypass).
- *  Mirrors the DB `app_is_workspace_admin()` predicate, which is `IN ('owner','admin','editor')`. */
+ *  Mirrors the DB `app_is_workspace_admin()` predicate, narrowed to `IN ('owner','admin')`
+ *  in 0051 so editors are project-bounded (FIX 3). Editors now resolve their project
+ *  role from project_members / doc_acl, not a blanket bypass. */
 function isWorkspaceAdminRole(role: Role | null): boolean {
-  return role === 'owner' || role === 'admin' || role === 'editor';
+  return role === 'owner' || role === 'admin';
 }
 
 /**
