@@ -57,6 +57,30 @@ interface LLMExtractionResult {
   why_nodes: Array<{ label: string; rationale: string; refers_to: string }>;
 }
 
+// ── A2.6 helpers (exported for unit tests) ───────────────────────────────────
+// Fuzzy concept dedup: normalise a label so case / punctuation / whitespace variants
+// converge on the same node ("Voice-Clone", "voice clone", "Voice  Clone" → one node).
+export function normalizeLabel(s: string): string {
+  return (s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+// Alphanumeric-only form for SQL-side fuzzy matching (no extension needed).
+export function compactLabel(s: string): string {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+export function conceptSlug(workspaceId: string, label: string): string {
+  return `${workspaceId}-${normalizeLabel(label).replace(/\s+/g, '-')}`;
+}
+// Chunk long docs so extraction isn't capped at the first 6000 chars.
+export function chunkMarkdown(md: string, size = 6000, maxChunks = 4): string[] {
+  const text = md || '';
+  if (text.length <= size) return [text];
+  const chunks: string[] = [];
+  for (let i = 0; i < text.length && chunks.length < maxChunks; i += size) {
+    chunks.push(text.slice(i, i + size));
+  }
+  return chunks;
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 async function upsertNode(
@@ -117,15 +141,19 @@ async function upsertEdge(
     .onConflictDoNothing();
 }
 
-// Resolve a label to the nearest matching node ID, or return null
+// Resolve a label to the nearest matching node ID, or return null.
+// A2.6: match on the alphanumeric-compact form so punctuation/whitespace/case variants
+// resolve to the same node (fuzzy dedup) — no pg extension needed.
 async function resolveLabel(db: Tx, workspaceId: string, label: string): Promise<string | null> {
+  const compact = compactLabel(label);
+  if (!compact) return null;
   const rows = await db
     .select({ id: graphNodes.id })
     .from(graphNodes)
     .where(
       and(
         eq(graphNodes.workspaceId, workspaceId),
-        sql`lower(${graphNodes.label}) = lower(${label})`,
+        sql`regexp_replace(lower(${graphNodes.label}), '[^a-z0-9]+', '', 'g') = ${compact}`,
       ),
     )
     .limit(1);
@@ -186,28 +214,52 @@ export async function extractSemantic(
       );
   }
 
-  // Call LLM
+  // A2.6: chunk long docs so extraction covers the WHOLE document, not just the first
+  // 6000 chars. Each chunk is extracted independently and the results are merged with
+  // fuzzy (normalized-label) dedup, so a concept mentioned in several chunks is one node.
   const model = mode === 'deep' ? 'gpt-4o' : 'gpt-4o-mini';
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const response = await openai.chat.completions.create({
-    model,
-    max_tokens: 4096,
-    messages: [
-      {
-        role: 'user',
-        content: EXTRACTION_PROMPT(doc.title || 'Untitled', doc.markdown || '', otherDocTitles),
-      },
-    ],
-  });
+  const maxChunks = Math.max(1, Number(process.env.GRAPH_EXTRACT_MAX_CHUNKS ?? (mode === 'deep' ? 8 : 4)));
+  const chunks = chunkMarkdown(doc.markdown || '', 6000, maxChunks);
 
-  const rawText = response.choices[0]?.message?.content ?? '';
-
-  let result: LLMExtractionResult;
-  try {
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    result = JSON.parse(jsonMatch?.[0] ?? rawText) as LLMExtractionResult;
-  } catch {
-    result = { concepts: [], relationships: [], why_nodes: [] };
+  const result: LLMExtractionResult = { concepts: [], relationships: [], why_nodes: [] };
+  const seenConcept = new Set<string>();
+  const seenWhy = new Set<string>();
+  const seenRel = new Set<string>();
+  for (const chunk of chunks) {
+    let part: LLMExtractionResult;
+    try {
+      const response = await openai.chat.completions.create({
+        model,
+        max_tokens: 4096,
+        messages: [
+          { role: 'user', content: EXTRACTION_PROMPT(doc.title || 'Untitled', chunk, otherDocTitles) },
+        ],
+      });
+      const rawText = response.choices[0]?.message?.content ?? '';
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      part = JSON.parse(jsonMatch?.[0] ?? rawText) as LLMExtractionResult;
+    } catch {
+      continue; // skip a failed/unparseable chunk, keep the rest
+    }
+    for (const c of part.concepts ?? []) {
+      const k = normalizeLabel(c.label || '');
+      if (!k || seenConcept.has(k)) continue;
+      seenConcept.add(k);
+      result.concepts.push(c);
+    }
+    for (const w of part.why_nodes ?? []) {
+      const k = normalizeLabel(w.label || '');
+      if (!k || seenWhy.has(k)) continue;
+      seenWhy.add(k);
+      result.why_nodes.push(w);
+    }
+    for (const r of part.relationships ?? []) {
+      const k = `${normalizeLabel(r.from || '')}|${normalizeLabel(r.to || '')}|${r.edge_type}`;
+      if (seenRel.has(k)) continue;
+      seenRel.add(k);
+      result.relationships.push(r);
+    }
   }
 
   let conceptCount = 0;
@@ -220,25 +272,26 @@ export async function extractSemantic(
   const conceptNodeMap = new Map<string, string>(); // label → nodeId
   for (const concept of result.concepts ?? []) {
     if (!concept.label) continue;
-    const entityId = `${workspaceId}-${concept.label.toLowerCase().replace(/\s+/g, '-')}`;
+    // A2.6: normalized slug → case/punct/whitespace variants converge on one node.
+    const entityId = conceptSlug(workspaceId, concept.label);
     const nodeId = await upsertNode(
       db, workspaceId, concept.type || 'concept', entityId, concept.label, concept.summary,
     );
-    conceptNodeMap.set(concept.label.toLowerCase(), nodeId);
+    conceptNodeMap.set(normalizeLabel(concept.label), nodeId);
     conceptCount++;
   }
 
   // Upsert why_nodes (rationale nodes)
   for (const why of result.why_nodes ?? []) {
     if (!why.label) continue;
-    const entityId = `${workspaceId}-why-${why.label.toLowerCase().replace(/\s+/g, '-')}`;
+    const entityId = `${workspaceId}-why-${normalizeLabel(why.label).replace(/\s+/g, '-')}`;
     const nodeId = await upsertNode(db, workspaceId, 'rationale', entityId, why.label, why.rationale);
-    conceptNodeMap.set(why.label.toLowerCase(), nodeId);
+    conceptNodeMap.set(normalizeLabel(why.label), nodeId);
     conceptCount++;
 
     // rationale_for edge: why_node → refers_to concept
     const refId = why.refers_to
-      ? (conceptNodeMap.get(why.refers_to.toLowerCase()) ?? await resolveLabel(db, workspaceId, why.refers_to))
+      ? (conceptNodeMap.get(normalizeLabel(why.refers_to)) ?? await resolveLabel(db, workspaceId, why.refers_to))
       : null;
     if (refId) {
       await upsertEdge(db, workspaceId, nodeId, refId, 'rationale_for', 'INFERRED', 0.9, 1.0, why.rationale);
@@ -250,14 +303,14 @@ export async function extractSemantic(
   for (const rel of result.relationships ?? []) {
     if (!rel.from || !rel.to || !rel.edge_type) continue;
 
-    // Resolve from/to: try concept map first, then DB label lookup, then doc node as fallback
-    const fromId = conceptNodeMap.get(rel.from.toLowerCase())
+    // Resolve from/to: try concept map first (normalized), then DB label lookup, then doc node.
+    const fromId = conceptNodeMap.get(normalizeLabel(rel.from))
       ?? await resolveLabel(db, workspaceId, rel.from)
-      ?? (rel.from.toLowerCase() === (doc.title || '').toLowerCase() ? docNodeId : null);
+      ?? (normalizeLabel(rel.from) === normalizeLabel(doc.title || '') ? docNodeId : null);
 
-    const toId = conceptNodeMap.get(rel.to.toLowerCase())
+    const toId = conceptNodeMap.get(normalizeLabel(rel.to))
       ?? await resolveLabel(db, workspaceId, rel.to)
-      ?? (rel.to.toLowerCase() === (doc.title || '').toLowerCase() ? docNodeId : null);
+      ?? (normalizeLabel(rel.to) === normalizeLabel(doc.title || '') ? docNodeId : null);
 
     if (!fromId || !toId || fromId === toId) continue;
 
@@ -289,6 +342,11 @@ export async function buildSimilarityEdges(
   // Raw SQL for the vector cosine similarity query.
   // Embeddings live in the separate `embeddings` table (not on docs directly).
   // We pick the most recent embedding per doc via DISTINCT ON.
+  // A2.6: widen the scope + make threshold/limit tunable — the old fixed 0.85/100 missed
+  // weaker-but-real cross-doc links and capped dense workspaces. Defaults are slightly
+  // wider (0.82 / 300); tune via GRAPH_SIM_THRESHOLD and GRAPH_SIM_LIMIT.
+  const simThreshold = Number(process.env.GRAPH_SIM_THRESHOLD ?? 0.82);
+  const simLimit = Math.max(1, Number(process.env.GRAPH_SIM_LIMIT ?? 300));
   const rows = await db.execute<{ from_id: string; to_id: string; similarity: number }>(
     sql`
       WITH doc_vecs AS MATERIALIZED (
@@ -300,8 +358,8 @@ export async function buildSimilarityEdges(
       SELECT a.doc_id as from_id, b.doc_id as to_id,
              1 - (a.embedding <=> b.embedding) as similarity
       FROM doc_vecs a JOIN doc_vecs b ON a.doc_id < b.doc_id
-      WHERE 1 - (a.embedding <=> b.embedding) > 0.85
-      ORDER BY similarity DESC LIMIT 100
+      WHERE 1 - (a.embedding <=> b.embedding) > ${simThreshold}
+      ORDER BY similarity DESC LIMIT ${simLimit}
     `,
   );
 
