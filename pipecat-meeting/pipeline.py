@@ -84,6 +84,7 @@ MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
 # the semantic LLM classifier (_classify_addressed below) handles implicit address.
 from addressing import is_addressed as _addressed  # noqa: E402
 from silence import resolve_leading_silent  # noqa: E402  — pure SILENT_TOKEN gate logic
+from local_tools import LOCAL_TOOL_DEFINITIONS, register_local_tools  # noqa: E402  — #6 live-meeting tools
 
 # "Live" questions whose answer is the current board/state, NOT a stored doc. For these we
 # skip the doc-RAG injection (which can surface a stale snapshot like "no tasks in
@@ -186,7 +187,7 @@ async def _classify_addressed(text: str, recently_engaged: bool, speaker: str | 
 def _mnema_tools_schema() -> ToolsSchema:
     """Convert the OpenAI-format Mnema tool dicts to Pipecat 1.2.1 FunctionSchemas."""
     fns = []
-    for t in MNEMA_TOOL_DEFINITIONS:
+    for t in list(MNEMA_TOOL_DEFINITIONS) + list(LOCAL_TOOL_DEFINITIONS):  # #6 local tools
         f = t["function"]
         params = f.get("parameters", {})
         fns.append(FunctionSchema(
@@ -303,6 +304,12 @@ class RAGContext(FrameProcessor):
         if isinstance(frame, TranscriptionFrame):
             text = (frame.text or "").strip()
             if text:
+                # #6: log EVERY human utterance (addressed or not) with its speaker so the
+                # bot can answer "who said X" from this live call. Capped to stay bounded.
+                spk = current_asker(self._state).get("name")
+                self._state.meeting_log.append({"speaker": spk, "text": text})
+                if len(self._state.meeting_log) > 300:
+                    del self._state.meeting_log[0]
                 # A1.6 semantic addressing. Two paths set the PER-TURN force flag so the
                 # next response is spoken (the persona's <silent> still suppresses clear
                 # side-talk when neither fires):
@@ -549,6 +556,7 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     # speaker from BotState and answers each call scoped to that participant.
     mnema = MnemaMCP(state)
     register_mnema_tools(llm, mnema)
+    register_local_tools(llm, state)   # #6: who_is_in_meeting / recall_what_was_said
 
     # ── TTS — ElevenLabs cloned voice, streaming PCM for the Output Media webpage ──
     # A3.4: first-sentence streaming is already the architecture — ElevenLabs Flash streams

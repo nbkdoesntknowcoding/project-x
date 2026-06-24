@@ -57,6 +57,12 @@ class BotState:
         self.participants: dict[str, dict] = {}
         self.active_speaker_id: str | None = None
         self.last_speaker_id: str | None = None
+        # #6 live-meeting awareness. roster_ever keeps EVERYONE seen this call (never
+        # removed on leave) so "was X in this meeting" works after they've gone.
+        # meeting_log is a rolling speaker-attributed transcript of this call (fed by the
+        # pipeline), so the bot can answer "who said X" from the live meeting, not the docs.
+        self.roster_ever: dict[str, dict] = {}
+        self.meeting_log: list[dict] = []
         # The bot's OWN participant id (it joins as "Mnema"). Tracked so we never attribute
         # speech/identity to the bot itself ("who am I → you're Mnema").
         self.bot_participant_id: str | None = None
@@ -292,6 +298,7 @@ class RecallSerializer(FrameSerializer):
             if is_host is None:
                 is_host = existing.get("is_host")
             st.participants[pid] = {"name": name, "email": email, "is_host": is_host}
+            st.roster_ever[pid] = {"name": name, "email": email, "is_host": is_host}  # #6
             logger.info(
                 "[recall] participant %s name=%s email=%s host=%s",
                 pid, name, "yes" if email else "no", is_host,
