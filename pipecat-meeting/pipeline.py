@@ -435,10 +435,20 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     )
 
     # ── LLM — GPT-4o-mini with Mnema tools registered for real execution ──────
-    llm = OpenAILLMService(
-        api_key=os.environ["OPENAI_API_KEY"],
-        model=os.environ.get("OPENAI_LLM_MODEL", "gpt-4o-mini"),
+    # A3.1: the LLM is OpenAI-compatible and swappable to a validated fast-silicon open
+    # model (Groq / Cerebras / Gemini 2.5 Flash) purely by config — tool registration is
+    # unchanged. Defaults to OpenAI gpt-4o-mini; set MEETING_LLM_BASE_URL + MEETING_LLM_MODEL
+    # (+ MEETING_LLM_API_KEY) to point at the model A3.2 validated. base_url is only passed
+    # when set, so the default path is byte-identical to before.
+    _llm_kwargs = dict(
+        api_key=os.environ.get("MEETING_LLM_API_KEY") or os.environ["OPENAI_API_KEY"],
+        model=os.environ.get("MEETING_LLM_MODEL", os.environ.get("OPENAI_LLM_MODEL", "gpt-4o-mini")),
     )
+    _llm_base_url = os.environ.get("MEETING_LLM_BASE_URL")
+    if _llm_base_url:
+        _llm_kwargs["base_url"] = _llm_base_url
+    llm = OpenAILLMService(**_llm_kwargs)
+    logger.info("[llm] model=%s base=%s", _llm_kwargs["model"], _llm_base_url or "openai-default")
     # Per-asker Mnema MCP sessions (meeting identity): MnemaMCP reads the active
     # speaker from BotState and answers each call scoped to that participant.
     mnema = MnemaMCP(state)
