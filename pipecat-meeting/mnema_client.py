@@ -67,6 +67,7 @@ class MnemaMCP:
             asker = current_asker(self._state)
             email = (asker.get("email") or "").strip()
             name = (asker.get("name") or "").strip()
+            is_host = bool(asker.get("is_host"))
             headers: dict = {}
             key_parts = []
             if email:
@@ -75,20 +76,22 @@ class MnemaMCP:
             if name:
                 headers["X-Mnema-Act-As-Name"] = name
                 key_parts.append(f"n:{name.lower()}")
-            # ALWAYS assert host as the final fallback. The server resolves in order
-            # email → saved-name alias → host (= this bot's organizer / key creator) →
-            # guest. So a recognised speaker still scopes to THEM, but an unidentified
-            # speaker (no participant events / no alias) resolves to the organizer instead
-            # of being guest-denied with zero knowledge. It's the organizer's own bot key,
-            # so the organizer's access is its rightful default.
-            headers["X-Mnema-Act-As-Host"] = "true"
-            key_parts.append("host")
-            # Phase 4: name the meeting so the server can validate the asserted identity
-            # against Recall's tamper-proof roster for THIS meeting.
-            if self._state.bot_id:
-                headers["X-Mnema-Meeting-Id"] = self._state.bot_id
-                key_parts.append(f"m:{self._state.bot_id}")
-            if headers:
+            # A1.3 security fix: assert host ONLY when the speaker actually IS the
+            # host/organizer. The server resolves email → saved-name alias → host →
+            # guest. Previously host was asserted unconditionally, so an UNIDENTIFIED
+            # speaker inherited the organizer's full access. Now an unidentified speaker
+            # (no email/name and not the host) asserts nothing → resolves to GUEST scope
+            # (zero knowledge) on the server. With A1.1 exact attribution, real speakers
+            # are reliably identified, so guest-fallback is safe.
+            if is_host:
+                headers["X-Mnema-Act-As-Host"] = "true"
+                key_parts.append("host")
+            if key_parts:
+                # Phase 4: name the meeting so the server can validate the asserted
+                # identity against Recall's tamper-proof roster for THIS meeting.
+                if self._state.bot_id:
+                    headers["X-Mnema-Meeting-Id"] = self._state.bot_id
+                    key_parts.append(f"m:{self._state.bot_id}")
                 return "|".join(key_parts), headers
         return "guest", {}
 
