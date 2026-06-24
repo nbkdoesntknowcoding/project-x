@@ -1,12 +1,16 @@
 """
 recall_io.py — Recall.ai audio bridge for the Pipecat meeting pipeline.
 
-INPUT (meeting → pipeline):
-  Recall pushes `audio_mixed_raw.data` messages (JSON text) to our public WS. Each
-  carries base64 PCM — mono 16-bit LE PCM @ 16 kHz. RecallSerializer decodes that to
-  InputAudioRawFrame and captures the per-meeting correlation id from the payload
-  (`bot.metadata.cid`, set at createBot; falls back to `bot.id`) so the output path
-  knows which Output Media webpage to stream to.
+INPUT (meeting → pipeline) — A1.1 separated streams:
+  Recall pushes `audio_separate_raw.data` messages (JSON text) to our public WS — one
+  packet PER participant, each carrying base64 PCM (mono 16-bit LE PCM @ 16 kHz) tagged
+  with its producing participant. RecallSerializer decodes that to InputAudioRawFrame,
+  (a) drops the bot's OWN stream outright (its TTS never re-enters STT — no echo gate),
+  (b) drops empty/silent packets (Recall sends them for unmuted-but-silent participants),
+  and (c) records EXACT per-packet attribution (the producer is named, not guessed from
+  speech_on/off timing). It also captures the per-meeting correlation id from the payload
+  (`bot.metadata.cid`, set at createBot; falls back to `bot.id`) so the output path knows
+  which Output Media webpage to stream to.
 
 OUTPUT (pipeline → meeting) — Stage 2, true barge-in:
   Recall's realtime WS is input-only, so audio leaves via Recall **Output Media**: the
@@ -74,6 +78,28 @@ def _extract_email(p: dict):
         return email
     extra = p.get("extra_data") or {}
     return extra.get("email") or None
+
+
+def _is_silent(pcm: bytes, threshold: int = 250) -> bool:
+    """Cheap peak-amplitude check over int16-LE samples (strided to stay fast).
+    With separated streams Recall emits empty/near-silent packets for every
+    unmuted-but-silent participant; dropping them keeps the single pipeline from
+    being flooded with N participants' silence interleaved with the one speaker."""
+    n = len(pcm)
+    if n < 2:
+        return True
+    step = 2 * max(1, (n // 2) // 256)  # sample up to ~256 points
+    peak = 0
+    for i in range(0, n - 1, step):
+        s = pcm[i] | (pcm[i + 1] << 8)
+        if s >= 32768:
+            s -= 65536
+        a = -s if s < 0 else s
+        if a > peak:
+            peak = a
+            if peak >= threshold:
+                return False
+    return peak < threshold
 
 
 # ── Roster reporting (Phase 2b capture) ───────────────────────────────────────
@@ -144,8 +170,10 @@ def current_asker(state: BotState) -> dict:
 
 
 class RecallSerializer(FrameSerializer):
-    """Decode Recall `audio_mixed_raw.data` JSON → InputAudioRawFrame (PCM16 16 kHz).
-    Output goes via Output Media (the webpage), so serialize() emits nothing."""
+    """Decode Recall `audio_separate_raw.data` JSON → InputAudioRawFrame (PCM16 16 kHz),
+    one packet per participant. Drops the bot's own stream + silent packets and records
+    exact per-packet attribution on BotState. Output goes via Output Media (the webpage),
+    so serialize() emits nothing."""
 
     def __init__(self, state: BotState) -> None:
         super().__init__()
@@ -169,8 +197,9 @@ class RecallSerializer(FrameSerializer):
         if event and event.startswith("participant_events."):
             self._handle_participant_event(event, d)
             return None
-        if event != "audio_mixed_raw.data":
+        if event != "audio_separate_raw.data":
             return None
+        # Bind the per-meeting correlation id (the output path needs it) from any audio payload.
         if self._state.cid is None:
             bot = d.get("bot") or {}
             meta = bot.get("metadata") or {}
@@ -179,10 +208,53 @@ class RecallSerializer(FrameSerializer):
                 self._state.cid = cid
                 self._state.bot_id = bot.get("id")
                 logger.info("[recall] bound to cid %s (bot %s)", cid, self._state.bot_id)
-        buf = ((d.get("data") or {}).get("buffer"))
+
+        # A1.1: each separated packet names its producing participant under data.participant.
+        inner = d.get("data") or {}
+        p = inner.get("participant") or {}
+        pid = p.get("id")
+        pid = str(pid) if pid is not None else None
+        name = p.get("name")
+
+        # Drop the bot's OWN stream — with separated audio the bot's TTS arrives as its own
+        # participant stream, so it is structurally excluded from STT (no echo gate needed).
+        is_self = (
+            (pid is not None and pid == self._state.bot_participant_id)
+            or bool(p.get("is_current_user"))
+            or (name is not None and name.strip().lower() == "mnema")
+        )
+        if is_self:
+            if pid is not None:
+                self._state.bot_participant_id = pid
+            return None
+
+        buf = inner.get("buffer")
         if not buf:
             return None
         pcm = base64.b64decode(buf)
+        # Drop silence so the single pipeline isn't flooded with every unmuted-but-silent
+        # participant's packets interleaved with the active speaker's audio.
+        if not pcm or _is_silent(pcm):
+            return None
+
+        # A1.1: EXACT attribution — the producer is known per packet, not guessed from
+        # speech_on/off timing. Enrich the roster (email/host arrive via participant_events;
+        # merge what the audio packet carries) and record the real speaker so current_asker()
+        # resolves to whoever actually produced this audio.
+        if pid is not None:
+            existing = self._state.participants.get(pid, {})
+            self._state.participants[pid] = {
+                "name": name or existing.get("name"),
+                "email": _extract_email(p) or existing.get("email"),
+                "is_host": p.get("is_host") if p.get("is_host") is not None else existing.get("is_host"),
+            }
+            # A1.1 verification: log only on speaker change (not per packet) so the log
+            # shows exact attribution — "audio from <name>" as the floor moves.
+            if self._state.active_speaker_id != pid:
+                logger.info("[recall] audio from participant %s (%s)", pid, name or "?")
+            self._state.active_speaker_id = pid
+            self._state.last_speaker_id = pid
+
         return InputAudioRawFrame(
             audio=pcm, sample_rate=RECALL_INPUT_SAMPLE_RATE, num_channels=1
         )

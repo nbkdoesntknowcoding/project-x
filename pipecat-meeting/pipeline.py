@@ -1,10 +1,10 @@
 """
 pipecat-meeting/pipeline.py — Meeting-bot Pipecat pipeline (Recall.ai front end).
 
-Recall joins the meeting and streams real-time MIXED audio to this service over a
-public WebSocket (Caddy: meet-ws.theboringpeople.in → here:8765). The audio is
-mono 16-bit LE PCM @ 16 kHz wrapped in `audio_mixed_raw.data` JSON messages
-(see recall_io.RecallSerializer). The pipeline runs:
+Recall joins the meeting and streams real-time SEPARATED per-participant audio to this
+service over a public WebSocket (Caddy: meet-ws.theboringpeople.in → here:8765) — one
+mono 16-bit LE PCM @ 16 kHz packet per participant in `audio_separate_raw.data` JSON
+messages (see recall_io.RecallSerializer; A1.1). The pipeline runs:
 
     Deepgram STT → GPT-4o-mini (+ Mnema tools) → ElevenLabs TTS (streaming PCM)
 

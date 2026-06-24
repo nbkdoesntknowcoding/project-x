@@ -51,19 +51,23 @@ export async function createBot(meetingUrl: string): Promise<CreateBotResult> {
 
   // Our own correlation id: it links this bot's Output Media page (URL query) to its
   // realtime audio stream. We set it as bot metadata, which Recall echoes in the
-  // audio_mixed_raw.data payload as bot.metadata.cid (pipecat keys the output WS on it).
+  // audio_separate_raw.data payload as bot.metadata.cid (pipecat keys the output WS on it).
   const cid = randomUUID();
 
   // realtime endpoints: the audio websocket (to pipecat) always; plus, when
   // configured, a signature-verified webhook to the API carrying participant
   // identity events (Phase 4 tamper-proof roster). Speech events stay on the
   // websocket for low-latency live attribution.
+  //
+  // A1.1: subscribe to audio_separate_raw.data — Recall sends one PCM packet PER
+  // participant, each tagged with its producer. This gives exact attribution and lets
+  // pipecat drop the bot's own stream outright (no echo gate). Requires 4-core bots.
   const realtimeEndpoints: Array<Record<string, unknown>> = [
     {
       type: 'websocket',
       url: AUDIO_WSS,
       events: [
-        'audio_mixed_raw.data',
+        'audio_separate_raw.data',
         'participant_events.join',
         'participant_events.update',
         'participant_events.leave',
@@ -92,12 +96,13 @@ export async function createBot(meetingUrl: string): Promise<CreateBotResult> {
     // recommends web_4_core for real-time audio agents.
     variant: { zoom: 'web_4_core', google_meet: 'web_4_core', microsoft_teams: 'web_4_core' },
     recording_config: {
-      // Enable mixed audio capture (required) ...
-      audio_mixed_raw: {},
-      // ... and stream it in real time to our Pipecat WS (input path).
-      // Format is mono 16-bit LE PCM @ 16 kHz (parsed by recall_io.RecallSerializer).
-      // See realtimeEndpoints above: audio + live participant events on the WS, plus
-      // the optional verified webhook to the API.
+      // A1.1: separated per-participant audio (replaces audio_mixed_raw). Recall streams
+      // one mono 16-bit LE PCM @ 16 kHz packet per speaking participant, each tagged with
+      // its producer (parsed by recall_io.RecallSerializer). Compute-heavy → web_4_core
+      // (set in `variant` above). Supported on Zoom/Meet/Teams; ≤16 concurrent speakers.
+      audio_separate_raw: {},
+      // See realtimeEndpoints above: separated audio + live participant events on the WS,
+      // plus the optional verified webhook to the API.
       realtime_endpoints: realtimeEndpoints,
     },
     // Output path (talking): the bot renders our webpage as its camera; the page holds
