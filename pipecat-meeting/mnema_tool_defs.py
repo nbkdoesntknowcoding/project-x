@@ -189,4 +189,19 @@ MNEMA_TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_concept_context",
+            "description": "Hydrate a concept/topic/decision into the ACTUAL source text behind it — follows the concept to the docs it connects to in the graph and returns the matched passages. Use when someone asks what a concept or decision actually says or means and you want concrete detail, not just that the topic exists.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "concept": {"type": "string", "description": "Concept/topic label to hydrate"},
+                    "limit": {"type": "integer", "description": "Max source docs (default 3)"},
+                },
+                "required": ["concept"],
+            },
+        },
+    },
 ]

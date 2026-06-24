@@ -55,6 +55,7 @@ import {
   GET_GRAPH_REPORT_TOOL_SPEC, getGraphReport,
   BUILD_KNOWLEDGE_GRAPH_TOOL_SPEC, buildKnowledgeGraph,
   GET_SURPRISING_CONNECTIONS_TOOL_SPEC, getSurprisingConnections,
+  GET_CONCEPT_CONTEXT_TOOL_SPEC, getConceptContext,
 } from './tools/graph.js';
 
 /**
@@ -681,6 +682,7 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
   registerGraphTool(GET_GRAPH_REPORT_TOOL_SPEC, getGraphReport, false);
   registerGraphTool(BUILD_KNOWLEDGE_GRAPH_TOOL_SPEC, buildKnowledgeGraph, false);
   registerGraphTool(GET_SURPRISING_CONNECTIONS_TOOL_SPEC, getSurprisingConnections, false);
+  registerGraphTool(GET_CONCEPT_CONTEXT_TOOL_SPEC, getConceptContext, false);   // A2.3 concept hydration
 
   return mcpServer;
 }

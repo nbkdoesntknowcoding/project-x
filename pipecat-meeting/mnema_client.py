@@ -282,6 +282,10 @@ async def get_surprising_connections(mcp: MnemaMCP, args: dict) -> dict:
     return await mcp.call("get_surprising_connections", {k: v for k, v in (args or {}).items() if v})
 
 
+async def get_concept_context(mcp: MnemaMCP, args: dict) -> dict:
+    return await mcp.call("get_concept_context", {k: v for k, v in (args or {}).items() if v})
+
+
 _TOOLS = {
     "create_task": create_task,
     "create_doc": create_doc,
@@ -297,6 +301,7 @@ _TOOLS = {
     "get_god_nodes": get_god_nodes,
     "get_graph_report": get_graph_report,
     "get_surprising_connections": get_surprising_connections,
+    "get_concept_context": get_concept_context,
 }
 
 

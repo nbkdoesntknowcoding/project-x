@@ -45,7 +45,7 @@ describe('chunkMarkdown (whole-doc extraction)', () => {
     const md = 'x'.repeat(20000);
     const chunks = chunkMarkdown(md, 6000, 4);
     expect(chunks.length).toBe(4);                 // capped (would be 4 here anyway)
-    expect(chunks[0].length).toBe(6000);
+    expect(chunks[0]?.length).toBe(6000);
     expect(chunks.join('').length).toBeLessThanOrEqual(20000);
   });
   it('caps coverage and drops the tail beyond maxChunks', () => {

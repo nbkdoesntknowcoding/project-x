@@ -8,7 +8,7 @@
  * H.5 get_surprising_connections — top cross-type INFERRED edges
  */
 
-import { and, desc, eq, or, sql, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, or, sql, inArray } from 'drizzle-orm';
 import Graph from 'graphology';
 import { bidirectional } from 'graphology-shortest-path/unweighted.js';
 import { db } from '../../db/index.js';
@@ -17,7 +17,7 @@ import { withTenant } from '../../db/with-tenant.js';
 import { enqueueFullBuild } from '../../queue/graph.js';
 import type { McpAuthContext } from '../auth.js';
 
-const { graphNodes, graphEdges, graphCommunities, graphReports, docs } = schema;
+const { graphNodes, graphEdges, graphCommunities, graphReports, docs, embeddings } = schema;
 
 const GRAPH_EXPLORER_URI = 'ui://mnema/graph-explorer.html';
 
@@ -391,5 +391,91 @@ export async function getSurprisingConnections(
   return {
     content: `**Surprising Connections** (${connections.length} cross-type INFERRED edges):\n\n${lines.join('\n\n')}`,
     structuredContent: { connections },
+  };
+}
+
+// ── H.6 get_concept_context (A2.3 concept hydration) ──────────────────────────
+
+export const GET_CONCEPT_CONTEXT_TOOL_SPEC = {
+  name: 'get_concept_context',
+  description: [
+    'Hydrate a concept (or any node) into CONCRETE source text: resolves the node, follows',
+    'it to the documents it connects to in the graph, and returns the actual matched chunk',
+    'text from each — not just "this topic exists". Use when someone asks what a concept,',
+    'decision, or topic actually says/means and you want grounded detail to answer from.',
+  ].join('\n'),
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      concept: { type: 'string', description: 'Concept/node label or UUID to hydrate' },
+      limit:   { type: 'number', description: 'Max source docs to pull text from (default 3, max 6)' },
+    },
+    required: ['concept'],
+  },
+  annotations: { readOnlyHint: true, title: 'Hydrate a concept into source document text' },
+};
+
+export async function getConceptContext(
+  ctx: McpAuthContext,
+  args: Record<string, unknown>,
+): Promise<{ content: string; structuredContent: Record<string, unknown> }> {
+  const conceptArg = String(args.concept ?? args.from ?? '');
+  const maxDocs = Math.min(Math.max(Number(args.limit ?? 3), 1), 6);
+  const workspaceId = ctx.tenant_id;
+
+  const node = await resolveNodeByLabelOrId(workspaceId, conceptArg);
+  if (!node) {
+    return { content: `Concept not found: "${conceptArg}"`, structuredContent: { error: 'not_found', concept: conceptArg } };
+  }
+
+  // 1-hop neighbours → keep doc nodes (the concept→doc hop). A doc node's entityId is the doc UUID.
+  const edges = await withTenant(workspaceId, tx =>
+    tx.select().from(graphEdges).where(and(
+      eq(graphEdges.workspaceId, workspaceId),
+      or(eq(graphEdges.fromNodeId, node.id), eq(graphEdges.toNodeId, node.id)),
+    )));
+  const neighborIds = [...new Set(edges.map(e => e.fromNodeId === node.id ? e.toNodeId : e.fromNodeId))];
+  const docNodes = neighborIds.length > 0
+    ? await withTenant(workspaceId, tx =>
+        tx.select().from(graphNodes).where(and(
+          eq(graphNodes.workspaceId, workspaceId),
+          inArray(graphNodes.id, neighborIds),
+          eq(graphNodes.entityType, 'doc'),
+        )))
+    : [];
+  // If the node itself is a doc, hydrate it directly too.
+  if (node.entityType === 'doc') docNodes.unshift(node);
+
+  const docIds = [...new Set(docNodes.map(d => d.entityId))].slice(0, maxDocs);
+
+  // doc → embeddings.chunkText: prefer the chunk that mentions the concept, else the first chunk.
+  const blocks: string[] = [];
+  const hydrated: Array<Record<string, unknown>> = [];
+  for (const docId of docIds) {
+    const docNode = docNodes.find(d => d.entityId === docId);
+    const chunks = await withTenant(workspaceId, tx =>
+      tx.select({ chunkText: embeddings.chunkText, chunkIndex: embeddings.chunkIndex, headingPath: embeddings.headingPath })
+        .from(embeddings)
+        .where(and(eq(embeddings.workspaceId, workspaceId), eq(embeddings.docId, docId)))
+        .orderBy(sql`(${embeddings.chunkText} ILIKE ${'%' + node.label + '%'}) DESC`, asc(embeddings.chunkIndex))
+        .limit(1));
+    const chunk = chunks[0];
+    if (!chunk) continue;
+    const head = `${docNode?.label ?? docId}${chunk.headingPath ? ` › ${chunk.headingPath}` : ''}`;
+    blocks.push(`[doc: ${head}]\n${chunk.chunkText.slice(0, 800)}`);
+    hydrated.push({ docId, title: docNode?.label ?? null, chunkIndex: chunk.chunkIndex, headingPath: chunk.headingPath ?? null });
+  }
+
+  const summary = node.summary ? `${node.summary}\n\n` : '';
+  const content = blocks.length > 0
+    ? `**Concept context — "${node.label}" (${node.entityType})**\n\n${summary}${blocks.join('\n\n---\n\n')}`
+    : `**"${node.label}"** (${node.entityType})${node.summary ? ` — ${node.summary}` : ''}\n\n(No source document text is linked to this concept yet.)`;
+
+  return {
+    content,
+    structuredContent: {
+      concept: { id: node.id, label: node.label, type: node.entityType, summary: node.summary },
+      docs: hydrated,
+    },
   };
 }
