@@ -244,7 +244,14 @@ class SilentGate(FrameProcessor):
             self._state.force_next_response = False
             if self._forced:
                 self._state.last_response_monotonic = time.monotonic()
-            self._decided = None
+                self._decided = None   # inspect leading tokens (strip any stray sentinel)
+            else:
+                # _STRICT and NOT addressed (no wake word, classifier said NO) → stay silent
+                # DETERMINISTICALLY. Previously this left the turn undecided and trusted the
+                # model to emit <silent>, which it usually didn't — so the bot answered clear
+                # human-to-human side-talk (audit 2026-06-24). Now un-addressed = dropped.
+                self._decided = True
+                logger.info("[silentgate] un-addressed turn — staying silent")
             await self.push_frame(frame, direction)
             return
 
