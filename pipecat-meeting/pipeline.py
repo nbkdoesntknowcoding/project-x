@@ -110,6 +110,36 @@ _CLASSIFY_SYS = (
     "answer NO. Reply with exactly one word: YES or NO."
 )
 
+
+def _build_user_turn_strategies():
+    """A1.5: end-of-utterance (EOU) turn-STOP strategy.
+
+    Default: plain VAD-silence endpointing (~0.6s after the user stops) — fast,
+    deterministic, no network. Pipecat 1.2.1's default SmartTurn v3 was avoided because
+    on the continuous MIXED audio it kept deciding the turn wasn't over and stalled the
+    LLM by tens of seconds. With A1.1 SEPARATED streams the analyzer sees one speaker, so
+    a Smart Turn EOU can commit-to-respond at end-of-thought instead of on raw silence.
+
+    Enable via MEETING_SMART_TURN=fal (+ FAL_KEY). Fully guarded: any import / version /
+    key error logs and FALLS BACK to SpeechTimeout, so the pipeline never fails to start.
+    NOTE: the exact pipecat-1.2.1 Smart Turn class path + the pipecat-ai[smart-turn] extra
+    must be verified against the installed package at deploy (can't be read offline)."""
+    mode = os.environ.get("MEETING_SMART_TURN", "off").lower()
+    if mode in ("fal", "1", "on", "true"):
+        try:
+            from pipecat.audio.turn.smart_turn.fal_smart_turn import FalSmartTurnAnalyzer
+            from pipecat.turns.user_stop import SmartTurnUserTurnStopStrategy
+            analyzer = FalSmartTurnAnalyzer(api_key=os.environ.get("FAL_KEY"))
+            logger.info("[turn] Smart Turn EOU enabled (Fal-hosted)")
+            return UserTurnStrategies(stop=[SmartTurnUserTurnStopStrategy(analyzer)])
+        except Exception as e:  # noqa: BLE001 — never block pipeline startup on this
+            logger.warning(
+                "[turn] Smart Turn requested but unavailable (%s) — falling back to "
+                "VAD-silence endpointing. Verify the pipecat-1.2.1 Smart Turn API + the "
+                "pipecat-ai[smart-turn] extra + FAL_KEY.", e,
+            )
+    return UserTurnStrategies(stop=[SpeechTimeoutUserTurnStopStrategy()])
+
 _classifier_client = None
 
 
@@ -405,17 +435,11 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         tools=_mnema_tools_schema(),
     )
     # VAD on the user aggregator → emits UserStartedSpeakingFrame for barge-in.
-    # IMPORTANT: override the default turn-STOP strategy. Pipecat 1.2.1 defaults to
-    # SmartTurn v3 (TurnAnalyzer), which on continuous meeting audio keeps deciding the
-    # turn isn't over and delays the LLM by tens of seconds. Use plain VAD-silence
-    # endpointing (0.6s after the user stops) like the VAP — fast and deterministic.
     aggregators = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
             vad_analyzer=SileroVADAnalyzer(sample_rate=RECALL_INPUT_SAMPLE_RATE),
-            user_turn_strategies=UserTurnStrategies(
-                stop=[SpeechTimeoutUserTurnStopStrategy()],
-            ),
+            user_turn_strategies=_build_user_turn_strategies(),
         ),
     )
 
