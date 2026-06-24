@@ -77,15 +77,11 @@ from recall_io import (
 
 MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
 
-# "Mnema" + common speech-to-text mishearings — used to decide when the bot is addressed.
-# STT renders the name wildly (Nama, Nema, Nima, Neema, Nemo, Namah, Kneema …), so we ALSO
-# accept anything matching the phonetic shape n/mn + vowel(s) + m + vowel(s) via _WAKE_RE,
-# which covers the variants without matching ordinary words like "name"/"no"/"mama".
-_WAKE_WORDS = frozenset((
-    "mnema", "nima", "neema", "nema", "nemo", "nimo", "mneme", "menma", "namo", "amnema",
-    "nama", "naima", "namah", "nemma", "nyema", "kneema", "knema", "neemah", "nemah",
-))
-_WAKE_RE = re.compile(r"m?n[aeiy][aeiy]?m[aiouh]*")
+# A1.6: wake-word ("is the bot addressed") detection lives in addressing.py so it is
+# unit-testable without the heavy pipecat/LLM imports. is_addressed = the fast-path;
+# the semantic LLM classifier (_classify_addressed below) handles implicit address.
+from addressing import is_addressed as _addressed  # noqa: E402
+
 # "Live" questions whose answer is the current board/state, NOT a stored doc. For these we
 # skip the doc-RAG injection (which can surface a stale snapshot like "no tasks in
 # progress") and let the LLM call the live tools (list_project_tasks / list_recent_docs).
@@ -94,22 +90,15 @@ _LIVE_DATA_RE = re.compile(
     r"assigned|what'?s new|what is new|board|who('?s| is) (working|assigned)|deadline|due)\b",
     re.I,
 )
-# Fillers/greetings people naturally put before a vocative ("so Mnema", "um Mnema").
-_GREETINGS = ("hey", "ok", "okay", "hi", "hello", "yo", "so", "um", "uh", "erm", "yeah", "alright", "and")
-
-
-def _is_wake(tok: str) -> bool:
-    return tok in _WAKE_WORDS or bool(_WAKE_RE.fullmatch(tok))
 
 # Addressed-only ("speak only when spoken to") is the default. Set MEETING_REQUIRE_ADDRESS=0
 # to go back to the legacy always-respond mode.
 _STRICT = os.environ.get("MEETING_REQUIRE_ADDRESS", "1") != "0"
-# Short window (seconds) an "addressed" decision stays valid — only long enough to bridge
-# STT splitting one utterance into several segments + the LLM/tool round-trip for THAT
-# turn. It is NOT a conversation timer: each new turn is re-judged by the classifier, so a
-# real back-and-forth continues naturally and lapses the moment the talk isn't for the bot.
-_ENGAGE_WINDOW = float(os.environ.get("MEETING_ENGAGE_WINDOW_S", "20"))
-# Fast model that judges, per turn, whether the user is talking TO the bot.
+# A1.6: semantic addressing. The fast LLM classifier judges, per turn, whether a
+# non-wake-word utterance is directed at the bot (catches implicit address like "can you
+# pull up the Q3 doc?"). Gated by env so it can be disabled if latency matters (the
+# persona's <silent> path still decides); default on. Fail-closed (NO) on any error.
+_SEMANTIC_ADDRESSING = os.environ.get("MEETING_SEMANTIC_ADDRESSING", "1") != "0"
 _CLASSIFIER_MODEL = os.environ.get("MEETING_CLASSIFIER_MODEL", "gpt-4o-mini")
 
 _CLASSIFY_SYS = (
@@ -132,20 +121,22 @@ def _get_classifier():
     return _classifier_client
 
 
-async def _classify_addressed(text: str, recently_engaged: bool) -> bool:
+async def _classify_addressed(text: str, recently_engaged: bool, speaker: str | None = None) -> bool:
     """Ask the fast model whether `text` is directed at the bot. Fail-closed (NO) on any
     error/timeout so a classifier hiccup never makes the bot blurt into the room — the
-    deterministic wake word still works as the manual override."""
+    deterministic wake word still works as the manual override. A1.3 gives exact
+    attribution, so the speaker's name is passed for sharper judgment."""
     try:
         hint = ("The user has just been talking with Mnema, so a bare follow-up question "
                 "is probably still for Mnema." if recently_engaged
                 else "There is no recent exchange with Mnema.")
+        who = f"The speaker is {speaker}. " if speaker else ""
         res = await asyncio.wait_for(
             _get_classifier().chat.completions.create(
                 model=_CLASSIFIER_MODEL, max_tokens=1, temperature=0,
                 messages=[
                     {"role": "system", "content": _CLASSIFY_SYS},
-                    {"role": "user", "content": f"{hint}\nLatest utterance: \"{text}\"\nDirected at Mnema?"},
+                    {"role": "user", "content": f"{who}{hint}\nLatest utterance: \"{text}\"\nDirected at Mnema?"},
                 ],
             ),
             timeout=2.0,
@@ -156,21 +147,7 @@ async def _classify_addressed(text: str, recently_engaged: bool) -> bool:
         return False
 
 
-def _addressed(text: str) -> bool:
-    """True only when the bot is *addressed* — the wake word is at the START of the
-    utterance (vocative: "Mnema, …"), or right after a greeting ("hey Mnema"). A wake
-    word later in a sentence (people talking ABOUT Mnema — "let's put this in Mnema")
-    does NOT count, which is what stops the bot replying to normal conversation."""
-    tokens = re.findall(r"[a-z]+", text.lower())
-    if not tokens:
-        return False
-    if _is_wake(tokens[0]):                            # "Mnema, …" (vocative, first word)
-        return True
-    # a filler/greeting immediately followed by the wake word ("hey/so/um Mnema …")
-    for i in range(len(tokens) - 1):
-        if tokens[i] in _GREETINGS and _is_wake(tokens[i + 1]):
-            return True
-    return False
+# _addressed (wake-word fast-path) is imported from addressing.py — see top of file.
 
 
 def _mnema_tools_schema() -> ToolsSchema:
@@ -225,9 +202,13 @@ class SilentGate(FrameProcessor):
         if isinstance(frame, LLMFullResponseStartFrame):
             self._buf = ""
             # _decided: False = speak, True = drop, None = let the model's first tokens
-            # decide. Non-strict mode or a just-heard wake word → force speak; otherwise
-            # undecided until we see whether the reply starts with the silence sentinel.
-            speak_now = (not _STRICT) or (time.monotonic() < self._state.force_until)
+            # decide. Non-strict mode or an addressed turn (A1.6 per-turn force flag) →
+            # force speak; otherwise undecided until we see whether the reply starts with
+            # the silence sentinel. Consume the flag here so it forces exactly THIS turn.
+            speak_now = (not _STRICT) or self._state.force_next_response
+            self._state.force_next_response = False
+            if speak_now:
+                self._state.last_response_monotonic = time.monotonic()
             self._decided = False if speak_now else None
             await self.push_frame(frame, direction)
             return
@@ -275,12 +256,22 @@ class RAGContext(FrameProcessor):
         if isinstance(frame, TranscriptionFrame):
             text = (frame.text or "").strip()
             if text:
-                # The model decides whether to answer (SilentGate + persona). Here we only
-                # (a) flag a clear wake word so "Mnema, …" can never be wrongly silenced, and
-                # (b) tell the model who is speaking so it can answer "who am I / my role".
+                # A1.6 semantic addressing. Two paths set the PER-TURN force flag so the
+                # next response is spoken (the persona's <silent> still suppresses clear
+                # side-talk when neither fires):
+                #   (a) wake word — instant, deterministic fast-path ("Mnema, …").
+                #   (b) else the fast LLM classifier judges implicit address ("can you pull
+                #       up the Q3 doc?"). Gated by env, fail-closed (NO), skipped if the
+                #       fast-path already fired. Replaces the old 6s force_until window.
                 if _addressed(text):
-                    self._state.force_until = time.monotonic() + 6.0
+                    self._state.force_next_response = True
                     logger.info("[gate] wake word: %s", text[:60])
+                elif _STRICT and _SEMANTIC_ADDRESSING:
+                    recently = (time.monotonic() - self._state.last_response_monotonic) < 30.0
+                    speaker = (current_asker(self._state).get("name") or None)
+                    if await _classify_addressed(text, recently, speaker):
+                        self._state.force_next_response = True
+                        logger.info("[gate] classifier: addressed — %s", text[:60])
                 await self._inject_identity(direction)
         await self.push_frame(frame, direction)
 

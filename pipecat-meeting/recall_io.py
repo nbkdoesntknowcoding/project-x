@@ -61,10 +61,14 @@ class BotState:
         # speech/identity to the bot itself ("who am I → you're Mnema").
         self.bot_participant_id: str | None = None
         # The model itself decides each turn whether to answer (it emits a silence sentinel
-        # for human-to-human side-talk). `force_until` is only a short safety override: when
-        # a clear wake word ("Mnema, …") was just heard, force a spoken answer even if the
-        # model second-guesses itself. No conversation timer — understanding drives it.
-        self.force_until: float = 0.0
+        # for human-to-human side-talk). A1.6: `force_next_response` is a PER-TURN override
+        # (replaces the old 6s `force_until` time window that over-triggered) — set when the
+        # turn is addressed (wake word OR semantic classifier), consumed by SilentGate for
+        # exactly the next response, then cleared. Bridges STT splitting one utterance into
+        # segments without a timer. `last_response_monotonic` is a soft hint for the
+        # addressing classifier ("recently engaged" → a bare follow-up is probably still ours).
+        self.force_next_response: bool = False
+        self.last_response_monotonic: float = 0.0
 
 
 def _extract_email(p: dict):
