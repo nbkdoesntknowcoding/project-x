@@ -282,6 +282,7 @@ class RAGContext(FrameProcessor):
         self._mnema = mnema
         self._state = state
         self._identity_str: str | None = None  # cached whoami (role/team/access)
+        self._startup_done = False             # A2.1: workspace brief injected once
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -295,17 +296,52 @@ class RAGContext(FrameProcessor):
                 #   (b) else the fast LLM classifier judges implicit address ("can you pull
                 #       up the Q3 doc?"). Gated by env, fail-closed (NO), skipped if the
                 #       fast-path already fired. Replaces the old 6s force_until window.
+                addressed = False
                 if _addressed(text):
                     self._state.force_next_response = True
+                    addressed = True
                     logger.info("[gate] wake word: %s", text[:60])
                 elif _STRICT and _SEMANTIC_ADDRESSING:
                     recently = (time.monotonic() - self._state.last_response_monotonic) < 30.0
                     speaker = (current_asker(self._state).get("name") or None)
                     if await _classify_addressed(text, recently, speaker):
                         self._state.force_next_response = True
+                        addressed = True
                         logger.info("[gate] classifier: addressed — %s", text[:60])
-                await self._inject_identity(direction)
+                await self._inject_startup_brief(direction)   # A2.1: workspace brief (once)
+                await self._inject_identity(direction)         # speaker identity (once)
+                if addressed:
+                    await self._inject(text, direction)        # A2.2: graph-aware grounding
         await self.push_frame(frame, direction)
+
+    async def _inject_startup_brief(self, direction: FrameDirection) -> None:
+        """A2.1 startup tier: give the bot a standing model of the workspace — its central
+        topics (god-nodes) — so cold questions ("what is this about / what matters here")
+        land in context with no tool call. Injected ONCE, early, off the turn path. Cached
+        after the persona so the A3.3 stable prefix is preserved."""
+        if self._startup_done:
+            return
+        self._startup_done = True
+        try:
+            res = await asyncio.wait_for(self._mnema.call("get_god_nodes", {"limit": 8}), timeout=2.5)
+            brief = ((res or {}).get("content") or "").strip()
+        except Exception as e:  # noqa: BLE001 — never block on the brief
+            logger.warning("[startup] god_nodes failed: %s", e)
+            return
+        if not brief:
+            return
+        logger.info("[startup] injected workspace brief (%d chars)", len(brief))
+        await self.push_frame(
+            LLMMessagesAppendFrame(
+                messages=[{"role": "system", "content": (
+                    "[Workspace — central topics & structure] The most connected things in this "
+                    "workspace's knowledge graph are below. Use them to ground answers about what "
+                    "the org/project is about, without calling a tool.\n\n" + brief[:1200]
+                )}],
+                run_llm=False,
+            ),
+            direction,
+        )
 
     async def _inject_identity(self, direction: FrameDirection) -> None:
         """Tell the LLM WHO it's talking to AND their org role/team/access, so 'who am I /
@@ -336,13 +372,17 @@ class RAGContext(FrameProcessor):
         )
 
     async def _inject(self, query: str, direction: FrameDirection) -> None:
-        # Search across everything the bot can access; results are project-labelled, so
-        # the LLM grounds on the right one. (Explicit per-project scoping happens when the
-        # LLM calls search_knowledge with a resolved project_id.)
-        search_args = {"query": query, "mode": "hybrid", "limit": 5}
+        """A2.2 per-turn tier: relationship-aware grounding injected BEFORE the LLM runs, in
+        one pass, no tool round-trip. search_docs (vector seed) → traverse_graph from the top
+        hit (1-hop neighbourhood) → path-prune (top hit + a few neighbours) → token-cap →
+        inject. Live-board questions are routed to the reactive tools instead."""
+        # Route live-state questions (tasks/status/board) to the live tools — stored docs
+        # would surface a stale snapshot.
+        if _LIVE_DATA_RE.search(query):
+            return
         try:
             res = await asyncio.wait_for(
-                self._mnema.call("search_docs", search_args),
+                self._mnema.call("search_docs", {"query": query, "mode": "hybrid", "limit": 4}),
                 timeout=2.5,
             )
         except Exception as e:  # noqa: BLE001 — never block the conversation on retrieval
@@ -352,27 +392,41 @@ class RAGContext(FrameProcessor):
         if not hits:
             return
         blocks = []
-        for h in hits[:5]:
+        for h in hits[:3]:   # seed: top doc hits, project-labelled
             proj = h.get("project_name") or "Unfiled"
             head = h.get("title") or ""
             if h.get("heading_path"):
                 head = f"{head} › {h['heading_path']}"
-            # Prefix each snippet with its project so the model never mixes projects.
             blocks.append(f"[project: {proj} | {head}]\n{(h.get('snippet') or '').strip()}")
+
+        # A2.2 expansion: follow relationships from the TOP hit's node (1-hop) so answers
+        # reflect how things connect, not just keyword similarity. Best-effort + capped.
+        top_label = (hits[0].get("title") or "").strip()
+        if top_label:
+            try:
+                gres = await asyncio.wait_for(
+                    self._mnema.call("traverse_graph", {"from": top_label, "depth": 1}),
+                    timeout=2.0,
+                )
+                gtxt = ((gres or {}).get("content") or "").strip()
+                if gtxt:
+                    blocks.append("[Related in the knowledge graph — how this connects]\n" + gtxt[:600])
+            except Exception as e:  # noqa: BLE001 — graph expansion is optional
+                logger.debug("[rag] graph expand skipped: %s", e)
+
         content = (
-            "[Background reference from the knowledge base — each item is labelled with its "
-            "project. These are stored DOCS and may be OUT OF DATE. For anything about current "
-            "tasks, status, what's in progress, the latest, or assignments, IGNORE these and "
-            "call the live tools (list_project_tasks / list_recent_docs / list_projects). Use "
-            "naturally, don't mention you looked it up]\n\n" + "\n\n---\n\n".join(blocks)
-        )
+            "[Background — stored docs + their graph relations, each labelled with its project. "
+            "Docs may be OUT OF DATE; for current tasks/status/assignments call the live tools "
+            "(list_project_tasks / list_recent_docs). Use naturally; don't say you looked it up]"
+            "\n\n" + "\n\n---\n\n".join(blocks)
+        )[:2500]   # hard token-ish cap on the injection
         await self.push_frame(
             LLMMessagesAppendFrame(
                 messages=[{"role": "system", "content": content}], run_llm=False
             ),
             direction,
         )
-        logger.info("[rag] injected %d hits for: %s", len(hits), query[:60])
+        logger.info("[rag] injected %d hits + graph for: %s", len(hits[:3]), query[:60])
 
 
 class VapTap(FrameProcessor):
