@@ -116,33 +116,43 @@ _CLASSIFY_SYS = (
 
 
 def _build_user_turn_strategies():
-    """A1.5: end-of-utterance (EOU) turn-STOP strategy.
+    """A1.5 / audit #3: end-of-utterance (EOU) turn-STOP strategy. Three modes via
+    MEETING_SMART_TURN — all guarded (any error logs and FALLS BACK to VAD silence, so the
+    pipeline never fails to start):
 
-    Default: plain VAD-silence endpointing (~0.6s after the user stops) — fast,
-    deterministic, no network. Pipecat 1.2.1's default SmartTurn v3 was avoided because
-    on the continuous MIXED audio it kept deciding the turn wasn't over and stalled the
-    LLM by tens of seconds. With A1.1 SEPARATED streams the analyzer sees one speaker, so
-    a Smart Turn EOU can commit-to-respond at end-of-thought instead of on raw silence.
+      - "local" (recommended): LocalSmartTurnAnalyzerV3 — the ONNX CPU model bundled with
+        pipecat (no torch, no Fal, no API cost). Benchmarked ~40ms median on this VPS at
+        cpu_count=1 (more cores were noisier). Tune cores via MEETING_SMART_TURN_CPUS.
+      - "fal": Fal-hosted Smart Turn (needs FAL_KEY; paid).
+      - "off" (default): plain VAD-silence endpointing. The silence window is tunable via
+        MEETING_EOU_SILENCE_SEC (default 0.6s) — raise it (~1.0s) to cut mid-sentence
+        finalisation with no model at all.
 
-    Enable via MEETING_SMART_TURN=fal (+ FAL_KEY). Fully guarded: any import / version /
-    key error logs and FALLS BACK to SpeechTimeout, so the pipeline never fails to start.
-    NOTE: the exact pipecat-1.2.1 Smart Turn class path + the pipecat-ai[smart-turn] extra
-    must be verified against the installed package at deploy (can't be read offline)."""
+    Smart Turn works well here because A1.1 feeds it SEPARATED single-speaker audio (on the
+    old MIXED audio pipecat's analyzer stalled deciding the turn wasn't over)."""
     mode = os.environ.get("MEETING_SMART_TURN", "off").lower()
-    if mode in ("fal", "1", "on", "true"):
+    if mode in ("local", "v3", "onnx"):
+        try:
+            from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
+            from pipecat.turns.user_stop import SmartTurnUserTurnStopStrategy
+            cpus = int(os.environ.get("MEETING_SMART_TURN_CPUS", "1"))
+            analyzer = LocalSmartTurnAnalyzerV3(cpu_count=cpus)
+            logger.info("[turn] Smart Turn EOU enabled (local ONNX v3, cpu_count=%d)", cpus)
+            return UserTurnStrategies(stop=[SmartTurnUserTurnStopStrategy(analyzer)])
+        except Exception as e:  # noqa: BLE001 — never block pipeline startup on this
+            logger.warning("[turn] local Smart Turn unavailable (%s) — falling back to VAD silence.", e)
+    elif mode in ("fal", "1", "on", "true"):
         try:
             from pipecat.audio.turn.smart_turn.fal_smart_turn import FalSmartTurnAnalyzer
             from pipecat.turns.user_stop import SmartTurnUserTurnStopStrategy
             analyzer = FalSmartTurnAnalyzer(api_key=os.environ.get("FAL_KEY"))
             logger.info("[turn] Smart Turn EOU enabled (Fal-hosted)")
             return UserTurnStrategies(stop=[SmartTurnUserTurnStopStrategy(analyzer)])
-        except Exception as e:  # noqa: BLE001 — never block pipeline startup on this
-            logger.warning(
-                "[turn] Smart Turn requested but unavailable (%s) — falling back to "
-                "VAD-silence endpointing. Verify the pipecat-1.2.1 Smart Turn API + the "
-                "pipecat-ai[smart-turn] extra + FAL_KEY.", e,
-            )
-    return UserTurnStrategies(stop=[SpeechTimeoutUserTurnStopStrategy()])
+        except Exception as e:  # noqa: BLE001
+            logger.warning("[turn] Fal Smart Turn unavailable (%s) — falling back to VAD silence.", e)
+    silence = float(os.environ.get("MEETING_EOU_SILENCE_SEC", "0.6"))
+    logger.info("[turn] VAD-silence endpointing (user_speech_timeout=%.2fs)", silence)
+    return UserTurnStrategies(stop=[SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=silence)])
 
 _classifier_client = None
 
