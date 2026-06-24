@@ -21,7 +21,6 @@ OUTPUT (pipeline → meeting) — Stage 2, true barge-in:
 """
 import os
 import json
-import time
 import base64
 import asyncio
 import logging
@@ -50,9 +49,6 @@ class BotState:
     def __init__(self) -> None:
         self.bot_id: str | None = None
         self.cid: str | None = None
-        # monotonic time until which the bot is considered "speaking" — used by
-        # InputGate to mute the (echoing) mixed input so the bot doesn't hear itself.
-        self.speaking_until: float = 0.0
         # Meeting identity (Phase 2): roster + active speaker, fed by Recall
         # participant_events. participants: id -> {"name", "email", "is_host"}.
         # email is only present for calendar-matched attendees (may arrive late via
@@ -308,25 +304,10 @@ class RecallSerializer(FrameSerializer):
             schedule_roster_report(st)
 
 
-class InputGate(FrameProcessor):
-    """Half-duplex echo guard. Recall's `audio_mixed_raw` is a MIX of all participants
-    INCLUDING the bot's own Output Media voice — with no echo cancellation, the bot
-    would hear itself, fire VAD, and interrupt its own replies (a self-cancelling loop).
-
-    While the bot is speaking (state.speaking_until in the future), drop incoming
-    InputAudioRawFrames so STT/VAD never see the bot's echo. Trade-off: the user can't
-    barge in mid-reply. True full-duplex barge-in needs Recall separate-participant
-    streams (so the bot's own track can be excluded) — a follow-up."""
-
-    def __init__(self, state: BotState) -> None:
-        super().__init__()
-        self._state = state
-
-    async def process_frame(self, frame: Frame, direction: FrameDirection):
-        await super().process_frame(frame, direction)
-        if isinstance(frame, InputAudioRawFrame) and time.monotonic() < self._state.speaking_until:
-            return  # drop — this is (mostly) the bot's own echo
-        await self.push_frame(frame, direction)
+# A1.2: the half-duplex InputGate (echo guard) was removed. With A1.1 separated
+# streams the bot's own audio is dropped at the serializer, so STT/VAD never see the
+# bot's voice — no muting needed, and the user can now barge in mid-reply (true
+# full-duplex). Barge-in is signalled by WebOutputProcessor forwarding `interrupt`.
 
 
 # ── Output Media webpage registry ─────────────────────────────────────────────
@@ -373,9 +354,6 @@ class WebOutputProcessor(FrameProcessor):
                     await ws.send_text(json.dumps({"type": "interrupt"}))
                     logger.info("[recall] sent interrupt to page (cid %s)", self._state.cid)
             elif isinstance(frame, TTSAudioRawFrame) and frame.audio:
-                # Mark the bot as speaking (+0.8s tail) so InputGate mutes the echoing
-                # mixed input until shortly after the bot finishes.
-                self._state.speaking_until = time.monotonic() + 0.8
                 if ws is None:
                     if not self._warned:
                         logger.warning(
