@@ -99,3 +99,24 @@ def test_no_state_is_guest():
     mcp = mnema_client.MnemaMCP(None)
     key, headers = mcp._identity()
     assert key == "guest" and headers == {}
+
+
+# ── #7: tool-call dedup helper ───────────────────────────────────────────────────
+def test_dedup_get_hit_within_ttl():
+    cache = {"k": (100.0, "cached-result")}
+    assert mnema_client._dedup_get(cache, "k", now=105.0, ttl=8.0) == "cached-result"
+
+
+def test_dedup_get_miss_after_ttl():
+    cache = {"k": (100.0, "cached-result")}
+    assert mnema_client._dedup_get(cache, "k", now=109.0, ttl=8.0) is None
+
+
+def test_dedup_get_unknown_key():
+    assert mnema_client._dedup_get({}, "nope", now=1.0, ttl=8.0) is None
+
+
+def test_dedup_get_none_key_or_disabled():
+    cache = {"k": (1.0, "r")}
+    assert mnema_client._dedup_get(cache, None, now=1.0, ttl=8.0) is None
+    assert mnema_client._dedup_get(cache, "k", now=1.0, ttl=0.0) is None  # ttl=0 disables

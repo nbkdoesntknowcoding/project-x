@@ -17,6 +17,7 @@ tasks+write; workspace must be dev_project for create_task — ours is).
 """
 import os
 import json
+import time
 import asyncio
 import logging
 from collections import OrderedDict
@@ -348,13 +349,49 @@ def _trim_for_context(result):
     return out
 
 
+# #7: dedup identical back-to-back tool calls. STT often splits one utterance into two
+# ("what tasks…" + "…are in progress?"), firing the same tool twice — wasteful for reads
+# and DUPLICATE-CREATING for writes (two create_task). We replay a recent (asker|tool|args)
+# result instead of re-calling. Keyed by the asker identity (_identity) so one speaker's
+# result never leaks to another. Window via MEETING_TOOL_DEDUP_SEC (default 8s; 0 disables).
+_DEDUP_TTL = float(os.environ.get("MEETING_TOOL_DEDUP_SEC", "8"))
+_recent_calls: "dict[str, tuple[float, object]]" = {}
+
+
+def _dedup_get(cache: dict, key, now: float, ttl: float):
+    """Return the cached result for key if still within ttl, else None."""
+    if key is None or ttl <= 0:
+        return None
+    hit = cache.get(key)
+    if hit is not None and (now - hit[0]) < ttl:
+        return hit[1]
+    return None
+
+
 def _make_handler(name, fn, mcp: MnemaMCP):
     async def handler(params):  # params: FunctionCallParams
         args = dict(params.arguments or {})
+        try:
+            dedup_key = f"{mcp._identity()[0]}|{name}|{json.dumps(args, sort_keys=True, default=str)}"
+        except Exception:  # noqa: BLE001 — keying must never break a call
+            dedup_key = None
+        now = time.monotonic()
+        cached = _dedup_get(_recent_calls, dedup_key, now, _DEDUP_TTL)
+        if cached is not None:
+            logger.info("[mnema-tool] %s deduped (identical call within %.0fs)", name, _DEDUP_TTL)
+            await params.result_callback(cached)
+            return
         try:
             result = await fn(mcp, args)
         except Exception as e:  # noqa: BLE001
             logger.exception("[mnema-tool] %s failed: %s", name, e)
             result = {"success": False, "error": str(e)}
-        await params.result_callback(_trim_for_context(result))
+        trimmed = _trim_for_context(result)
+        if dedup_key is not None and _DEDUP_TTL > 0:
+            _recent_calls[dedup_key] = (now, trimmed)
+            if len(_recent_calls) > 256:  # prune expired entries to stay bounded
+                for k, (ts, _) in list(_recent_calls.items()):
+                    if now - ts >= _DEDUP_TTL:
+                        _recent_calls.pop(k, None)
+        await params.result_callback(trimmed)
     return handler
