@@ -330,13 +330,25 @@ class RAGContext(FrameProcessor):
             return
         if not brief:
             return
+        # A2.5: also surface the top cross-domain links so the bot can VOLUNTEER a relevant
+        # cross-project connection unprompted (not left as a model-elected tool).
+        surprising = ""
+        try:
+            sres = await asyncio.wait_for(
+                self._mnema.call("get_surprising_connections", {"limit": 5}), timeout=2.0)
+            stxt = ((sres or {}).get("content") or "").strip()
+            if stxt:
+                surprising = ("\n\n[Cross-project connections worth surfacing when relevant]\n"
+                              + stxt[:600])
+        except Exception as e:  # noqa: BLE001 — optional
+            logger.debug("[startup] surprising_connections skipped: %s", e)
         logger.info("[startup] injected workspace brief (%d chars)", len(brief))
         await self.push_frame(
             LLMMessagesAppendFrame(
                 messages=[{"role": "system", "content": (
                     "[Workspace — central topics & structure] The most connected things in this "
                     "workspace's knowledge graph are below. Use them to ground answers about what "
-                    "the org/project is about, without calling a tool.\n\n" + brief[:1200]
+                    "the org/project is about, without calling a tool.\n\n" + brief[:1200] + surprising
                 )}],
                 run_llm=False,
             ),
@@ -359,12 +371,28 @@ class RAGContext(FrameProcessor):
         if not self._identity_str:
             return
         logger.info("[identity] %s", self._identity_str[:80])
+        # A2.4 speaker tier: also pull what this person is connected to in the graph
+        # (their tasks / meetings / team) so "what's on my plate / what did I commit to"
+        # answer from the graph with no turn-time traversal. Best-effort, appended once.
+        work_block = ""
+        speaker = (current_asker(self._state).get("name") or "").strip()
+        if speaker:
+            try:
+                gres = await asyncio.wait_for(
+                    self._mnema.call("traverse_graph", {"from": speaker, "depth": 1}), timeout=2.0)
+                gtxt = ((gres or {}).get("content") or "").strip()
+                if gtxt:
+                    work_block = ("\n\n[What this person is connected to — their tasks, meetings, "
+                                  "team. Answer 'what's on my plate / what did I commit to' from "
+                                  "this]\n" + gtxt[:600])
+            except Exception as e:  # noqa: BLE001 — optional
+                logger.debug("[identity] speaker graph skipped: %s", e)
         await self.push_frame(
             LLMMessagesAppendFrame(
                 messages=[{"role": "system", "content": (
                     f"[Who you are speaking with] {self._identity_str} When they ask who they "
                     f"are, their role, title, team, or what they can access, answer from this "
-                    f"directly — never refuse it as personal information."
+                    f"directly — never refuse it as personal information." + work_block
                 )}],
                 run_llm=False,
             ),

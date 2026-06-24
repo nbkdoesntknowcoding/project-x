@@ -278,6 +278,10 @@ async def get_graph_report(mcp: MnemaMCP, args: dict) -> dict:
     return await mcp.call("get_graph_report", {})
 
 
+async def get_surprising_connections(mcp: MnemaMCP, args: dict) -> dict:
+    return await mcp.call("get_surprising_connections", {k: v for k, v in (args or {}).items() if v})
+
+
 _TOOLS = {
     "create_task": create_task,
     "create_doc": create_doc,
@@ -292,6 +296,7 @@ _TOOLS = {
     "traverse_graph": traverse_graph,
     "get_god_nodes": get_god_nodes,
     "get_graph_report": get_graph_report,
+    "get_surprising_connections": get_surprising_connections,
 }
 
 

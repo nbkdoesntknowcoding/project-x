@@ -178,4 +178,15 @@ MNEMA_TOOL_DEFINITIONS = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_surprising_connections",
+            "description": "Cross-domain links the graph found between different kinds of things (e.g. a doc in one project related to a flow in another). Use to volunteer a relevant cross-project connection.",
+            "parameters": {
+                "type": "object",
+                "properties": {"limit": {"type": "integer", "description": "Max connections (default 10)"}},
+            },
+        },
+    },
 ]
