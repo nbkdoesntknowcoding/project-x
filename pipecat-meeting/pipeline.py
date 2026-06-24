@@ -455,6 +455,10 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     register_mnema_tools(llm, mnema)
 
     # ── TTS — ElevenLabs cloned voice, streaming PCM for the Output Media webpage ──
+    # A3.4: first-sentence streaming is already the architecture — ElevenLabs Flash streams
+    # audio as LLM text arrives (SilentGate pushes LLMTextFrames token-by-token, and the
+    # addressed/forced path streams the first tokens immediately without buffering), so
+    # playback begins before generation completes. No batching of the full reply.
     tts = ElevenLabsTTSService(
         api_key=os.environ["ELEVENLABS_API_KEY"],
         voice_id=os.environ["ELEVENLABS_VOICE_ID"],
@@ -465,6 +469,11 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     # Stream TTS audio to the bot's Output Media webpage + signal barge-in.
     web_out = WebOutputProcessor(state)
 
+    # A3.3: the persona is the FIRST, STABLE system message — the cacheable prefix. All
+    # dynamic content (identity, A2 graph brief/RAG) is APPENDED after it via
+    # LLMMessagesAppendFrame, never prepended, so OpenAI-compatible providers (OpenAI /
+    # Groq auto-cache long stable prefixes) reuse the prefill on turn 2+. The full win
+    # lands once A2.1's startup brief becomes part of this prefix.
     context = LLMContext(
         messages=[{"role": "system", "content": system_prompt}],
         tools=_mnema_tools_schema(),
