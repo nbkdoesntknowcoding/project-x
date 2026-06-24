@@ -83,6 +83,7 @@ MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
 # unit-testable without the heavy pipecat/LLM imports. is_addressed = the fast-path;
 # the semantic LLM classifier (_classify_addressed below) handles implicit address.
 from addressing import is_addressed as _addressed  # noqa: E402
+from silence import resolve_leading_silent  # noqa: E402  — pure SILENT_TOKEN gate logic
 
 # "Live" questions whose answer is the current board/state, NOT a stored doc. For these we
 # skip the doc-RAG injection (which can surface a stale snapshot like "no tasks in
@@ -226,6 +227,7 @@ class SilentGate(FrameProcessor):
         super().__init__()
         self._state = state
         self._buf = ""
+        self._forced = False               # this turn must be spoken (addressed / non-strict)
         self._decided: bool | None = None  # None=undecided, True=silent, False=speak
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
@@ -233,38 +235,43 @@ class SilentGate(FrameProcessor):
 
         if isinstance(frame, LLMFullResponseStartFrame):
             self._buf = ""
-            # _decided: False = speak, True = drop, None = let the model's first tokens
-            # decide. Non-strict mode or an addressed turn (A1.6 per-turn force flag) →
-            # force speak; otherwise undecided until we see whether the reply starts with
-            # the silence sentinel. Consume the flag here so it forces exactly THIS turn.
-            speak_now = (not _STRICT) or self._state.force_next_response
+            # _forced: non-strict mode OR an addressed turn (A1.6 per-turn force flag) means
+            # THIS turn must be spoken. We still start undecided and inspect the leading
+            # tokens so we can STRIP a stray "<silent>" the model may emit even on a forced
+            # turn (audit fix) — otherwise the sentinel got spoken aloud. Consume the flag
+            # here so it forces exactly THIS turn.
+            self._forced = (not _STRICT) or self._state.force_next_response
             self._state.force_next_response = False
-            if speak_now:
+            if self._forced:
                 self._state.last_response_monotonic = time.monotonic()
-            self._decided = False if speak_now else None
+            self._decided = None
             await self.push_frame(frame, direction)
             return
 
         if isinstance(frame, LLMTextFrame):
             if self._decided is True:
-                return  # model chose silence — drop
+                return  # resolved to silence — drop
             if self._decided is False:
-                await self.push_frame(frame, direction)
+                await self.push_frame(frame, direction)  # already speaking — stream through
                 return
-            # Undecided: buffer the leading text just long enough to spot the sentinel.
+            # Undecided: buffer the leading text just long enough to rule the sentinel in/out.
             self._buf += frame.text
-            stripped = self._buf.lstrip().lower()
-            if not stripped:
+            action, text = resolve_leading_silent(self._buf, self._forced)
+            if action == "wait":
                 return
-            if stripped.startswith(SILENT_TOKEN):
+            if action == "drop":
                 self._decided = True
                 logger.info("[silentgate] model chose silence")
                 return
-            if SILENT_TOKEN.startswith(stripped):
-                return  # could still become the sentinel — wait for more
+            # speak / speak_stripped
             self._decided = False
-            logger.info("[silentgate] speaking: %s", stripped[:60])
-            await self.push_frame(LLMTextFrame(self._buf), direction)
+            if action == "speak_stripped":
+                logger.info("[silentgate] stripped stray <silent> on forced turn; speaking: %s",
+                            (text or "")[:60])
+            else:
+                logger.info("[silentgate] speaking: %s", (text or "")[:60])
+            if text:
+                await self.push_frame(LLMTextFrame(text), direction)
             return
 
         await self.push_frame(frame, direction)
