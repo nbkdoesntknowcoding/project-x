@@ -51,6 +51,7 @@ from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.frames.frames import (
     Frame,
+    InputAudioRawFrame,
     TranscriptionFrame,
     LLMTextFrame,
     LLMFullResponseStartFrame,
@@ -63,6 +64,7 @@ from latency import TurnMetrics, TurnMetricsEarly, TurnMetricsLate
 from output_page import output_page_html
 from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS
 from mnema_client import register_mnema_tools, MnemaMCP
+from vap_service import make_vap_service  # A1.4 predictive turn-taking (no-op stub unless MEETING_VAP=1)
 from recall_io import (
     BotState,
     RecallSerializer,
@@ -373,10 +375,33 @@ class RAGContext(FrameProcessor):
         logger.info("[rag] injected %d hits for: %s", len(hits), query[:60])
 
 
+class VapTap(FrameProcessor):
+    """A1.4: feed the active human's separated 16 kHz stream to the VAP service
+    (channel 1). Pure passthrough — the bot's TTS (channel 2) is fed from
+    WebOutputProcessor. No-op when VAP is the stub (MEETING_VAP off / deps missing)."""
+
+    def __init__(self, state) -> None:
+        super().__init__()
+        self._state = state
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, InputAudioRawFrame) and self._state.vap is not None and frame.audio:
+            try:
+                self._state.vap.push_human_audio(frame.audio)
+            except Exception as e:  # noqa: BLE001 — VAP must never break the audio path
+                logger.debug("[vap] push_human_audio failed: %s", e)
+        await self.push_frame(frame, direction)
+
+
 async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: str) -> None:
     """One meeting = one pipeline run. Audio in from Recall, replies out via Output Audio."""
     state = BotState()
     serializer = RecallSerializer(state)
+    # A1.4: predictive turn-taking. make_vap_service() returns a no-op stub unless
+    # MEETING_VAP=1 and vap_realtime is installed, so this is safe by default.
+    state.vap = make_vap_service()
+    state.vap.start()
 
     transport = FastAPIWebsocketTransport(
         websocket=websocket,
@@ -447,6 +472,7 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
 
     pipeline = Pipeline([
         transport.input(),      # A1.1: separated streams; bot's own audio dropped at the serializer
+        VapTap(state),          # A1.4: tap the human stream into VAP (no-op unless MEETING_VAP=1)
         stt,
         NoiseGate(),            # drop sub-3-char STT noise before it reaches the LLM
         TurnMetricsEarly(metrics),  # stamp end-of-user-speech
@@ -473,6 +499,10 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         except Exception:  # noqa: BLE001
             pass
         await mnema.aclose()
+        try:
+            state.vap.stop()
+        except Exception:  # noqa: BLE001
+            pass
     logger.info("[meeting-pipeline] finished")
 
 

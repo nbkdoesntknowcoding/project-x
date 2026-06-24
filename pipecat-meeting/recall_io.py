@@ -69,6 +69,10 @@ class BotState:
         # addressing classifier ("recently engaged" → a bare follow-up is probably still ours).
         self.force_next_response: bool = False
         self.last_response_monotonic: float = 0.0
+        # A1.4: optional VAP predictive turn-taking service (set in pipeline.py; a no-op
+        # stub unless MEETING_VAP=1 + vap_realtime installed). Fed the human stream + bot
+        # TTS; exposes latest_result for the turn logic. None until wired.
+        self.vap = None
 
 
 def _extract_email(p: dict):
@@ -358,6 +362,10 @@ class WebOutputProcessor(FrameProcessor):
                     await ws.send_text(json.dumps({"type": "interrupt"}))
                     logger.info("[recall] sent interrupt to page (cid %s)", self._state.cid)
             elif isinstance(frame, TTSAudioRawFrame) and frame.audio:
+                # A1.4: feed the bot's own TTS to VAP (channel 2) so it can predict
+                # turn-shift / barge-in. No-op when VAP is disabled (stub).
+                if self._state.vap is not None:
+                    self._state.vap.push_bot_audio(frame.audio)
                 if ws is None:
                     if not self._warned:
                         logger.warning(
