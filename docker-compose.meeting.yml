@@ -2,7 +2,7 @@
 #
 # Recall joins the meeting and streams mixed audio to pipecat-meeting over a PUBLIC
 # WebSocket (Caddy: meet-ws.theboringpeople.in → pipecat-meeting:8765). pipecat runs
-# Deepgram → GPT-4o-mini (+ Mnema tools) → ElevenLabs and (talking) plays the reply
+# Deepgram → GPT-4o-mini (+ Mnema tools) → Inworld TTS and (talking) plays the reply
 # back via Recall Output Media. meeting-bot is just the Recall REST controller.
 #
 # Secrets come from infra/.env via env_file (same as the core api service).
@@ -12,7 +12,7 @@ services:
     build: ./pipecat-meeting
     restart: unless-stopped
     env_file:
-      - infra/.env            # OPENAI/DEEPGRAM/ELEVENLABS/RECALL_*/MEETING_WS_SECRET
+      - infra/.env            # OPENAI/DEEPGRAM/INWORLD_*/RECALL_*/MEETING_WS_SECRET
     ports:
       - "127.0.0.1:8765:8765" # local health; public access is via Caddy
     networks:

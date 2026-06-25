@@ -6,7 +6,7 @@ service over a public WebSocket (Caddy: meet-ws.theboringpeople.in → here:8765
 mono 16-bit LE PCM @ 16 kHz packet per participant in `audio_separate_raw.data` JSON
 messages (see recall_io.RecallSerializer; A1.1). The pipeline runs:
 
-    Deepgram STT → GPT-4o-mini (+ Mnema tools) → ElevenLabs TTS (streaming PCM)
+    Deepgram STT → GPT-4o-mini (+ Mnema tools) → Inworld TTS (streaming PCM)
 
 and streams each reply to the bot's Output Media webpage (recall_io.WebOutputProcessor
 → /output WS → the page plays PCM via Web Audio). SileroVAD on the user aggregator +
@@ -44,7 +44,7 @@ from pipecat.transports.websocket.fastapi import (
 )
 from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
 from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+from pipecat.services.inworld import InworldTTSService
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy
@@ -782,16 +782,22 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     register_mnema_tools(llm, mnema)
     register_local_tools(llm, state)   # #6: who_is_in_meeting / recall_what_was_said
 
-    # ── TTS — ElevenLabs cloned voice, streaming PCM for the Output Media webpage ──
-    # A3.4: first-sentence streaming is already the architecture — ElevenLabs Flash streams
-    # audio as LLM text arrives (SilentGate pushes LLMTextFrames token-by-token, and the
-    # addressed/forced path streams the first tokens immediately without buffering), so
-    # playback begins before generation completes. No batching of the full reply.
-    tts = ElevenLabsTTSService(
-        api_key=os.environ["ELEVENLABS_API_KEY"],
-        voice_id=os.environ["ELEVENLABS_VOICE_ID"],
-        model=os.environ.get("ELEVENLABS_MODEL", "eleven_flash_v2_5"),
-        sample_rate=OUTPUT_SAMPLE_RATE,  # → pcm_24000; the page plays PCM16 @ this rate
+    # ── TTS — Inworld (native pipecat InworldTTSService, websocket), streaming raw PCM ──
+    # A3.4: first-sentence streaming is preserved — Inworld's realtime WS streams audio as
+    # LLM text arrives (SilentGate pushes LLMTextFrames token-by-token, and the addressed/
+    # forced path streams the first tokens immediately), so playback begins before generation
+    # completes. encoding="PCM" → raw PCM16 (NO mp3, NO WAV header) at OUTPUT_SAMPLE_RATE, so
+    # frames feed straight into web_out / the Output Media page with no decode step. Secrets
+    # via env only (INWORLD_API_KEY = the Basic-auth value). Same TTSService interface, so
+    # RecapProcessor / web_out / VAP are unchanged.
+    tts = InworldTTSService(
+        api_key=os.environ["INWORLD_API_KEY"],
+        sample_rate=OUTPUT_SAMPLE_RATE,  # match the Output page rate exactly (PCM16 @ this rate)
+        encoding="PCM",                  # raw PCM16 — no mp3 decode, no WAV header to strip
+        settings=InworldTTSService.Settings(
+            voice=os.environ["INWORLD_VOICE_ID"],
+            model=os.environ.get("INWORLD_TTS_MODEL", "inworld-tts-1.5-max"),
+        ),
     )
 
     # Stream TTS audio to the bot's Output Media webpage + signal barge-in.

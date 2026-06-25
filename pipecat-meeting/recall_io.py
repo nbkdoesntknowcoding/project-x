@@ -39,7 +39,7 @@ from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 logger = logging.getLogger("pipecat-meeting.recall")
 
 RECALL_INPUT_SAMPLE_RATE = 16000   # Recall mixed audio is 16 kHz S16LE mono
-OUTPUT_SAMPLE_RATE = int(os.environ.get("MEETING_TTS_SAMPLE_RATE", "24000"))  # ElevenLabs pcm_24000
+OUTPUT_SAMPLE_RATE = int(os.environ.get("MEETING_TTS_SAMPLE_RATE", "24000"))  # Inworld PCM @ this rate
 
 
 class BotState:

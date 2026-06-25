@@ -5,7 +5,7 @@ bot (A1.4). In-process per-call sidecar adapted from voice-clone/media-worker's 
 Reuses inokoj/VAP-Realtime exactly as voice-clone does (CPU, two TCP-loopback input
 channels), but for the MEETING bot's audio contract:
   - channel 1 ("human")  = the active human's SEPARATED 16 kHz PCM stream (A1.1) — no resample
-  - channel 2 ("bot")    = the bot's TTS PCM (ElevenLabs, 24 kHz) → resampled to 16 kHz
+  - channel 2 ("bot")    = the bot's TTS PCM (Inworld, 24 kHz) → resampled to 16 kHz
 Outputs p_now (who is speaking now) + p_future (turn-shift prediction) at 10 Hz, which
 pipeline.VapTap exposes on BotState so the turn logic can hold through mid-utterance
 pauses, suppress on backchannels, and time barge-in naturally.
@@ -35,7 +35,7 @@ logger = logging.getLogger("pipecat-meeting.vap")
 
 # ── Audio constants ──────────────────────────────────────────────────────────────
 _HUMAN_RATE = 16000   # A1.1 separated human stream is 16 kHz S16LE mono
-_BOT_RATE   = int(os.environ.get("MEETING_TTS_SAMPLE_RATE", "24000"))  # ElevenLabs pcm_24000
+_BOT_RATE   = int(os.environ.get("MEETING_TTS_SAMPLE_RATE", "24000"))  # Inworld PCM @ 24000
 _VAP_RATE   = 16000   # VAP model expects 16 kHz
 _VAP_FRAME  = 160     # samples per VAP frame (10 ms @ 16 kHz)
 _VAP_DTYPE  = np.float64

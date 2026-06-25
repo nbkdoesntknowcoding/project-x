@@ -11,17 +11,21 @@ python-dotenv>=1.0.0
 # PINNED to 1.2.1 to match the VAP (voice-clone media-worker) exactly: the import
 # paths (pipecat.processors.aggregators.openai_llm_context) and the FrameSerializer
 # / transport APIs this code uses are the VAP's. 1.3.0 moved them.
-pipecat-ai[silero,openai,deepgram,elevenlabs,websocket]==1.2.1
+# TTS is Inworld (native pipecat InworldTTSService, websocket). It needs no extra SDK
+# beyond [websocket] (already present); the `inworld` extra is requested anyway — pip
+# ignores it with a warning if 1.2.1 doesn't define it, and pulls any deps if it does.
+# IMPORTANT: pipecat stays PINNED at 1.2.1 (VAP import-path compat). VERIFY 1.2.1 ships
+# pipecat.services.inworld before deploying (see the deploy gate); do NOT bump pipecat.
+# `elevenlabs` extra left in place — harmless, and removing it isn't required.
+pipecat-ai[silero,openai,deepgram,elevenlabs,websocket,inworld]==1.2.1
 
-# STT/LLM/TTS SDKs (deepgram-sdk, openai, elevenlabs) are pulled by the
-# pipecat-ai[...] extras above at versions compatible with 1.2.1 — do NOT pin them
-# separately (newer versions break the 1.2.1 service wrappers, e.g. deepgram 6.x
-# removed LiveOptions).
+# STT/LLM/TTS SDKs (deepgram-sdk, openai) are pulled by the pipecat-ai[...] extras above
+# at versions compatible with 1.2.1 — do NOT pin them separately (newer versions break
+# the 1.2.1 service wrappers, e.g. deepgram 6.x removed LiveOptions).
 
 numpy>=1.26.0
 
-# Direct REST calls: ElevenLabs mp3 synthesis (output) + Recall Output Audio POST.
-# (openai already pulls httpx, but pin it explicitly.)
+# Direct REST calls: Recall Output Audio POST (and openai already pulls httpx).
 httpx>=0.27.0
 
 # Mnema tool access goes through the MCP endpoint (POST /mcp) with the API key —

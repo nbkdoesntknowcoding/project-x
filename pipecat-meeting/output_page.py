@@ -15,7 +15,7 @@ The page:
     (barge-in), {"type":"config","sampleRate":N} ignored (rate fixed at load).
   - renders a branded placeholder (Output Media always sends the camera video)
 
-PCM rate is passed as ?rate=… (default 24000, matching ElevenLabs pcm_24000). The
+PCM rate is passed as ?rate=… (default 24000, matching Inworld PCM @ 24000). The
 AudioContext is created at that rate so samples map 1:1.
 """
 
