@@ -6,6 +6,7 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { projects, tasks } from '../../db/schema.js';
+import { withTenant } from '../../db/with-tenant.js';
 import type { McpAuthContext } from '../auth.js';
 
 export const LIST_PROJECTS_TOOL = {
@@ -48,18 +49,37 @@ function colorCircle(color: string): string {
 export async function listProjects(ctx: McpAuthContext, rawArgs: Record<string, unknown>) {
   const statusFilter = typeof rawArgs.status === 'string' ? rawArgs.status : 'active';
 
-  const rows = await db
-    .select()
-    .from(projects)
-    .where(
-      statusFilter === 'all'
-        ? eq(projects.workspaceId, ctx.tenant_id)
-        : and(
-            eq(projects.workspaceId, ctx.tenant_id),
-            eq(projects.status, statusFilter),
-          ),
-    )
-    .orderBy(asc(projects.boardOrder), asc(projects.createdAt));
+  // BOTH the project list AND the task-count aggregation run inside withTenant so they pass
+  // through the SAME RLS predicate (SET LOCAL ROLE app_user → workspace_id = tenant AND
+  // app_can_see_project(project_id)) that list_project_tasks enforces. Previously the counts
+  // used a raw db.execute OUTSIDE withTenant, so they bypassed RLS and over-reported tasks for
+  // projects a scoped key (e.g. the project-scoped meeting bot) cannot actually read — the
+  // counts then CONTRADICTED list_project_tasks (which returned the true, often empty, set).
+  // Now both reflect the same visible scope and agree.
+  const { rows, countRows } = await withTenant(ctx.tenant_id, async (tx) => {
+    const projectRows = await tx
+      .select()
+      .from(projects)
+      .where(
+        statusFilter === 'all'
+          ? eq(projects.workspaceId, ctx.tenant_id)
+          : and(
+              eq(projects.workspaceId, ctx.tenant_id),
+              eq(projects.status, statusFilter),
+            ),
+      )
+      .orderBy(asc(projects.boardOrder), asc(projects.createdAt));
+
+    const counts = (await tx.execute(
+      sql`SELECT project_id::text, status, COUNT(*)::int AS cnt
+          FROM tasks
+          WHERE workspace_id = ${ctx.tenant_id}::uuid
+            AND project_id IS NOT NULL
+          GROUP BY project_id, status`,
+    )) as unknown as { project_id: string; status: string; cnt: number }[];
+
+    return { rows: projectRows, countRows: counts };
+  });
 
   if (rows.length === 0) {
     return {
@@ -67,15 +87,6 @@ export async function listProjects(ctx: McpAuthContext, rawArgs: Record<string, 
       structuredContent: { projects: [] },
     };
   }
-
-  // Aggregate task counts per project
-  const countRows = await db.execute(
-    sql`SELECT project_id::text, status, COUNT(*)::int AS cnt
-        FROM tasks
-        WHERE workspace_id = ${ctx.tenant_id}::uuid
-          AND project_id IS NOT NULL
-        GROUP BY project_id, status`,
-  ) as unknown as { project_id: string; status: string; cnt: number }[];
 
   const countsMap: Record<string, Record<string, number>> = {};
   for (const r of countRows) {

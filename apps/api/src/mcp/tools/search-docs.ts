@@ -95,9 +95,32 @@ const argsSchema = z.object({
     }),
   mode: z.enum(['hybrid', 'keyword', 'semantic']).optional().default('hybrid'),
   limit: z.number().int().min(1).max(20).optional().default(10),
-  project_id: z.string().uuid().optional(),
+  // Accept a project SLUG or a UUID (consistent with list_project_tasks). Resolved to a UUID
+  // in searchDocs before scoping — previously this required a UUID and rejected a slug with a
+  // raw "Invalid uuid", which is exactly what the model passes when it names a project.
+  project_id: z.string().optional(),
   folder_id: z.string().uuid().optional(),
 });
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Resolve a project identifier (UUID or slug) to its UUID within this tenant, RLS-scoped.
+ *  Returns null when no matching project is visible (caller then searches unscoped). */
+async function resolveProjectId(ctx: McpAuthContext, identifier?: string): Promise<string | null> {
+  const id = (identifier ?? '').trim();
+  if (!id) return null;
+  if (UUID_RE.test(id)) return id;
+  const { projects } = await import('../../db/schema.js');
+  const { eq, and } = await import('drizzle-orm');
+  const rows = await withTenant(ctx.tenant_id, (tx) =>
+    tx
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.workspaceId, ctx.tenant_id), eq(projects.slug, id)))
+      .limit(1),
+  );
+  return rows[0]?.id ?? null;
+}
 
 /** Build an extra WHERE fragment scoping by project/folder (on the docs alias `d`). */
 function scopeClause(projectId?: string, folderId?: string): SQL {
@@ -167,7 +190,8 @@ export async function searchDocs(
     ctx,
     { tool_name: SEARCH_DOCS_TOOL.name, args: args as Record<string, unknown> },
     async () => {
-      const scope = scopeClause(args.project_id, args.folder_id);
+      const resolvedProjectId = await resolveProjectId(ctx, args.project_id);
+      const scope = scopeClause(resolvedProjectId ?? undefined, args.folder_id);
       let result: SearchResult;
       switch (args.mode) {
         case 'keyword':
