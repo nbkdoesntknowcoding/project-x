@@ -35,11 +35,15 @@ _RUBRIC_PROMPTS = {
         "1 = slightly overclaims; 0 = asserts a specific that traces to none of the tool "
         "returns / transcript as if it were fact."),
     "NO_RECITATION": (
-        "Rubric NO_RECITATION. She must answer in her OWN words, not read a doc/snippet verbatim "
-        "and not dump a title+date as if it were the content. Especially: if the underlying note "
-        "is thin/empty, she should SAY it's thin, not recite its heading. 2 = own words, no "
-        "verbatim dump; 1 = leans on quoted text; 0 = reads the doc/snippet or dumps title+date "
-        "as content."),
+        "Rubric NO_RECITATION. Flag recitation ONLY when she reproduces a SUBSTANTIAL doc body "
+        "verbatim (a wall of the document's text) or dumps a title+date as if it were the "
+        "content. A short, ACCURATE factual report is NOT recitation and must score 2 — e.g. "
+        "relaying the one line a thin transcript actually contains ('the note just has a "
+        "greeting — Hey, how are you'), a one-sentence summary in her own words, or naming who "
+        "said what from the live transcript. If the underlying note is thin, saying so plainly "
+        "(optionally quoting the single line) is CORRECT behaviour, not a dump. 2 = own words or "
+        "a brief accurate report; 1 = leans noticeably on quoted blocks; 0 = reproduces a "
+        "substantial doc body verbatim or passes a title+date off as the content."),
     "HUMAN_DELIVERY": (
         "Rubric HUMAN_DELIVERY. Does she sound like a calm, warm person speaking — varied "
         "sentence length, natural spoken punctuation, no call-centre tics ('Is there anything "

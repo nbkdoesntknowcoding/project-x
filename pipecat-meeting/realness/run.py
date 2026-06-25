@@ -24,6 +24,7 @@ from realness import report as R
 from realness.turn import TurnRunner
 from realness.groundtruth import build_ground_truth
 from realness.judge import judge_one
+from llm_config import resolve_model
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("realness.run")
@@ -232,7 +233,9 @@ async def main(quick=False):
         "aggregate": agg, "rows": rows, "sequence_rows": sequence_rows,
         "category_rates": agg["category_rates"],
         "meta": {
-            "model": os.environ.get("MEETING_LLM_MODEL", os.environ.get("OPENAI_LLM_MODEL", "gpt-4o-mini")),
+            # the ACTUAL resolved model the harness turns used (same llm_config the bot uses)
+            # — was hard-defaulting to gpt-4o-mini in the header even when calls ran on gpt-4.1.
+            "model": resolve_model(os.environ),
             "judge_model": JUDGE_MODEL,
             "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
             "workspace": os.environ.get("MNEMA_WORKSPACE", "The Boring People"),
