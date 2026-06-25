@@ -44,7 +44,7 @@ from pipecat.transports.websocket.fastapi import (
 )
 from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
 from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.inworld import InworldTTSService
+from pipecat.services.inworld.tts import InworldTTSService  # 1.2.1: class lives in .tts (not re-exported)
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy
@@ -792,12 +792,10 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     # RecapProcessor / web_out / VAP are unchanged.
     tts = InworldTTSService(
         api_key=os.environ["INWORLD_API_KEY"],
+        voice_id=os.environ["INWORLD_VOICE_ID"],
+        model=os.environ.get("INWORLD_TTS_MODEL", "inworld-tts-1.5-max"),
         sample_rate=OUTPUT_SAMPLE_RATE,  # match the Output page rate exactly (PCM16 @ this rate)
         encoding="PCM",                  # raw PCM16 — no mp3 decode, no WAV header to strip
-        settings=InworldTTSService.Settings(
-            voice=os.environ["INWORLD_VOICE_ID"],
-            model=os.environ.get("INWORLD_TTS_MODEL", "inworld-tts-1.5-max"),
-        ),
     )
 
     # Stream TTS audio to the bot's Output Media webpage + signal barge-in.
