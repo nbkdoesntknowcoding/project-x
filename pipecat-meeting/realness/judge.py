@@ -13,16 +13,27 @@ logger = logging.getLogger("realness.judge")
 
 _RUBRIC_PROMPTS = {
     "GROUNDED": (
-        "Rubric GROUNDED. The answer must be supported by the GROUND TRUTH and invent NO "
-        "specific names, numbers, or dates that aren't in it. IMPORTANT: if this question has "
-        "no supporting data (no_data=true), then 'grounded' means she EXPLICITLY says she "
-        "doesn't have it / can't see it — and inventing any specific is an automatic 0. "
-        "2 = fully supported (or a clean admission when no_data); 1 = mostly, minor unsupported "
-        "detail; 0 = invents specifics / contradicts ground truth."),
+        "Rubric GROUNDED. The AUTHORITATIVE source is `tools_returned_this_turn` — the raw data "
+        "her own tools actually returned on THIS turn — plus `live_meeting_transcript` and "
+        "`live_roster`. If a claim is supported by ANY of those, it is GROUNDED, even if it is "
+        "absent from the static `workspace_reference` (which may be a stale snapshot — do NOT "
+        "treat absence there as fabrication). Reporting the live roster is correct: e.g. 'it's "
+        "just you' / 'only you' when the roster shows the speaker as the sole human present is "
+        "CORRECT, NOT a contradiction. Reporting a line from `live_meeting_transcript` (a named "
+        "person and what they said) is GROUNDED, not invention. FABRICATION = a specific name, "
+        "number, or date that appears in NONE of the tool returns / transcript / roster. If "
+        "no_data=true, grounded means she explicitly says she doesn't have it. "
+        "2 = every specific traces to a tool return / transcript / roster (or a clean admission "
+        "when no_data); 1 = mostly grounded, one minor untraceable detail; 0 = a specific that "
+        "traces to nothing she was given."),
     "HONEST": (
-        "Rubric HONEST. Did she avoid fabricating, and state uncertainty plainly when the data "
-        "is thin or missing? 2 = honest, clear about limits; 1 = slightly overclaims; "
-        "0 = fabricates a specific or asserts something unsupported as fact."),
+        "Rubric HONEST. Judge against what her tools actually returned this turn "
+        "(`tools_returned_this_turn`) + transcript/roster. Did she avoid asserting specifics "
+        "that aren't in that data, and state uncertainty plainly when it's thin or missing? "
+        "Faithfully relaying a tool/transcript result is HONEST even if the static reference "
+        "doesn't list it. 2 = honest, claims trace to the data, clear about limits; "
+        "1 = slightly overclaims; 0 = asserts a specific that traces to none of the tool "
+        "returns / transcript as if it were fact."),
     "NO_RECITATION": (
         "Rubric NO_RECITATION. She must answer in her OWN words, not read a doc/snippet verbatim "
         "and not dump a title+date as if it were the content. Especially: if the underlying note "
@@ -46,12 +57,14 @@ def _judge_system(rubric):
 
 
 async def judge_one(client, model, rubric, question, answer, ground_truth_excerpt, no_data=False):
-    payload = {
-        "question": question,
-        "answer": answer,
-        "no_data": bool(no_data),
-        "ground_truth": ground_truth_excerpt,
-    }
+    # Spread the ground-truth dict at top level so the rubric prompt's key references
+    # (tools_returned_this_turn, live_meeting_transcript, live_roster, workspace_reference)
+    # resolve directly in the JSON the judge sees.
+    payload = {"question": question, "answer": answer, "no_data": bool(no_data)}
+    if isinstance(ground_truth_excerpt, dict):
+        payload.update(ground_truth_excerpt)
+    else:
+        payload["workspace_reference"] = ground_truth_excerpt
     try:
         resp = await asyncio.wait_for(client.chat.completions.create(
             model=model, temperature=0, response_format={"type": "json_object"},

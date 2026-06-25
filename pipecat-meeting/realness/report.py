@@ -128,6 +128,14 @@ def render_report(results: dict) -> str:
         L.append("")
         L.append(f"**Tool calls:** {_tool_str(row['tool_calls'])}")
         L.append("")
+        # Raw tool returns — so 'did she fabricate or did the tool feed her that?' is a
+        # lookup, not a judgment call.
+        returns = [c for c in row["tool_calls"] if c.get("result") is not None]
+        if returns:
+            L.append("**Tool returns (what she actually had):**")
+            for c in returns:
+                L.append(f"- `{c['name']}({_args(c.get('args'))})` → {str(c['result'])[:400]}")
+            L.append("")
         L.append("| Rubric | Score | Source | Reason |")
         L.append("|---|---|---|---|")
         for rubric, s in row["scores"].items():

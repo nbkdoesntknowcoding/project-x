@@ -320,8 +320,14 @@ class TurnRunner:
                     args = json.loads(tc.function.arguments or "{}")
                 except Exception:  # noqa: BLE001
                     args = {}
-                tool_calls_made.append({"name": tc.function.name, "args": args})
                 result = await self._exec_tool(tc.function.name, args)
+                # Record the RAW return alongside the call — this is the keystone of the
+                # harness: grounding becomes "is her claim in what the tool actually returned"
+                # rather than a judgment call. Truncated so the report/judge stay bounded.
+                tool_calls_made.append({
+                    "name": tc.function.name, "args": args,
+                    "result": json.dumps(result, default=str)[:1500],
+                })
                 convo.append({"role": "tool", "tool_call_id": tc.id,
                               "content": json.dumps(result, default=str)[:4000]})
         # ran out of iterations — ask for a final answer with no more tools

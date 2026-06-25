@@ -39,7 +39,13 @@ async def _call(mcp, name, args, timeout=6.0):
 async def build_ground_truth(mcp, state) -> dict:
     from local_tools import format_roster  # pure
     gt = {"recent_docs": [], "latest_doc": None, "post_meeting_notes": None,
-          "board_tasks": [], "roster": None, "present_facts": {}, "absent_probes": {}}
+          "board_tasks": [], "roster": None, "meeting_transcript": [],
+          "present_facts": {}, "absent_probes": {}}
+
+    # The live meeting transcript (what who-spoke / recall_what_was_said reads). Captured into
+    # ground truth so reporting a line from it (e.g. 'Alex Kim said …') is correctly judged as
+    # GROUNDED in the live call, not as fabrication against the docs.
+    gt["meeting_transcript"] = list(getattr(state, "meeting_log", []) or [])
 
     # recent docs (titles + dates + ids)
     docs_res = await _call(mcp, "list_recent_docs", {"limit": 8})

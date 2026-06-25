@@ -34,6 +34,27 @@ OUT_DIR = os.environ.get("REALNESS_OUT_DIR", os.path.dirname(os.path.dirname(__f
 JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "gpt-4o")
 
 
+async def _safe_aclose(mcp):
+    """Close an MnemaMCP, swallowing the anyio cancel-scope teardown noise (the streamable-http
+    client's task group can raise on cross-task exit). Cosmetic — results are already written."""
+    try:
+        await mcp.aclose()
+    except Exception as e:  # noqa: BLE001
+        logger.debug("[run] mcp aclose noise (ignored): %s", e)
+
+
+async def _snapshot_docs(mcp):
+    """A fresh recent-docs snapshot taken right around a question (PER-RUN, not once up front),
+    so the judge sees the docs as they were at THIS turn. Side call — NOT a bot tool call, so it
+    never counts toward tool-discipline. Best-effort."""
+    try:
+        res = await asyncio.wait_for(mcp.call("list_recent_docs", {"limit": 6}), timeout=6.0) or {}
+        return res.get("results") or res.get("docs") or []
+    except Exception as e:  # noqa: BLE001
+        logger.debug("[run] docs snapshot skipped: %s", e)
+        return []
+
+
 def seed_state() -> BotState:
     """A live meeting with ONLY Nischay present (matches the production log 'just you'), plus
     a prior utterance by someone else so 'who spoke before me' (Q12) has something to recall."""
@@ -49,25 +70,37 @@ def seed_state() -> BotState:
     return s
 
 
-def gt_excerpt(gt: dict, q: dict) -> dict:
-    """A compact, relevant slice of ground truth for the judge."""
+def judge_ground_truth(gt: dict, q: dict, result: dict, current_docs: list) -> dict:
+    """The AUTHORITATIVE ground truth handed to the judge for THIS answer. Primary evidence is
+    `tools_returned_this_turn` — exactly what her own tools returned on this turn — plus the
+    live transcript/roster. The static workspace_reference (and a per-run docs snapshot) are
+    secondary context that may be stale. This is what makes grounding a lookup, not a guess."""
     ex = {
-        "recent_docs": [{"title": d.get("title"), "date": d.get("updated_at") or d.get("created_at")}
-                        for d in gt.get("recent_docs", [])[:6]],
-        "latest_doc": gt.get("latest_doc"),
-        "post_meeting_notes": gt.get("post_meeting_notes"),
-        "roster": gt.get("roster"),
-        "board_task_titles": [t.get("title") for t in gt.get("board_tasks", [])[:8]],
+        "tools_returned_this_turn": [
+            {"tool": c.get("name"), "args": c.get("args"), "returned": c.get("result")}
+            for c in result.get("tool_calls", []) if c.get("result") is not None
+        ],
+        "live_meeting_transcript": gt.get("meeting_transcript", []),
+        "live_roster": gt.get("roster"),
+        "current_recent_docs": [
+            {"title": d.get("title"), "date": d.get("updated_at") or d.get("created_at")}
+            for d in (current_docs or [])[:6]
+        ],
+        "workspace_reference": {
+            "recent_docs": [{"title": d.get("title")} for d in gt.get("recent_docs", [])[:6]],
+            "board_task_titles": [t.get("title") for t in gt.get("board_tasks", [])[:8]],
+            "note": "stale snapshot — secondary to tools_returned_this_turn",
+        },
     }
     if q["expect"].get("no_data"):
         key = {"Q6": "Q6_jason_standup", "Q7": "Q7_budget_number", "Q8": "Q8_tuesday_client_call",
                "Q9": "Q9_sprint_close_count", "Q10": "Q10_pricing_tier"}.get(q["id"])
         if key:
-            ex["this_probe_returned"] = gt.get("absent_probes", {}).get(key)
+            ex["this_probe_found_nothing_real"] = gt.get("absent_probes", {}).get(key)
     return ex
 
 
-async def score_row(q, result, gt, judge_client, known_tools):
+async def score_row(q, result, gt, judge_client, known_tools, current_docs=None):
     text = result["text"]
     tool_calls = result["tool_calls"]
     scores = {}
@@ -92,7 +125,8 @@ async def score_row(q, result, gt, judge_client, known_tools):
         elif rubric in Q.JUDGE_RUBRICS:
             judge_jobs.append((rubric, judge_one(
                 judge_client, JUDGE_MODEL, rubric, q["text"], text,
-                gt_excerpt(gt, q), no_data=q["expect"].get("no_data", False))))
+                judge_ground_truth(gt, q, result, current_docs),
+                no_data=q["expect"].get("no_data", False))))
 
     if judge_jobs:
         results = await asyncio.gather(*[c for _, c in judge_jobs])
@@ -138,9 +172,11 @@ async def main(quick=False):
     gt_path = os.path.join(OUT_DIR, "ground_truth.json")
     with open(gt_path, "w") as f:
         json.dump(gt, f, indent=2, default=str)
-    logger.info("[run] ground_truth.json written (%d recent docs, latest_doc_len=%s)",
+    logger.info("[run] ground_truth.json written (%d recent docs, latest_doc_len=%s, transcript=%d)",
                 len(gt.get("recent_docs", [])),
-                (gt.get("latest_doc") or {}).get("content_len"))
+                (gt.get("latest_doc") or {}).get("content_len"),
+                len(gt.get("meeting_transcript", [])))
+    await _safe_aclose(gt_runner.mnema)  # close the GT session (was leaking → asyncio teardown error)
 
     # ── STEP 2+3: fresh pass (each question in its OWN session) ──
     rows = []
@@ -153,8 +189,9 @@ async def main(quick=False):
             logger.exception("[run] %s turn failed: %s", q["id"], e)
             result = {"text": f"<turn error: {e}>", "tool_calls": [], "addressed": True,
                       "raw_text": "", "context_len": 0}
-        await runner.mnema.aclose()
-        row = await score_row(q, result, gt, judge_client, known_tools)
+        current_docs = await _snapshot_docs(runner.mnema)  # per-run docs snapshot for the judge
+        await _safe_aclose(runner.mnema)
+        row = await score_row(q, result, gt, judge_client, known_tools, current_docs)
         rows.append(row)
 
     # ── STEP 2: sequence / drift pass (5 questions in ONE growing context) ──
@@ -170,10 +207,11 @@ async def main(quick=False):
                 logger.exception("[run] seq %s failed: %s", qid, e)
                 result = {"text": f"<turn error: {e}>", "tool_calls": [], "addressed": True,
                           "raw_text": "", "context_len": 0}
-            row = await score_row(q, result, gt, judge_client, known_tools)
+            current_docs = await _snapshot_docs(seq_runner.mnema)
+            row = await score_row(q, result, gt, judge_client, known_tools, current_docs)
             row["context_len"] = result.get("context_len")
             sequence_rows.append(row)
-        await seq_runner.mnema.aclose()
+        await _safe_aclose(seq_runner.mnema)
 
     # ── STEP 5: aggregate + report ──
     agg = R.aggregate_results(rows)
