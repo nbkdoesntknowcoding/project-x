@@ -16,13 +16,13 @@ def test_default_is_gpt_4_1():
 
 def test_env_precedence():
     assert resolve_model({"MNEMA_LLM_MODEL": "gpt-4.1"}) == "gpt-4.1"
-    # MNEMA_LLM_MODEL wins over the older swap vars
-    assert resolve_model({"MNEMA_LLM_MODEL": "gpt-4.1", "MEETING_LLM_MODEL": "old",
-                          "OPENAI_LLM_MODEL": "older"}) == "gpt-4.1"
-    # falls back through the legacy vars when the new one is unset
-    assert resolve_model({"MEETING_LLM_MODEL": "x"}) == "x"
-    assert resolve_model({"OPENAI_LLM_MODEL": "y"}) == "y"
-    # a future override still works (env-driven, no code change)
+    # only MNEMA_LLM_MODEL overrides; the legacy swap vars are IGNORED for the model id so a
+    # stale gpt-4o-mini in infra/.env can never pin the model again
+    assert resolve_model({"MEETING_LLM_MODEL": "gpt-4o-mini"}) == "gpt-4.1"
+    assert resolve_model({"OPENAI_LLM_MODEL": "gpt-4o-mini"}) == "gpt-4.1"
+    assert resolve_model({"MEETING_LLM_MODEL": "x", "OPENAI_LLM_MODEL": "y"}) == "gpt-4.1"
+    # MNEMA_LLM_MODEL still wins, and a future explicit override works (env-driven, no code change)
+    assert resolve_model({"MNEMA_LLM_MODEL": "gpt-4.1", "OPENAI_LLM_MODEL": "gpt-4o-mini"}) == "gpt-4.1"
     assert resolve_model({"MNEMA_LLM_MODEL": "gpt-4.1-mini"}) == "gpt-4.1-mini"
 
 

@@ -13,14 +13,13 @@ DEFAULT_MODEL = "gpt-4.1"
 
 
 def resolve_model(env) -> str:
-    """The LLM model id. Precedence: MNEMA_LLM_MODEL (new, primary) → MEETING_LLM_MODEL →
-    OPENAI_LLM_MODEL → gpt-4.1. Empty/whitespace values are ignored so an unset-but-present
-    var doesn't blank the model."""
-    for key in ("MNEMA_LLM_MODEL", "MEETING_LLM_MODEL", "OPENAI_LLM_MODEL"):
-        v = (env.get(key) or "").strip()
-        if v:
-            return v
-    return DEFAULT_MODEL
+    """The LLM model id. gpt-4.1 is the HARD default, overridable ONLY by the explicit new
+    MNEMA_LLM_MODEL. The legacy swap vars (MEETING_LLM_MODEL / OPENAI_LLM_MODEL) are NO LONGER
+    consulted for the model id: a stale 'gpt-4o-mini' left in one of them in infra/.env was
+    silently winning over the gpt-4.1 default (and pinning the live bot to the old model). To
+    run anything other than gpt-4.1, set MNEMA_LLM_MODEL explicitly. Empty/whitespace ignored."""
+    v = (env.get("MNEMA_LLM_MODEL") or "").strip()
+    return v or DEFAULT_MODEL
 
 
 def resolve_api_key(env) -> str:
