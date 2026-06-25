@@ -16,13 +16,19 @@ pipeline.py and is unit-tested via this class.
 """
 import re
 
-from text_norm import to_spoken_plaintext, is_signoff, strip_trailing_offer_clause
+from text_norm import (
+    to_spoken_plaintext, is_signoff, strip_trailing_offer_clause, collapse_enumeration,
+)
 
 # A safe flush boundary: up to and including the first sentence-ender (. ! ?) that is
 # followed by whitespace or end-of-buffer, OR the first newline. Non-greedy so we cut at
 # the EARLIEST boundary and keep streaming promptly. Ellipses ("..."): the lookahead only
 # fires on the dot before a space, so "thinking... okay" flushes as one piece.
-_FLUSH_RE = re.compile(r"^(.*?(?:[.!?](?=\s|$)|\n))", re.S)
+# A safe flush boundary: the first sentence-ender (. ! ?) followed by whitespace/end, or a
+# newline. The (?<!\d) guard means a digit-period like "1." / "2." is NOT treated as a
+# sentence end — so an enumeration marker stays attached to its item (then to_spoken_plaintext
+# strips the leading marker per segment) instead of being split into a stray "1." read aloud.
+_FLUSH_RE = re.compile(r"^(.*?(?:(?<!\d)[.!?](?=\s|$)|\n))", re.S)
 # Residual emphasis sweep: after normalization, drop any leftover asterisks — these only
 # survive when a **bold** / *italic* span was split across stream chunks (one marker in this
 # segment, its partner in the next). Voice never wants an asterisk. Backticks are already
@@ -31,10 +37,15 @@ _STRAY_AST_RE = re.compile(r"\*+")
 
 
 def _clean(seg: str) -> str:
-    """Normalize one segment to spoken plaintext + sweep residual asterisks. '' if blank."""
+    """Normalize one segment to spoken plaintext, sweep residual asterisks, and collapse any
+    read-aloud enumeration ('1. … 2. … 3. …' inside this segment) into prose. '' if blank.
+    (Leading list markers on their own line are already removed by to_spoken_plaintext; this
+    handles the INLINE numbered list that survives it — the Q22 wall.)"""
     if not seg or not seg.strip():
         return ""
-    return _STRAY_AST_RE.sub("", to_spoken_plaintext(seg)).strip()
+    cleaned = _STRAY_AST_RE.sub("", to_spoken_plaintext(seg)).strip()
+    cleaned, _ = collapse_enumeration(cleaned)
+    return cleaned
 
 
 class SpokenStripper:

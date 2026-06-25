@@ -31,6 +31,17 @@ def test_side_chatter_not_wake_addressed():
     assert is_addressed("yeah I think we should just ship it") is False
 
 
+# ── STEP 3: greeting that names her is ADDRESSED (Q20 fix) ──
+def test_greeting_with_name_is_addressed():
+    assert is_addressed("Morning, Nema.") is True
+    assert is_addressed("good morning Nema") is True
+    assert is_addressed("evening, Mnema") is True
+    assert is_addressed("thanks Nema") is True
+    # but a greeting to a HUMAN (no wake word) is not addressed
+    assert is_addressed("morning everyone") is False
+    assert is_addressed("good morning team") is False
+
+
 # ── addressed: vocative wake word ────────────────────────────────────────────────
 def test_vocative_start():
     assert is_addressed("Mnema, what's the status of the billing task?")

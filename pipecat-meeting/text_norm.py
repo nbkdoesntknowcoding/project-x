@@ -125,6 +125,45 @@ def strip_trailing_offer_clause(text: str) -> str:
     return text
 
 
+# An enumeration marker: "1." / "2)" followed by whitespace, not part of a decimal/version
+# ("3.14", "v2.0") — the lookbehind blocks a preceding word-char or dot.
+_ENUM_MARKER_RE = re.compile(r"(?<![\w.])(\d+)[.)](?=\s)")
+
+
+def collapse_enumeration(text: str):
+    """Collapse a read-aloud enumeration ('1. … 2. … 3. …') into spoken prose by REMOVING the
+    sequence numerals, so nothing reads as '1 2 3' aloud. SAFE: only fires on a real sequence
+    (markers 1,2,3,… in order, at least two of them), and only deletes the numeral tokens —
+    never the content, so meaning is preserved. A lone 'Point 1.' or a year '2026.' never
+    triggers (not a 1-based run). Returns (text, collapsed: bool)."""
+    if not text:
+        return text, False
+    markers = list(_ENUM_MARKER_RE.finditer(text))
+    if len(markers) < 2:
+        return text, False
+    run, expect = [], 1
+    for m in markers:                       # longest leading run that is 1,2,3,…
+        if int(m.group(1)) == expect:
+            run.append(m)
+            expect += 1
+        else:
+            break
+    if len(run) < 2:
+        return text, False
+    out, last = [], 0
+    for m in run:
+        out.append(text[last:m.start()])    # content before the marker
+        ws = m.end()                         # skip the marker + the spaces after it
+        while ws < len(text) and text[ws] == " ":
+            ws += 1
+        last = ws
+    out.append(text[last:])
+    result = "".join(out)
+    result = re.sub(r"\s{2,}", " ", result)
+    result = re.sub(r"\s+([,.;:])", r"\1", result).strip()
+    return result, True
+
+
 def looks_enumerated(text: str) -> bool:
     """Heuristic flag (NOT a rewrite): the reply reads like an enumerated list — numbered
     markers or 4+ very short clauses. Used only to log/flag list-cadence; we never mangle

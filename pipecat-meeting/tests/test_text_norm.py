@@ -30,6 +30,31 @@ def test_looks_enumerated():
     assert looks_enumerated("Done. Ready. Next. Go. Now.")
     assert not looks_enumerated("Last call was end of month — that hasn't shifted since the review.")
 
+
+# ── STEP 2 (re-verify): enumeration collapse removes numerals, keeps content/meaning ──
+def test_collapse_enumeration_multisentence():
+    from text_norm import collapse_enumeration  # noqa
+    txt = "1. Episodic Memory: it records. 2. Semantic Memory: it stores. 3. Context Capture: it captures."
+    out, did = collapse_enumeration(txt)
+    assert did is True
+    assert not re.search(r"(?<!\d)[1-3][.)]\s", out)  # no enumerals
+    assert "Episodic Memory" in out and "Context Capture" in out
+
+
+def test_collapse_enumeration_inline():
+    from text_norm import collapse_enumeration  # noqa
+    out, did = collapse_enumeration("ways: 1. A records, 2. B stores, 3. C captures, 4. D answers.")
+    assert did and "A records" in out and "D answers" in out
+    assert not re.search(r"(?<!\d)[1-4][.)]\s", out)
+
+
+def test_collapse_enumeration_leaves_non_sequences():
+    from text_norm import collapse_enumeration  # noqa
+    # a lone marker / a year / a version is NOT a 1-based sequence → untouched
+    assert collapse_enumeration("It happened in 2026. Then we shipped it.")[1] is False
+    assert collapse_enumeration("Point 1. is the important one.")[1] is False
+    assert collapse_enumeration("It's pi, 3.14, roughly.")[1] is False
+
 def _no_markup(s):
     assert "#" not in s and "`" not in s and "|" not in s and ">" not in s
     assert "**" not in s and "](" not in s

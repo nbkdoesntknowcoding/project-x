@@ -125,3 +125,19 @@ def test_honest_fallback_line_survives():
     # the STEP 1 forced-silence fallback must NOT be mistaken for a sign-off
     out = strip_markdown_reply("I don't have that to hand — I can't see it from what I've got here.")
     assert "don't have that" in out.lower()
+
+
+# ── STEP 2 (re-verify through the streaming stripper): the Q22 wall → prose ──
+def test_enumeration_wall_collapses_through_stripper():
+    q22 = ("1. Episodic Memory: it records each meeting session. 2. Semantic Memory: it stores "
+           "facts. 3. Context Capture: it captures the room. 4. Response Generation: it answers.")
+    out = strip_markdown_reply(q22)
+    assert not re.search(r"(?<!\d)[1-4][.)]\s", out)        # no enumerals read aloud
+    for kept in ("Episodic Memory", "Semantic Memory", "Context Capture", "Response Generation"):
+        assert kept in out                                   # meaning preserved
+
+
+def test_number_ending_sentence_not_broken():
+    # the (?<!\d) flush guard must not mangle a sentence that ends in a number
+    out = strip_markdown_reply("It happened in 2026. Then we shipped it.")
+    assert "2026" in out and "shipped it" in out
