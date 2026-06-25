@@ -16,6 +16,7 @@ Auth: Authorization: Bearer ${MNEMA_API_KEY} (must start with mnema_api_; scopes
 tasks+write; workspace must be dev_project for create_task — ours is).
 """
 import os
+import re
 import json
 import time
 import asyncio
@@ -179,6 +180,70 @@ def _parse_result(res) -> dict:
     return {"content": "\n".join(texts)} if texts else {}
 
 
+# ── whoami identity resolution (feeds Layer B) ───────────────────────────────────
+# The server whoami tool (apps/api/src/mcp/tools/whoami.ts) returns EITHER discrete
+# structuredContent fields OR — when the MCP transport surfaces only text — a sentence:
+#   "You are {name}[, {title}][, on the {team} team][, in {dept}]. As a workspace
+#    {role}, you have {access note}."
+# _parse_result collapses the result to one shape. We prefer the structured fields and
+# parse the sentence as a fallback, so role/team/access reach Layer B in both cases.
+# We never guess: a field that isn't cleanly present stays None (the builder degrades).
+_WHOAMI_TEAM_RE = re.compile(r"^on the (.+?) team$", re.I)
+_WHOAMI_DEPT_RE = re.compile(r"^in .+$", re.I)
+_WHOAMI_ACCESS_RE = re.compile(r"as a workspace (\w+)", re.I)
+_WHOAMI_ACCESS_SPLIT_RE = re.compile(r"\.\s*as a workspace", re.I)
+
+
+def _parse_whoami_sentence(sentence: str) -> dict:
+    """Best-effort extraction of {name, role, team, access} from the whoami sentence.
+    Only returns what is unambiguously present; everything else stays None."""
+    out = {"name": None, "role": None, "team": None, "access": None}
+    s = (sentence or "").strip()
+    if not s:
+        return out
+    m = _WHOAMI_ACCESS_RE.search(s)
+    if m:
+        out["access"] = m.group(1)
+    if not s.lower().startswith("you are "):
+        return out  # not the expected identity sentence — only access (if any) is safe
+    head = _WHOAMI_ACCESS_SPLIT_RE.split(s, maxsplit=1)[0].strip().rstrip(".").strip()
+    body = head[len("You are "):].strip()
+    segs = [seg.strip() for seg in body.split(",") if seg.strip()]
+    if not segs:
+        return out
+    name = segs[0]
+    out["name"] = name if name.lower() != "this person" else None  # server placeholder, not a name
+    for seg in segs[1:]:
+        mt = _WHOAMI_TEAM_RE.match(seg)
+        if mt:
+            out["team"] = mt.group(1).strip()
+        elif _WHOAMI_DEPT_RE.match(seg):
+            continue  # department — not used by Layer B
+        elif out["role"] is None:
+            out["role"] = seg
+    return out
+
+
+def parse_whoami_identity(res: dict, fallback_name: str | None = None) -> dict:
+    """Resolve {name, role, team, access_level} for Layer B from a whoami result.
+    Priority: structured fields → sentence parse → (for name) Recall attribution. Returns
+    None for anything not cleanly resolvable; never fills a guess/default/'unknown'."""
+    res = res or {}
+    p = _parse_whoami_sentence(res.get("content") or "")
+    name = res.get("name") or fallback_name or p["name"]
+    role = res.get("title") or res.get("role") or p["role"]
+    team = res.get("team") or p["team"]
+    access = res.get("workspace_role") or p["access"]
+
+    def _clean(v):
+        if isinstance(v, str):
+            v = v.strip()
+        return v or None
+
+    return {"name": _clean(name), "role": _clean(role),
+            "team": _clean(team), "access_level": _clean(access)}
+
+
 # ── Tool implementations (mapped to the real MCP tools) ──────────────────────
 async def create_task(mcp: MnemaMCP, args: dict) -> dict:
     payload: dict = {"title": args["title"]}
@@ -189,7 +254,19 @@ async def create_task(mcp: MnemaMCP, args: dict) -> dict:
     pid = args.get("project_id") or MNEMA_PROJECT_ID
     if pid:
         payload["project_id"] = pid
-    return await mcp.call("create_task", payload)
+    result = await mcp.call("create_task", payload)
+    # Record this action item for the optional end-of-meeting recap (no LLM — just the title
+    # the user already committed to). Best-effort; never affects the tool result.
+    try:
+        st = getattr(mcp, "_state", None)
+        title = (args.get("title") or "").strip()
+        if st is not None and title:
+            if getattr(st, "captured_items", None) is None:
+                st.captured_items = []
+            st.captured_items.append(title)
+    except Exception:  # noqa: BLE001
+        pass
+    return result
 
 
 async def create_doc(mcp: MnemaMCP, args: dict) -> dict:

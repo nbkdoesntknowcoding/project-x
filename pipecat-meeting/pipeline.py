@@ -57,13 +57,19 @@ from pipecat.frames.frames import (
     LLMFullResponseStartFrame,
     LLMFullResponseEndFrame,
     LLMMessagesAppendFrame,
+    UserStoppedSpeakingFrame,
+    TTSSpeakFrame,
+    EndFrame,
+    CancelFrame,
 )
 
-from meeting_persona import build_meeting_persona, SILENT_TOKEN
+from meeting_persona import (
+    build_meeting_persona, build_speaker_modulation_block, build_reanchor_block, SILENT_TOKEN,
+)
 from latency import TurnMetrics, TurnMetricsEarly, TurnMetricsLate
 from output_page import output_page_html
 from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS
-from mnema_client import register_mnema_tools, MnemaMCP
+from mnema_client import register_mnema_tools, MnemaMCP, parse_whoami_identity
 from vap_service import make_vap_service  # A1.4 predictive turn-taking (no-op stub unless MEETING_VAP=1)
 from recall_io import (
     BotState,
@@ -84,6 +90,8 @@ MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
 # the semantic LLM classifier (_classify_addressed below) handles implicit address.
 from addressing import is_addressed as _addressed  # noqa: E402
 from silence import resolve_leading_silent  # noqa: E402  — pure SILENT_TOKEN gate logic
+from text_norm import to_spoken_plaintext  # noqa: E402  — strip markdown from [Background]
+from recap import recap_on_start, recap_on_end, build_start_recap, build_end_recap  # noqa: E402
 from local_tools import LOCAL_TOOL_DEFINITIONS, register_local_tools  # noqa: E402  — #6 live-meeting tools
 
 # "Live" questions whose answer is the current board/state, NOT a stored doc. For these we
@@ -104,6 +112,10 @@ _STRICT = os.environ.get("MEETING_REQUIRE_ADDRESS", "1") != "0"
 # persona's <silent> path still decides); default on. Fail-closed (NO) on any error.
 _SEMANTIC_ADDRESSING = os.environ.get("MEETING_SEMANTIC_ADDRESSING", "1") != "0"
 _CLASSIFIER_MODEL = os.environ.get("MEETING_CLASSIFIER_MODEL", "gpt-4o-mini")
+
+# Layer C drift re-anchor: re-state the persona character every N of Mnema's OWN spoken
+# turns to counter long-context drift. Transient per-turn injection (not cached).
+REANCHOR_EVERY_TURNS = int(os.environ.get("MEETING_REANCHOR_EVERY", "13"))
 
 _CLASSIFY_SYS = (
     "You are the attention gate for a voice assistant named Mnema that sits silently in a "
@@ -283,6 +295,10 @@ class SilentGate(FrameProcessor):
                 return
             # speak / speak_stripped
             self._decided = False
+            # Count THIS as one of Mnema's OWN spoken turns (drives the Layer C re-anchor).
+            # Reached only when she commits to speaking — never on <silent>/dropped/un-addressed
+            # turns. Dynamic attr on the shared BotState keeps this a single-file change.
+            self._state.spoken_turns = getattr(self._state, "spoken_turns", 0) + 1
             if action == "speak_stripped":
                 logger.info("[silentgate] stripped stray <silent> on forced turn; speaking: %s",
                             (text or "")[:60])
@@ -306,8 +322,11 @@ class RAGContext(FrameProcessor):
         super().__init__()
         self._mnema = mnema
         self._state = state
-        self._identity_str: str | None = None  # cached whoami (role/team/access)
+        self._spk_resolved = False             # whoami identity resolved + cached once
+        self._spk: dict = {}                   # cached {name, role, team, access_level} for Layer B
+        self._work_injected = False            # A2.4 speaker work-graph injected once
         self._startup_done = False             # A2.1: workspace brief injected once
+        self._reanchors_done = 0               # Layer C re-anchors fired so far (milestones)
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -339,10 +358,17 @@ class RAGContext(FrameProcessor):
                         self._state.force_next_response = True
                         addressed = True
                         logger.info("[gate] classifier: addressed — %s", text[:60])
-                await self._inject_startup_brief(direction)   # A2.1: workspace brief (once)
-                await self._inject_identity(direction)         # speaker identity (once)
+                # Per-turn context order, after the cached Layer A prefix:
+                #   Layer B speaker block → [Layer C re-anchor, only on the trigger turn] →
+                #   startup brief → speaker work-graph → [Background]. Layer B + grounding are
+                #   per RESPONDING turn; brief/work-graph once; Layer C transient on triggers.
                 if addressed:
-                    await self._inject(text, direction)        # A2.2: graph-aware grounding
+                    await self._ensure_identity_resolved()            # whoami → cache (once)
+                    await self._inject_speaker_modulation(direction)  # Layer B (per-turn)
+                    await self._inject_reanchor(direction)            # Layer C (every N spoken turns)
+                    await self._inject_startup_brief(direction)       # A2.1 workspace brief (once)
+                    await self._inject_work_graph(direction)          # A2.4 speaker work-graph (once)
+                    await self._inject(text, direction)               # A2.2 graph-aware grounding
         await self.push_frame(frame, direction)
 
     async def _inject_startup_brief(self, direction: FrameDirection) -> None:
@@ -386,45 +412,128 @@ class RAGContext(FrameProcessor):
             direction,
         )
 
-    async def _inject_identity(self, direction: FrameDirection) -> None:
-        """Tell the LLM WHO it's talking to AND their org role/team/access, so 'who am I /
-        what's my role' work and the bot HOLDS that context. Fetched once via the server
-        `whoami` tool (the bot acts as the resolved speaker), then cached + re-stated each
-        turn so it stays in recent context."""
-        if self._identity_str is not None:
-            return  # fetched + injected once already; the whoami tool covers later asks
-        self._identity_str = ""
-        try:
-            res = await asyncio.wait_for(self._mnema.call("whoami", {}), timeout=2.5)
-            self._identity_str = ((res or {}).get("content") or "").strip()
-        except Exception as e:  # noqa: BLE001
-            logger.warning("[identity] whoami failed: %s", e)
-        if not self._identity_str:
+    async def _ensure_identity_resolved(self) -> None:
+        """Resolve the current speaker's identity ONCE via the server `whoami` tool (the bot
+        acts as the resolved speaker) and cache the structured fields for Layer B. Resolution
+        is UNCHANGED from before — whoami + Recall attribution; only the rendering moved to
+        Layer B (build_speaker_modulation_block). The whoami tool still covers later 'who am
+        I' asks directly."""
+        if self._spk_resolved:
             return
-        logger.info("[identity] %s", self._identity_str[:80])
-        # A2.4 speaker tier: also pull what this person is connected to in the graph
-        # (their tasks / meetings / team) so "what's on my plate / what did I commit to"
-        # answer from the graph with no turn-time traversal. Best-effort, appended once.
-        work_block = ""
-        speaker = (current_asker(self._state).get("name") or "").strip()
-        if speaker:
-            try:
-                gres = await asyncio.wait_for(
-                    self._mnema.call("traverse_graph", {"from": speaker, "depth": 1}), timeout=2.0)
-                gtxt = ((gres or {}).get("content") or "").strip()
-                if gtxt:
-                    work_block = ("\n\n[What this person is connected to — their tasks, meetings, "
-                                  "team. Answer 'what's on my plate / what did I commit to' from "
-                                  "this]\n" + gtxt[:600])
-            except Exception as e:  # noqa: BLE001 — optional
-                logger.debug("[identity] speaker graph skipped: %s", e)
+        self._spk_resolved = True
+        res: dict = {}
+        try:
+            res = await asyncio.wait_for(self._mnema.call("whoami", {}), timeout=2.5) or {}
+        except Exception as e:  # noqa: BLE001 — never block on identity
+            logger.warning("[identity] whoami failed: %s", e)
+        asker = current_asker(self._state)
+        # Prefer whoami's structured fields; fall back to parsing its sentence; name falls
+        # back to Recall attribution. Anything unresolved stays None (Layer B degrades).
+        self._spk = parse_whoami_identity(res, fallback_name=asker.get("name"))
+        logger.info("[identity] speaker=%s role=%s team=%s access=%s",
+                    self._spk.get("name"), self._spk.get("role"),
+                    self._spk.get("team"), self._spk.get("access_level"))
+
+    async def _inject_speaker_modulation(self, direction: FrameDirection) -> None:
+        """Layer B — the per-turn speaker-modulation block, appended FRESH each responding
+        turn (never merged into the cached Layer A prefix). Verbatim text is built by
+        build_speaker_modulation_block, which drops the '[Speaking now]' line when the
+        speaker is unidentified and never emits 'unknown'."""
+        block = build_speaker_modulation_block(
+            self._spk.get("name"), self._spk.get("role"),
+            self._spk.get("team"), self._spk.get("access_level"),
+        )
+        await self.push_frame(
+            LLMMessagesAppendFrame(messages=[{"role": "system", "content": block}], run_llm=False),
+            direction,
+        )
+
+    def _participant_names(self):
+        """Cheap, in-memory list of current human participants (no tool call) → a natural
+        spoken join, or None if unknown. Excludes the bot."""
+        names, seen = [], set()
+        for pid, p in (self._state.participants or {}).items():
+            if pid == self._state.bot_participant_id:
+                continue
+            n = (p.get("name") or "").strip()
+            if n and n.lower() not in seen:
+                seen.add(n.lower())
+                names.append(n)
+        if not names:
+            return None
+        if len(names) == 1:
+            return names[0]
+        if len(names) == 2:
+            return f"{names[0]} and {names[1]}"
+        return ", ".join(names[:-1]) + f" and {names[-1]}"
+
+    def _recent_topic(self):
+        """Cheap recent-topic from the in-memory transcript (NO model call): the most recent
+        substantive human utterance BEFORE this turn, trimmed to a short phrase. None if none.
+        The current turn's utterance is already the last meeting_log entry, so we exclude it —
+        'the thread just now' means the prior exchange, not the question being asked now."""
+        log = self._state.meeting_log or []
+        _tail_stop = {"to", "and", "the", "of", "a", "an", "for", "with", "in", "on",
+                      "at", "is", "was", "that", "but", "or", "so", "we", "i"}
+        for entry in reversed(log[:-1]):
+            words = (entry.get("text") or "").split()
+            if len(words) >= 4:  # skip backchannels / one-word turns
+                phrase = [w.rstrip(".,!?") for w in words[:10]]
+                while len(phrase) > 3 and phrase[-1].lower() in _tail_stop:
+                    phrase.pop()  # don't end on a dangling preposition/conjunction
+                return " ".join(phrase)
+        return None
+
+    async def _inject_reanchor(self, direction: FrameDirection) -> None:
+        """Layer C — drift re-anchor. Fires on the first responding turn after every
+        REANCHOR_EVERY_TURNS of Mnema's OWN spoken turns. Transient per-turn injection
+        (appended after Layer B, before the brief), never cached. Placeholders are filled
+        only from sources already cheaply in the loop — NO new LLM/network/blocking work;
+        anything unavailable is passed as None and the builder drops that clause."""
+        spoken = getattr(self._state, "spoken_turns", 0)
+        due = spoken // REANCHOR_EVERY_TURNS
+        if spoken == 0 or due <= self._reanchors_done:
+            return
+        self._reanchors_done = due
+        # Cheap, already-in-memory sources only — no LLM/network/blocking work:
+        #   participants  = the live roster, meeting_focus = the title captured at startup,
+        #   recent_topic  = a trimmed recent human utterance from meeting_log.
+        # Any absent source stays None and the builder drops that clause.
+        block = build_reanchor_block(
+            participants=self._participant_names(),
+            meeting_focus=getattr(self._state, "meeting_focus", None),
+            recent_topic=self._recent_topic(),
+        )
+        logger.info("[reanchor] drift re-anchor at %d spoken turns", spoken)
+        await self.push_frame(
+            LLMMessagesAppendFrame(messages=[{"role": "system", "content": block}], run_llm=False),
+            direction,
+        )
+
+    async def _inject_work_graph(self, direction: FrameDirection) -> None:
+        """A2.4 speaker tier: pull what this person is connected to in the graph (their tasks /
+        meetings / team) so 'what's on my plate / what did I commit to' answer with no
+        turn-time traversal. Best-effort, injected ONCE, separate from Layer B."""
+        if self._work_injected:
+            return
+        self._work_injected = True
+        speaker = (self._spk.get("name") or "").strip()
+        if not speaker:
+            return
+        try:
+            gres = await asyncio.wait_for(
+                self._mnema.call("traverse_graph", {"from": speaker, "depth": 1}), timeout=2.0)
+            gtxt = ((gres or {}).get("content") or "").strip()
+        except Exception as e:  # noqa: BLE001 — optional
+            logger.debug("[identity] speaker graph skipped: %s", e)
+            return
+        if not gtxt:
+            return
         await self.push_frame(
             LLMMessagesAppendFrame(
                 messages=[{"role": "system", "content": (
-                    f"[Who you are speaking with] {self._identity_str} When they ask who they "
-                    f"are, their role, title, team, or what they can access, answer from this "
-                    f"directly — never refuse it as personal information." + work_block
-                )}],
+                    "[What this person is connected to — their tasks, meetings, team. Answer "
+                    "'what's on my plate / what did I commit to' from this]\n" + gtxt[:600])}],
                 run_llm=False,
             ),
             direction,
@@ -473,11 +582,15 @@ class RAGContext(FrameProcessor):
             except Exception as e:  # noqa: BLE001 — graph expansion is optional
                 logger.debug("[rag] graph expand skipped: %s", e)
 
+        # Strip markdown from the BODY so Mnema never reads markup aloud (persona §3/§5).
+        # The "[Background …]" label/framing is kept exactly as is; retrieval/selection/order
+        # are unchanged — this is a FORMAT-only pass at the single pre-injection point.
+        body = to_spoken_plaintext("\n\n---\n\n".join(blocks))
         content = (
             "[Background — stored docs + their graph relations, each labelled with its project. "
             "Docs may be OUT OF DATE; for current tasks/status/assignments call the live tools "
             "(list_project_tasks / list_recent_docs). Use naturally; don't say you looked it up]"
-            "\n\n" + "\n\n---\n\n".join(blocks)
+            "\n\n" + body
         )[:2500]   # hard token-ish cap on the injection
         await self.push_frame(
             LLMMessagesAppendFrame(
@@ -507,9 +620,78 @@ class VapTap(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
+class RecapProcessor(FrameProcessor):
+    """Config-gated boundary recap — the ONLY unprompted speech. Default OFF (both flags) →
+    pure passthrough, byte-identical to today. When enabled it speaks ONE calm intro after
+    the meeting is active (recap_on_start) and/or ONE short closing on the end signal
+    (recap_on_end), built from already-available context — NO LLM/summary call. Spoken via
+    the normal TTS path (TTSSpeakFrame → tts → web_out), plain text (to_spoken_plaintext via
+    the recap builders), so barge-in/output all apply. Placed between SilentGate and tts so
+    it sees the VAD/end signals flowing down and its speech reaches tts directly."""
+
+    def __init__(self, mnema: MnemaMCP, state) -> None:
+        super().__init__()
+        self._mnema = mnema
+        self._state = state
+        self._on_start = recap_on_start()
+        self._on_end = recap_on_end()
+        self._started_fired = False
+        self._ended_fired = False
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        # END recap: speak the closing once, just before propagating the end signal.
+        if (self._on_end and not self._ended_fired
+                and isinstance(frame, (EndFrame, CancelFrame))):
+            self._ended_fired = True
+            text = build_end_recap(getattr(self._state, "captured_items", []))
+            if text:
+                logger.info("[recap] end recap (%d items)",
+                            len(getattr(self._state, "captured_items", []) or []))
+                await self.push_frame(TTSSpeakFrame(text), FrameDirection.DOWNSTREAM)
+            await self.push_frame(frame, direction)
+            return
+        # START recap: once, after the first human finishes speaking (meeting is active and
+        # we won't talk over anyone). Reuses the existing VAD UserStoppedSpeakingFrame — no
+        # new detector.
+        if (self._on_start and not self._started_fired
+                and isinstance(frame, UserStoppedSpeakingFrame)
+                and self._has_human_participants()):
+            self._started_fired = True
+            await self._speak_start_recap()
+        await self.push_frame(frame, direction)
+
+    def _has_human_participants(self) -> bool:
+        return any(pid != self._state.bot_participant_id
+                   for pid in (self._state.participants or {}))
+
+    async def _speak_start_recap(self) -> None:
+        # Source: the Aspect 2.1 startup brief (get_god_nodes — a graph query, NOT an LLM
+        # generation). Empty → say nothing (never fabricate).
+        try:
+            res = await asyncio.wait_for(self._mnema.call("get_god_nodes", {"limit": 6}), timeout=2.0)
+            brief = ((res or {}).get("content") or "").strip()
+        except Exception as e:  # noqa: BLE001 — recap must never break the meeting
+            logger.debug("[recap] start brief fetch skipped: %s", e)
+            return
+        text = build_start_recap(brief)
+        if text:
+            logger.info("[recap] start recap")
+            await self.push_frame(TTSSpeakFrame(text), FrameDirection.DOWNSTREAM)
+
+
 async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: str) -> None:
     """One meeting = one pipeline run. Audio in from Recall, replies out via Output Audio."""
     state = BotState()
+    # Layer C meeting_focus: capture the meeting title/subject ONCE at startup from whatever
+    # the join already provides (a WS query param, else an optional env). No fetch, no
+    # per-turn cost — read from stored state. None when absent → the re-anchor drops the clause.
+    state.meeting_focus = (
+        (websocket.query_params.get("subject") or websocket.query_params.get("title")
+         or os.environ.get("MNEMA_MEETING_TITLE") or "").strip() or None
+    )
+    if state.meeting_focus:
+        logger.info("[meeting] focus captured at start: %s", state.meeting_focus)
     serializer = RecallSerializer(state)
     # A1.4: predictive turn-taking. make_vap_service() returns a no-op stub unless
     # MEETING_VAP=1 and vap_realtime is installed, so this is safe by default.
@@ -613,6 +795,7 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         aggregators.user(),     # VAD here → barge-in detection
         llm,
         SilentGate(state),      # speak only when the turn addressed the bot
+        RecapProcessor(mnema, state),  # config-gated start/end recap (default OFF → passthrough)
         tts,
         TurnMetricsLate(metrics),   # stamp LLM/TTS milestones → log p50/p95
         web_out,                # stream PCM to the Output Media page; interrupt on barge-in
