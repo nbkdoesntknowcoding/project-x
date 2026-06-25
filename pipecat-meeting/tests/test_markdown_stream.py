@@ -82,3 +82,46 @@ def test_flush_emits_unterminated_tail():
     s = SpokenStripper()
     assert s.feed("no terminator here") == []
     assert s.flush() == "no terminator here"
+
+
+# ── STEP 3: trailing service-desk sign-offs stripped, substance preserved ──
+def test_trailing_signoff_sentence_stripped():
+    out = strip_markdown_reply("Last call was end of month. Just let me know if you need the detail.")
+    assert "last call was end of month" in out.lower()
+    assert "let me know" not in out.lower()
+
+
+def test_trailing_im_here_to_help_stripped():
+    out = strip_markdown_reply("We closed zero items last sprint. I'm here to help.")
+    assert "zero items" in out.lower()
+    assert "here to help" not in out.lower()
+
+
+def test_multiple_trailing_signoffs_all_dropped():
+    out = strip_markdown_reply("Here's the status. Let me know if you need more. Happy to help!")
+    assert "status" in out.lower()
+    assert "let me know" not in out.lower() and "happy to help" not in out.lower()
+
+
+def test_would_you_like_me_to_offer_stripped():
+    out = strip_markdown_reply("The TTS decision isn't recorded yet. Would you like me to dig deeper?")
+    assert "tts decision" in out.lower()
+    assert "would you like me to" not in out.lower()
+
+
+def test_substantive_clarifying_question_preserved():
+    # the vague-ask exemplar — a real choice, NOT a formulaic closer → must survive
+    out = strip_markdown_reply("The budget item, or the timeline one?")
+    assert "budget item" in out.lower() and "timeline" in out.lower()
+
+
+def test_midreply_signoffish_phrase_not_dropped_when_followed_by_content():
+    # "let me know" mid-reply (a real request) is released because a substantive sentence follows
+    out = strip_markdown_reply("Let me know the number and I'll log it. It's not on the board yet.")
+    assert "log it" in out.lower() and "not on the board" in out.lower()
+
+
+def test_honest_fallback_line_survives():
+    # the STEP 1 forced-silence fallback must NOT be mistaken for a sign-off
+    out = strip_markdown_reply("I don't have that to hand — I can't see it from what I've got here.")
+    assert "don't have that" in out.lower()

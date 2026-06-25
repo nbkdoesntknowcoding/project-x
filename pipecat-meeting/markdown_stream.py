@@ -16,7 +16,7 @@ pipeline.py and is unit-tested via this class.
 """
 import re
 
-from text_norm import to_spoken_plaintext
+from text_norm import to_spoken_plaintext, is_signoff, strip_trailing_offer_clause
 
 # A safe flush boundary: up to and including the first sentence-ender (. ! ?) that is
 # followed by whitespace or end-of-buffer, OR the first newline. Non-greedy so we cut at
@@ -47,6 +47,11 @@ class SpokenStripper:
 
     def __init__(self) -> None:
         self._buf = ""
+        # STEP 3: completed sentences that ARE sign-offs are held here, not emitted yet — they
+        # might be trailing closers (drop) or mid-reply (a later substantive sentence releases
+        # them). At flush, anything still held is trailing → dropped. Streaming is preserved:
+        # substantive sentences are emitted immediately; only a closer is briefly delayed.
+        self._held: list[str] = []
 
     def feed(self, text: str) -> list[str]:
         if not text:
@@ -60,14 +65,27 @@ class SpokenStripper:
             seg = m.group(1)
             self._buf = self._buf[len(seg):]
             cleaned = _clean(seg)
-            if cleaned:
+            if not cleaned:
+                continue
+            if is_signoff(cleaned):
+                self._held.append(cleaned)          # hold — possibly a trailing closer
+            else:
+                for h in self._held:                # a real sentence followed → held were mid-reply
+                    out.append(h + " ")
+                self._held = []
                 out.append(cleaned + " ")
         return out
 
     def flush(self) -> str | None:
         seg, self._buf = self._buf, ""
+        self._held = []                              # any held sign-offs are trailing → drop
         cleaned = _clean(seg)
-        return cleaned or None
+        if not cleaned:
+            return None
+        cleaned = strip_trailing_offer_clause(cleaned)   # trim a trailing offer clause
+        if not cleaned or is_signoff(cleaned):           # whole tail was a closer → drop
+            return None
+        return cleaned
 
 
 def strip_markdown_reply(text: str) -> str:

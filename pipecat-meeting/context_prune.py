@@ -46,6 +46,7 @@ TRANSIENT_PREFIXES = (
     "Read what this person needs right now",
     "[A reminder, partway through]",
     "[Background",
+    "[You're being spoken to directly",   # STEP 1 addressed-directive (re-injected each turn)
 )
 
 

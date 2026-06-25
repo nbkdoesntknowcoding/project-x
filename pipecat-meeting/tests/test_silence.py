@@ -7,8 +7,31 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from silence import resolve_leading_silent  # noqa: E402
+from silence import resolve_leading_silent, finalize_forced_reply, forced_silence_fallback  # noqa: E402
 from meeting_persona import SILENT_TOKEN  # noqa: E402
+
+
+# ── STEP 1: addressed turn NEVER yields silence; non-addressed stays silent ──
+def test_forced_turn_never_silent():
+    fb = forced_silence_fallback()
+    assert fb and SILENT_TOKEN not in fb
+    # model returned pure <silent> on a forced (addressed) turn → honest fallback, not silence
+    assert finalize_forced_reply(SILENT_TOKEN, forced=True) == fb
+    assert finalize_forced_reply("", forced=True) == fb
+    assert finalize_forced_reply("   ", forced=True) == fb
+    # the fallback is itself never silence and survives the guard
+    assert finalize_forced_reply(fb, forced=True) == fb
+
+
+def test_forced_turn_keeps_real_answer():
+    real = "Last call was the end of the month."
+    assert finalize_forced_reply(real, forced=True) == real
+
+
+def test_non_addressed_turn_stays_silent():
+    # un-addressed side-chatter: empty/silent stays silent (NOT replaced by a spoken line)
+    assert finalize_forced_reply("", forced=False) == ""
+    assert finalize_forced_reply(SILENT_TOKEN, forced=False) == SILENT_TOKEN
 
 
 # ── the bug: stray sentinel on a forced turn must be stripped, not spoken ─────────

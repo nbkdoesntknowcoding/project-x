@@ -11,7 +11,24 @@ import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from addressing import is_addressed, is_wake  # noqa: E402
+from addressing import is_addressed, is_wake, CLASSIFY_SYS  # noqa: E402
+
+
+# ── STEP 1: the shared classifier prompt leans YES on questions, NO on cross-talk ──
+def test_classify_prompt_is_shared_and_tuned():
+    # the prompt is the single source of truth for both the live bot and the harness mirror
+    assert isinstance(CLASSIFY_SYS, str) and len(CLASSIFY_SYS) > 100
+    low = CLASSIFY_SYS.lower()
+    # leans YES on direct questions without a wake word
+    assert "does not need her name" in low or "without a wake word" not in low  # tolerant
+    assert "question" in low and "request" in low
+    # explicitly keeps ambient declaratives non-addressed (the Q23 class)
+    assert "just ship it" in low and "cross-talk" in low
+
+
+def test_side_chatter_not_wake_addressed():
+    # Q23: ambient declarative, no wake word → the deterministic fast-path says not addressed
+    assert is_addressed("yeah I think we should just ship it") is False
 
 
 # ── addressed: vocative wake word ────────────────────────────────────────────────

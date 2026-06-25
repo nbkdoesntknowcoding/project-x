@@ -75,6 +75,67 @@ _OPAQUE_KEYS = frozenset({
 })
 
 
+# ── STEP 3: trailing service-desk sign-off detection (output-boundary stripper) ──
+# Phrase families the persona already bans but models still reflex into at the end of a turn
+# ("…just let me know", "I'm here to help", "Would you like me to…?"). These identify a
+# CLOSER/OFFER; the stripper only DROPS them when they are TRAILING, never mid-reply.
+_SIGNOFF_PHRASES = (
+    "let me know",                      # "just let me know", "let me know if…"
+    "happy to help", "glad to help", "glad to assist", "here to help",
+    "is there anything else", "anything else i can", "anything else you",
+    "feel free to", "hope that helps", "hope this helps", "hope it helps",
+    "would you like me to", "want me to", "do you want me to", "shall i",
+    "should i look", "should i pull", "should i go", "should i dig",
+    "if you need anything", "if there's anything", "if there is anything",
+    "if you'd like", "if you would like", "if there's something else",
+)
+# A trailing offer is often a CLAUSE on the last sentence (after one of these separators).
+_CLAUSE_SEP_RE = re.compile(r"\s*(?:,|—|;| - | -- )\s*")
+
+
+def is_signoff(sentence: str) -> bool:
+    """True if a whole sentence is a service-desk closer/offer (not substantive content).
+    A genuine clarifying question that offers a real choice — 'The budget item, or the
+    timeline one?' — contains none of these phrases and is correctly NOT flagged. Note
+    'would you like me to …' (offer to act) is a closer, while 'would you like X or Y'
+    (a real choice) is not."""
+    s = (sentence or "").strip().lower().rstrip(".!?")
+    if not s:
+        return False
+    return any(p in s for p in _SIGNOFF_PHRASES)
+
+
+def strip_trailing_offer_clause(text: str) -> str:
+    """If the final clause of `text` (after the last comma / em-dash / semicolon) is a sign-off
+    offer and there is substantive content before it, drop just that trailing clause. Never
+    removes substantive content; returns `text` unchanged when there's no trailing offer."""
+    t = (text or "").rstrip()
+    if not t:
+        return text
+    parts = _CLAUSE_SEP_RE.split(t)
+    if len(parts) < 2:
+        return text
+    tail = parts[-1]
+    head = t[: t.rfind(tail)].rstrip().rstrip(",;—-").rstrip()
+    if head and len(head.split()) >= 3 and is_signoff(tail):
+        # keep the substantive head; restore a natural terminal mark
+        if not head.endswith((".", "!", "?")):
+            head += "."
+        return head
+    return text
+
+
+def looks_enumerated(text: str) -> bool:
+    """Heuristic flag (NOT a rewrite): the reply reads like an enumerated list — numbered
+    markers or 4+ very short clauses. Used only to log/flag list-cadence; we never mangle
+    meaning (a safe spoken-prose collapse needs the model, so we leave content intact)."""
+    t = text or ""
+    if re.search(r"(?:^|\s)\d+[.)]\s+\S", t):
+        return True
+    shorts = [s for s in re.split(r"[.!?]+\s+|\n+", t) if 0 < len(s.split()) <= 4]
+    return len(shorts) >= 4
+
+
 def normalize_tool_result(obj, _key: str | None = None):
     """STEP 2: recursively convert every PROSE string in a tool result to spoken plaintext,
     so raw markdown from get_doc / search_knowledge / list_recent_docs (headings, bold,

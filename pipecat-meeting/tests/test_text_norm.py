@@ -3,6 +3,32 @@ import os, sys, re
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from text_norm import to_spoken_plaintext as norm  # noqa: E402
 from text_norm import normalize_tool_result  # noqa: E402
+from text_norm import is_signoff, strip_trailing_offer_clause, looks_enumerated  # noqa: E402
+
+
+# ── STEP 3: sign-off detection ───────────────────────────────────────────────
+def test_is_signoff_families():
+    for s in ["Just let me know.", "I'm here to help.", "Happy to help!",
+              "Is there anything else I can do?", "Would you like me to look that up?",
+              "Feel free to reach out.", "Let me know if you need anything."]:
+        assert is_signoff(s), s
+    for s in ["The budget item, or the timeline one?", "Last call was end of month.",
+              "I don't have that to hand.", "It's just you in the meeting."]:
+        assert not is_signoff(s), s
+
+
+def test_strip_trailing_offer_clause():
+    out = strip_trailing_offer_clause("Last call was end of month, just let me know if you need it")
+    assert out.lower().startswith("last call was end of month") and "let me know" not in out.lower()
+    # no trailing offer → unchanged
+    keep = "The budget item, or the timeline one?"
+    assert strip_trailing_offer_clause(keep) == keep
+
+
+def test_looks_enumerated():
+    assert looks_enumerated("1. first thing 2. second thing 3. third thing")
+    assert looks_enumerated("Done. Ready. Next. Go. Now.")
+    assert not looks_enumerated("Last call was end of month — that hasn't shifted since the review.")
 
 def _no_markup(s):
     assert "#" not in s and "`" not in s and "|" not in s and ">" not in s

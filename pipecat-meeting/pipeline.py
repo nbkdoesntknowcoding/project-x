@@ -89,11 +89,14 @@ MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
 # A1.6: wake-word ("is the bot addressed") detection lives in addressing.py so it is
 # unit-testable without the heavy pipecat/LLM imports. is_addressed = the fast-path;
 # the semantic LLM classifier (_classify_addressed below) handles implicit address.
-from addressing import is_addressed as _addressed  # noqa: E402
+from addressing import is_addressed as _addressed, CLASSIFY_SYS as _CLASSIFY_SYS  # noqa: E402
 from silence import resolve_leading_silent  # noqa: E402  — pure SILENT_TOKEN gate logic
 from text_norm import to_spoken_plaintext  # noqa: E402  — strip markdown from [Background]
 from context_prune import prune_context  # noqa: E402  — STEP 1: keep per-turn context lean
 from markdown_stream import SpokenStripper  # noqa: E402  — STEP 4: strip model markdown pre-TTS
+from text_norm import looks_enumerated  # noqa: E402  — STEP 3: flag list-cadence (no mangle)
+from llm_config import resolve_model, resolve_api_key, resolve_base_url  # noqa: E402  — GPT-4.1 swap
+from silence import forced_silence_fallback  # noqa: E402  — STEP 1: never silent on a forced turn
 from recap import recap_on_start, recap_on_end, build_start_recap, build_end_recap  # noqa: E402
 from local_tools import LOCAL_TOOL_DEFINITIONS, register_local_tools  # noqa: E402  — #6 live-meeting tools
 
@@ -127,14 +130,8 @@ REANCHOR_EVERY_TURNS = int(os.environ.get("MEETING_REANCHOR_EVERY", "13"))
 # Tune via MEETING_CONTEXT_USER_TURNS; 0 disables the window (transient stripping stays on).
 CONTEXT_USER_TURNS = int(os.environ.get("MEETING_CONTEXT_USER_TURNS", "10"))
 
-_CLASSIFY_SYS = (
-    "You are the attention gate for a voice assistant named Mnema that sits silently in a "
-    "live meeting between humans. Given the latest thing someone said, decide if it is "
-    "directed AT Mnema — i.e. a question, request, or command for the assistant, or a "
-    "direct follow-up to what Mnema just said — versus the people in the room talking to "
-    "EACH OTHER. Most meeting talk is between the humans and is NOT for Mnema. When unsure, "
-    "answer NO. Reply with exactly one word: YES or NO."
-)
+# Semantic-addressing classifier prompt lives in addressing.CLASSIFY_SYS (shared with the
+# realness harness mirror so the two never drift). Imported below with is_addressed.
 
 
 def _build_user_turn_strategies():
@@ -262,12 +259,14 @@ class SilentGate(FrameProcessor):
         self._buf = ""
         self._forced = False               # this turn must be spoken (addressed / non-strict)
         self._decided: bool | None = None  # None=undecided, True=silent, False=speak
+        self._emitted = 0                  # spoken frames pushed this response (STEP 1 guarantee)
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, LLMFullResponseStartFrame):
             self._buf = ""
+            self._emitted = 0
             # _forced: non-strict mode OR an addressed turn (A1.6 per-turn force flag) means
             # THIS turn must be spoken. We still start undecided and inspect the leading
             # tokens so we can STRIP a stray "<silent>" the model may emit even on a forced
@@ -293,6 +292,7 @@ class SilentGate(FrameProcessor):
                 return  # resolved to silence — drop
             if self._decided is False:
                 await self.push_frame(frame, direction)  # already speaking — stream through
+                self._emitted += 1
                 return
             # Undecided: buffer the leading text just long enough to rule the sentinel in/out.
             self._buf += frame.text
@@ -316,6 +316,18 @@ class SilentGate(FrameProcessor):
                 logger.info("[silentgate] speaking: %s", (text or "")[:60])
             if text:
                 await self.push_frame(LLMTextFrame(text), direction)
+                self._emitted += 1
+            return
+
+        # STEP 1 guarantee: an addressed/forced turn must NEVER end silent. If the model
+        # produced nothing speakable (pure <silent> / empty), speak the honest fallback before
+        # the response closes — a direct question never returns silence.
+        if isinstance(frame, LLMFullResponseEndFrame):
+            if self._forced and self._emitted == 0:
+                logger.info("[silentgate] forced turn produced no speech — honest fallback")
+                await self.push_frame(LLMTextFrame(forced_silence_fallback()), direction)
+                self._emitted += 1
+            await self.push_frame(frame, direction)
             return
 
         await self.push_frame(frame, direction)
@@ -333,21 +345,29 @@ class SpokenOutputNormalizer(FrameProcessor):
     def __init__(self) -> None:
         super().__init__()
         self._stripper = SpokenStripper()
+        self._spoken = ""   # accumulated cleaned reply — for the list-cadence flag only
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
         if isinstance(frame, LLMFullResponseStartFrame):
             self._stripper = SpokenStripper()  # fresh buffer per response
+            self._spoken = ""
             await self.push_frame(frame, direction)
             return
         if isinstance(frame, LLMTextFrame):
             for seg in self._stripper.feed(frame.text):
+                self._spoken += seg
                 await self.push_frame(LLMTextFrame(seg), direction)
-            return  # original (possibly markdown) frame is swallowed; cleaned segs emitted
+            return  # original (possibly markdown/sign-off) frame is swallowed; cleaned segs emitted
         if isinstance(frame, LLMFullResponseEndFrame):
             tail = self._stripper.flush()
             if tail:
+                self._spoken += tail
                 await self.push_frame(LLMTextFrame(tail + " "), direction)
+            # STEP 3: damp list-cadence — FLAG only, never mangle (a safe spoken-prose collapse
+            # needs the model; mangling could change meaning). Persona + model carry the rewrite.
+            if looks_enumerated(self._spoken):
+                logger.info("[output] list-cadence flagged (not mangled): %s", self._spoken[:80])
             await self.push_frame(frame, direction)
             return
         await self.push_frame(frame, direction)
@@ -419,6 +439,7 @@ class RAGContext(FrameProcessor):
                     await self._inject_work_graph(direction)          # A2.4 speaker work-graph (once)
                     await self._inject_reanchor(direction)            # Layer C (every N spoken turns)
                     await self._inject(text, direction)               # A2.2 graph-aware grounding ([Background])
+                    await self._inject_addressed_directive(direction) # STEP 1: answer, don't go silent
                     await self._inject_speaker_modulation(direction)  # Layer B (per-turn) — closest to the user msg
         await self.push_frame(frame, direction)
 
@@ -566,6 +587,23 @@ class RAGContext(FrameProcessor):
         logger.info("[identity] speaker=%s role=%s team=%s access=%s",
                     self._spk.get("name"), self._spk.get("role"),
                     self._spk.get("team"), self._spk.get("access_level"))
+
+    async def _inject_addressed_directive(self, direction: FrameDirection) -> None:
+        """STEP 1: this turn was addressed to Mnema, so she MUST answer — never stay silent.
+        A transient per-turn system line (pruned next turn) telling the model to answer in her
+        own voice and, when she lacks the info, to say so plainly rather than emit the silence
+        token. The deterministic SilentGate fallback still guarantees no silence if the model
+        ignores this; the line just makes the right thing the model's first instinct. Persona
+        character text is untouched — this is a pipeline instruction, not Layer A/B/C."""
+        await self.push_frame(
+            LLMMessagesAppendFrame(messages=[{"role": "system", "content": (
+                "[You're being spoken to directly right now — answer in your own voice. If you "
+                "don't have the information, say so plainly, like 'I don't have that' or 'I "
+                "can't see that from here'. Never reply with only the silence token when you're "
+                "addressed.]"
+            )}], run_llm=False),
+            direction,
+        )
 
     async def _inject_speaker_modulation(self, direction: FrameDirection) -> None:
         """Layer B — the per-turn speaker-modulation block, appended FRESH each responding
@@ -876,16 +914,17 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     )
 
     # ── LLM — GPT-4o-mini with Mnema tools registered for real execution ──────
-    # A3.1: the LLM is OpenAI-compatible and swappable to a validated fast-silicon open
-    # model (Groq / Cerebras / Gemini 2.5 Flash) purely by config — tool registration is
-    # unchanged. Defaults to OpenAI gpt-4o-mini; set MEETING_LLM_BASE_URL + MEETING_LLM_MODEL
-    # (+ MEETING_LLM_API_KEY) to point at the model A3.2 validated. base_url is only passed
-    # when set, so the default path is byte-identical to before.
+    # The LLM is OpenAI-compatible. Model id comes from llm_config.resolve_model
+    # (MNEMA_LLM_MODEL → MEETING_LLM_MODEL → OPENAI_LLM_MODEL → gpt-4.1). GPT-4.1 is the
+    # locked default: reliable function-calling, 1M context, NO reasoning pause (a reasoning
+    # step would add latency that breaks voice). Key/base url reuse the existing OpenAI env
+    # wiring; the tool/function schema is sent UNCHANGED. base_url is only passed when set, so
+    # the default OpenAI path is unchanged.
     _llm_kwargs = dict(
-        api_key=os.environ.get("MEETING_LLM_API_KEY") or os.environ["OPENAI_API_KEY"],
-        model=os.environ.get("MEETING_LLM_MODEL", os.environ.get("OPENAI_LLM_MODEL", "gpt-4o-mini")),
+        api_key=resolve_api_key(os.environ),
+        model=resolve_model(os.environ),
     )
-    _llm_base_url = os.environ.get("MEETING_LLM_BASE_URL")
+    _llm_base_url = resolve_base_url(os.environ)
     if _llm_base_url:
         _llm_kwargs["base_url"] = _llm_base_url
     llm = OpenAILLMService(**_llm_kwargs)
