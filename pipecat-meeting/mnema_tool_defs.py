@@ -218,4 +218,18 @@ MNEMA_TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_meeting_brief",
+            "description": "The room-safe start brief — where we left off last time + related meetings, as plain text, ACL-scoped to what EVERYONE in the room may see. Use at the start of a meeting for 'what happened last time / where did we leave off'. Returns empty when there's nothing the whole room can hear.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "meeting_id": {"type": "string", "description": "Meeting UUID"},
+                    "recall_bot_id": {"type": "string", "description": "Recall bot id (live bot)"},
+                },
+            },
+        },
+    },
 ]

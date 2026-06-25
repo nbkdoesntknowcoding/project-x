@@ -9,8 +9,10 @@
  * Aspect-6 brief assembler (M3) uses to ACL-bound spoken output.
  */
 import { and, eq } from 'drizzle-orm';
+import { db } from '../../db/index.js';
 import { withTenant } from '../../db/with-tenant.js';
 import * as schema from '../../db/schema.js';
+import { assembleMeetingBrief } from '../../lib/meeting-brief.js';
 import type { McpAuthContext } from '../auth.js';
 
 const { meetings, meetingParticipants, projects } = schema;
@@ -86,4 +88,44 @@ export async function getMeetingContext(
       aclScope,
     },
   };
+}
+
+// ── M3 get_meeting_brief — ACL-scoped start brief ────────────────────────────────
+
+export const GET_MEETING_BRIEF_TOOL_SPEC = {
+  name: 'get_meeting_brief',
+  description: [
+    'The room-safe start brief for a meeting: where we left off last time + related meetings,',
+    'as plain spoken text. The live bot calls this at join (by recall_bot_id). It is ACL-scoped',
+    'to what EVERY attendee is allowed to see — anything outside the room\'s shared access is',
+    'excluded. Returns empty content when there is nothing the whole room may hear.',
+  ].join('\n'),
+  inputSchema: {
+    type: 'object' as const,
+    properties: {
+      meeting_id: { type: 'string', description: 'Meeting UUID.' },
+      recall_bot_id: { type: 'string', description: 'Recall bot id — the live bot lookup at join.' },
+    },
+  },
+  annotations: { readOnlyHint: true, title: 'Get the room-safe meeting start brief' },
+};
+
+export async function getMeetingBrief(
+  ctx: McpAuthContext,
+  args: Record<string, unknown>,
+): Promise<{ content: string; structuredContent: Record<string, unknown> }> {
+  const workspaceId = ctx.tenant_id;
+  const meetingId = typeof args.meeting_id === 'string' ? args.meeting_id : undefined;
+  const recallBotId = typeof args.recall_bot_id === 'string' ? args.recall_bot_id : undefined;
+  if (!meetingId && !recallBotId) {
+    return { content: '', structuredContent: { error: 'missing_id', recordCount: 0 } };
+  }
+  const [m] = await withTenant(workspaceId, tx =>
+    tx.select({ id: meetings.id }).from(meetings).where(and(
+      eq(meetings.workspaceId, workspaceId),
+      meetingId ? eq(meetings.id, meetingId) : eq(meetings.recallBotId, recallBotId!),
+    )).limit(1));
+  if (!m) return { content: '', structuredContent: { error: 'not_found', recordCount: 0 } };
+  const brief = await assembleMeetingBrief(db, workspaceId, m.id);
+  return { content: brief.text, structuredContent: { recordCount: brief.recordCount } };
 }

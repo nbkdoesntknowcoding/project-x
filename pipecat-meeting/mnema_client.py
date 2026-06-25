@@ -368,6 +368,10 @@ async def get_meeting_context(mcp: MnemaMCP, args: dict) -> dict:
     return await mcp.call("get_meeting_context", {k: v for k, v in (args or {}).items() if v})
 
 
+async def get_meeting_brief(mcp: MnemaMCP, args: dict) -> dict:
+    return await mcp.call("get_meeting_brief", {k: v for k, v in (args or {}).items() if v})
+
+
 _TOOLS = {
     "create_task": create_task,
     "create_doc": create_doc,
@@ -385,6 +389,7 @@ _TOOLS = {
     "get_surprising_connections": get_surprising_connections,
     "get_concept_context": get_concept_context,
     "get_meeting_context": get_meeting_context,
+    "get_meeting_brief": get_meeting_brief,
 }
 
 
