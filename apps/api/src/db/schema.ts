@@ -376,6 +376,45 @@ export const meetingTranscripts = pgTable(
   }),
 );
 
+/**
+ * Aspect 6 / M1 — Episodic meeting record (migration 0057). The structured, explicitly
+ * TIMESTAMPED unit the consolidation worker (M2) writes and the start-brief assembler (M3)
+ * reads. Distinct from `meetings.summary`: this is the durable episodic store (the graph is
+ * the semantic store). acl_scope is the least-privilege scope the record's spoken content
+ * may surface in (project else workspace); set on write. source_refs link back to the
+ * transcript / notes doc. Deleting a record cascades + its linked decision graph nodes are
+ * removed (right-to-be-forgotten) by deleteMeetingRecord (lib/meeting-records.ts).
+ */
+export interface MeetingCommitment { who: string; what: string }
+
+export const meetingRecords = pgTable(
+  'meeting_records',
+  {
+    id:           uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId:  uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    meetingId:    uuid('meeting_id').notNull().references(() => meetings.id, { onDelete: 'cascade' }),
+    projectId:    uuid('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    title:        text('title'),
+    participants: jsonb('participants').$type<Array<{ name?: string | null; email?: string | null; userId?: string | null }>>().notNull().default(sql`'[]'::jsonb`),
+    startedAt:    timestamp('started_at', { withTimezone: true }),
+    endedAt:      timestamp('ended_at', { withTimezone: true }),
+    summary:      text('summary'),
+    decisions:    jsonb('decisions').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    actionItems:  jsonb('action_items').$type<Array<{ text: string; owner?: string | null }>>().notNull().default(sql`'[]'::jsonb`),
+    commitments:  jsonb('commitments').$type<MeetingCommitment[]>().notNull().default(sql`'[]'::jsonb`),
+    // 'project:<uuid>' | 'workspace:<uuid>' — least-privilege scope, set on write.
+    aclScope:     text('acl_scope').notNull(),
+    sourceRefs:   jsonb('source_refs').$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:    timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    meetingUq:    unique('meeting_records_meeting_uq').on(table.meetingId),
+    workspaceIdx: index('meeting_records_workspace_idx').on(table.workspaceId),
+    projectIdx:   index('meeting_records_project_idx').on(table.projectId),
+  }),
+);
+
 // ── Org Structure + IAM (Phase A, migrations 0034–0039) ─────────────────────────
 
 /** Teams: departments / squads inside a workspace. Supports nesting (0034). */
