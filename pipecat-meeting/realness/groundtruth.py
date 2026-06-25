@@ -39,8 +39,21 @@ async def _call(mcp, name, args, timeout=6.0):
 async def build_ground_truth(mcp, state) -> dict:
     from local_tools import format_roster  # pure
     gt = {"recent_docs": [], "latest_doc": None, "post_meeting_notes": None,
-          "board_tasks": [], "roster": None, "meeting_transcript": [],
+          "board_tasks": [], "projects": [], "roster": None, "meeting_transcript": [],
           "present_facts": {}, "absent_probes": {}}
+
+    # Live per-project task state (names + status counts incl. in-progress) — captured at run
+    # start so the judge grades 'what's in progress' answers against the REAL board, not a
+    # stale empty snapshot. Now that list_projects is RLS-consistent with list_project_tasks,
+    # these counts reflect exactly what the bot can fetch.
+    proj_res = await _call(mcp, "list_projects", {})
+    for p in (proj_res.get("projects") or []):
+        if isinstance(p, dict):
+            tc = p.get("taskCounts") or {}
+            gt["projects"].append({
+                "name": p.get("name"), "slug": p.get("slug"), "id": p.get("id"),
+                "task_counts": tc, "in_progress": tc.get("in_progress", 0),
+            })
 
     # The live meeting transcript (what who-spoke / recall_what_was_said reads). Captured into
     # ground truth so reporting a line from it (e.g. 'Alex Kim said …') is correctly judged as

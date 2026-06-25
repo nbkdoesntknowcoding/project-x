@@ -90,7 +90,14 @@ def judge_ground_truth(gt: dict, q: dict, result: dict, current_docs: list) -> d
         "workspace_reference": {
             "recent_docs": [{"title": d.get("title")} for d in gt.get("recent_docs", [])[:6]],
             "board_task_titles": [t.get("title") for t in gt.get("board_tasks", [])[:8]],
-            "note": "stale snapshot — secondary to tools_returned_this_turn",
+            # live per-project in-progress counts (RLS-consistent) — grade status/board answers
+            # against THIS, so "X has 3 in progress" isn't graded against a stale empty board.
+            "project_task_state": [
+                {"project": p.get("name"), "in_progress": p.get("in_progress"),
+                 "counts": p.get("task_counts")}
+                for p in gt.get("projects", [])
+            ],
+            "note": "project_task_state is the live board; other fields may be a stale snapshot",
         },
     }
     if q["expect"].get("no_data"):
