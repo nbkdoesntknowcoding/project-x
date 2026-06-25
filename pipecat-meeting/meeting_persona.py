@@ -138,13 +138,29 @@ def build_speaker_modulation_block(
     access_level: Optional[str] = None,
 ) -> str:
     """Layer B — per-turn speaker-modulation block, verbatim from the Mnema persona doc.
-    Graceful degrade: if the speaker can't be identified (no name), drop the "[Speaking
-    now]" identity line and return only the modulation paragraph. Never emits "unknown".
-    Exposed for the later per-turn wiring; not called anywhere yet."""
+    Graceful degrade PER FIELD: any of name/role/team/access_level that is None, empty, or
+    whitespace is treated as absent, and the "[Speaking now]" identity line is composed from
+    only the present fields with correct punctuation — never an empty field, a dangling
+    comma, a stray "— , .", or " . access." with no value, and never the word "unknown".
+    No name at all → drop the whole identity line and return just the modulation paragraph.
+    The modulation paragraph itself is byte-for-byte verbatim."""
     modulation = "Read what this person needs right now and meet it — the pressure they're under, what they're really asking, how much they actually want. Adapt to the moment, never to the rank: everyone here gets the same care and the same straight answer, whether they're the founder or the newest hire. Their role tells you what's useful to them, not how much you defer. And stay yourself while you do it: calm, warm, careful, brief unless they need the full picture."
-    if not name:
+
+    def _present(v) -> bool:
+        return v is not None and str(v).strip() != ""
+
+    if not _present(name):
         return modulation
-    line = f"[Speaking now] {name} — {role or ''}, {team or ''}. {access_level or ''} access."
+
+    # "[Speaking now] {name}" + optional " — {role}, {team}" (present fields, in order) + "."
+    # + optional " {access} access."
+    line = f"[Speaking now] {str(name).strip()}"
+    role_team = [str(v).strip() for v in (role, team) if _present(v)]
+    if role_team:
+        line += " — " + ", ".join(role_team)
+    line += "."
+    if _present(access_level):
+        line += f" {str(access_level).strip()} access."
     return f"{line}\n\n{modulation}"
 
 

@@ -120,3 +120,49 @@ def test_dedup_get_none_key_or_disabled():
     cache = {"k": (1.0, "r")}
     assert mnema_client._dedup_get(cache, None, now=1.0, ttl=8.0) is None
     assert mnema_client._dedup_get(cache, "k", now=1.0, ttl=0.0) is None  # ttl=0 disables
+
+
+# ── whoami identity resolution → Layer B fields (structured + sentence) ───────────
+def test_whoami_structured_fills_all_fields():
+    res = {"identified": True, "name": "Nischay B K", "email": "n@x.io",
+           "title": "Founder & CEO", "role": "Founder", "role_slug": "founder",
+           "team": "Leadership", "department": "Leadership", "workspace_role": "owner"}
+    r = mnema_client.parse_whoami_identity(res)
+    assert r == {"name": "Nischay B K", "role": "Founder & CEO",
+                 "team": "Leadership", "access_level": "owner"}
+
+
+def test_whoami_sentence_parsed_to_fields():
+    res = {"content": "You are Nischay B K, Founder & CEO, on the Leadership team, in "
+                      "Leadership. As a workspace owner, you have full access to everything "
+                      "in the workspace."}
+    r = mnema_client.parse_whoami_identity(res)
+    assert r == {"name": "Nischay B K", "role": "Founder & CEO",
+                 "team": "Leadership", "access_level": "owner"}
+
+
+def test_whoami_sentence_partial_only_present_fields():
+    # name + role, no team/access stated → role kept, team/access None
+    res = {"content": "You are Alex Kim, Engineer."}
+    r = mnema_client.parse_whoami_identity(res)
+    assert r == {"name": "Alex Kim", "role": "Engineer", "team": None, "access_level": None}
+
+
+def test_whoami_name_only_sentence():
+    res = {"content": "You are Sam."}
+    r = mnema_client.parse_whoami_identity(res)
+    assert r == {"name": "Sam", "role": None, "team": None, "access_level": None}
+
+
+def test_whoami_unidentified_falls_back_to_attribution_name():
+    # identified:false → no content/structured name → attribution name, rest None
+    res = {"identified": False}
+    r = mnema_client.parse_whoami_identity(res, fallback_name="Nischay B K")
+    assert r == {"name": "Nischay B K", "role": None, "team": None, "access_level": None}
+
+
+def test_whoami_no_guessing_blank_result():
+    r = mnema_client.parse_whoami_identity({}, fallback_name=None)
+    assert r == {"name": None, "role": None, "team": None, "access_level": None}
+    # never invents a default like "member" or "unknown"
+    assert "unknown" not in str(r).lower() and "member" not in str(r).lower()
