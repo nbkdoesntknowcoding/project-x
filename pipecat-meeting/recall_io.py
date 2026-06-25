@@ -89,6 +89,9 @@ class BotState:
         # it hits the cap the handler short-circuits with a "answer with what you have" note
         # instead of letting the model loop tools + narrate "having trouble retrieving…".
         self.tool_calls_this_turn: int = 0
+        # Per-tool-name call counts this turn — the fan-out guard (one tool called once per
+        # project). Reset alongside tool_calls_this_turn each addressed turn.
+        self.tool_name_counts: dict = {}
         # A1.4: optional VAP predictive turn-taking service (set in pipeline.py; a no-op
         # stub unless MEETING_VAP=1 + vap_realtime installed). Fed the human stream + bot
         # TTS; exposes latest_result for the turn logic. None until wired.

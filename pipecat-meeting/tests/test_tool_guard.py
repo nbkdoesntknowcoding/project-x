@@ -5,7 +5,35 @@ import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from tool_guard import over_cap, cap_result, is_failure, annotate_failure  # noqa: E402
+from tool_guard import (  # noqa: E402
+    over_cap, cap_result, is_failure, annotate_failure, over_same_tool_cap, same_tool_cap_result,
+)
+
+
+# ── STEP 1: per-tool fan-out cap (list_project_tasks once per project) ──
+def test_same_tool_cap_blocks_fanout():
+    cap = 2
+    counts, real, blocked = {}, 0, 0
+    for project in ["p1", "p2", "p3", "p4", "p5"]:
+        name = "list_project_tasks"
+        if over_same_tool_cap(counts.get(name, 0), cap):
+            blocked += 1
+            continue
+        counts[name] = counts.get(name, 0) + 1
+        real += 1
+    assert real == 2 and blocked == 3            # hard-capped at 2, rest short-circuited
+    msg = same_tool_cap_result("list_project_tasks", cap)
+    assert msg["capped"] and "already called list_project_tasks" in msg["note"]
+    assert "do not call it again" in msg["note"].lower() or "do not search again" in msg["note"].lower()
+
+
+def test_same_tool_cap_allows_diverse_chain():
+    cap = 2
+    counts = {}
+    for name in ["list_projects", "search_knowledge", "get_doc"]:
+        assert not over_same_tool_cap(counts.get(name, 0), cap)  # different tools never capped
+        counts[name] = counts.get(name, 0) + 1
+    assert not over_same_tool_cap(0, 0)          # cap<=0 disables
 
 
 def test_over_cap_threshold_and_disable():

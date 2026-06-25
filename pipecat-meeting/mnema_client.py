@@ -29,7 +29,9 @@ from mcp.client.streamable_http import streamablehttp_client
 
 from recall_io import BotState, current_asker
 from text_norm import normalize_tool_result  # STEP 2: spoken-plaintext tool results
-from tool_guard import over_cap, cap_result, is_failure, annotate_failure  # STEP 3: anti-thrash
+from tool_guard import (  # STEP 3 anti-thrash + STEP 1 fan-out guard
+    over_cap, cap_result, is_failure, annotate_failure, over_same_tool_cap, same_tool_cap_result,
+)
 
 logger = logging.getLogger("pipecat-meeting.mnema")
 
@@ -450,6 +452,9 @@ _recent_calls: "dict[str, tuple[float, object]]" = {}
 # search → fetch the doc) but it bites a runaway loop, short-circuiting further calls with
 # "answer with what you have". 0 disables. Tunable via MEETING_MAX_TOOLS_PER_TURN.
 _MAX_TOOLS_PER_TURN = int(os.environ.get("MEETING_MAX_TOOLS_PER_TURN", "6"))
+# STEP 1: cap on calls to a SINGLE tool within one turn (the fan-out guard). 2 lets a tool be
+# retried once with different args; a 3rd same-tool call (per-project sweep) is short-circuited.
+_MAX_SAME_TOOL_PER_TURN = int(os.environ.get("MEETING_MAX_SAME_TOOL_PER_TURN", "2"))
 
 
 def _dedup_get(cache: dict, key, now: float, ttl: float):
@@ -484,7 +489,20 @@ def _make_handler(name, fn, mcp: MnemaMCP):
                         name, _MAX_TOOLS_PER_TURN)
             await params.result_callback(cap_result(_MAX_TOOLS_PER_TURN))
             return
+        # STEP 1 fan-out guard: cap REPEATED calls to the SAME tool in one turn (the model
+        # calling list_project_tasks once per project). The cross-project view is already in
+        # list_projects' counts, so further per-project calls are thrash.
         if state is not None:
+            counts = getattr(state, "tool_name_counts", None)
+            if counts is None:
+                counts = {}
+                state.tool_name_counts = counts
+            if over_same_tool_cap(counts.get(name, 0), _MAX_SAME_TOOL_PER_TURN):
+                logger.info("[mnema-tool] %s fan-out capped (>%d same-tool calls this turn)",
+                            name, _MAX_SAME_TOOL_PER_TURN)
+                await params.result_callback(same_tool_cap_result(name, _MAX_SAME_TOOL_PER_TURN))
+                return
+            counts[name] = counts.get(name, 0) + 1
             state.tool_calls_this_turn = getattr(state, "tool_calls_this_turn", 0) + 1
         try:
             result = await fn(mcp, args)

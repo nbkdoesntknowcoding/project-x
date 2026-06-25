@@ -456,8 +456,9 @@ class RAGContext(FrameProcessor):
         Layer A + the one-shot briefs are preserved by prune_context (their markers aren't
         transient); tool_call/tool-result pairs are never split (cuts at user boundaries)."""
         # STEP 3: new addressed turn → reset the per-turn tool-call budget so the cap counts
-        # only THIS turn's calls.
+        # only THIS turn's calls. STEP 1 (fan-out): also reset the per-tool-name counts.
         self._state.tool_calls_this_turn = 0
+        self._state.tool_name_counts = {}
         ctx = self._context
         if ctx is None:
             return

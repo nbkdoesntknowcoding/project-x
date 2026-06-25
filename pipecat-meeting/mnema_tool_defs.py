@@ -58,7 +58,7 @@ MNEMA_TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "list_project_tasks",
-            "description": "List a live task board (what's in progress, in review, done, etc.). Use for questions about tasks, status, the latest build, or what moved — this reflects today's board, not docs. Pass project (id or slug, from list_projects) to scope to one project.",
+            "description": "List the live task board (what's in progress, in review, done, etc.). Use for questions about tasks, status, the latest build, or what moved — this reflects today's board, not docs. For a WHOLE-BOARD or 'what's in progress across everything' question, call this ONCE with no project (and a status if you want, e.g. in_progress) to get the full board in one call — do NOT call it once per project. The per-project in-progress counts are ALREADY in list_projects, so trust those instead of sweeping each project. Pass project (id or slug) only when the user asked about ONE specific project.",
             "parameters": {
                 "type": "object",
                 "properties": {

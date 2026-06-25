@@ -38,6 +38,23 @@ def cap_result(cap: int) -> dict:
             "note": f"Already checked {cap} things this turn. " + _NO_MENTION}
 
 
+def over_same_tool_cap(count: int, cap: int) -> bool:
+    """True once ONE tool has been called `cap` times in a single turn (cap <= 0 disables).
+    This is the fan-out guard: gpt-4.1 answers a board/status question by calling
+    list_project_tasks once PER project (5+ calls). The cross-project view is already in the
+    list_projects counts, so repeating the same tool per project is wasted thrash."""
+    return cap > 0 and count >= cap
+
+
+def same_tool_cap_result(name: str, cap: int) -> dict:
+    """Returned INSTEAD of a repeated same-tool call once its per-turn cap is hit — tells the
+    model it already has what that tool returns and to answer from it, not fan out further."""
+    return {"capped": True,
+            "note": (f"You've already called {name} {cap} times this turn — you have what you "
+                     f"need. Answer from the results you already have (the per-project counts "
+                     f"from list_projects are enough); do not call it again. " + _NO_MENTION)}
+
+
 def is_failure(result: Any) -> bool:
     """True if a tool result is an error or empty — i.e. it gave the model nothing useful."""
     if result is None:
