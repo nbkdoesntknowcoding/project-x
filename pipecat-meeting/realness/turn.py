@@ -41,8 +41,9 @@ from meeting_persona import (
 from context_prune import prune_context
 from text_norm import to_spoken_plaintext
 from markdown_stream import SpokenStripper
-from silence import resolve_leading_silent
-from addressing import is_addressed
+from silence import resolve_leading_silent, finalize_forced_reply
+from addressing import is_addressed, CLASSIFY_SYS
+from llm_config import resolve_model, resolve_api_key, resolve_base_url
 from mnema_client import MnemaMCP, register_mnema_tools, parse_whoami_identity
 from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS
 from local_tools import LOCAL_TOOL_DEFINITIONS, register_local_tools
@@ -89,10 +90,11 @@ class _Params:
 
 
 def _model_kwargs():
-    api_key = os.environ.get("MEETING_LLM_API_KEY") or os.environ["OPENAI_API_KEY"]
-    model = os.environ.get("MEETING_LLM_MODEL", os.environ.get("OPENAI_LLM_MODEL", "gpt-4o-mini"))
-    base_url = os.environ.get("MEETING_LLM_BASE_URL")
-    kw = {"api_key": api_key}
+    # Shared llm_config so the harness measures the SAME model the live bot uses (GPT-4.1 by
+    # default via MNEMA_LLM_MODEL). Tool schema sent unchanged.
+    model = resolve_model(os.environ)
+    kw = {"api_key": resolve_api_key(os.environ)}
+    base_url = resolve_base_url(os.environ)
     if base_url:
         kw["base_url"] = base_url
     return model, kw
@@ -138,14 +140,7 @@ class TurnRunner:
                 model=os.environ.get("MEETING_CLASSIFIER_MODEL", "gpt-4o-mini"),
                 max_tokens=1, temperature=0,
                 messages=[
-                    {"role": "system", "content": (
-                        "You are the attention gate for a voice assistant named Mnema that sits "
-                        "silently in a live meeting between humans. Given the latest thing someone "
-                        "said, decide if it is directed AT Mnema — a question, request, or command "
-                        "for the assistant, or a direct follow-up to what Mnema just said — versus "
-                        "the people in the room talking to EACH OTHER. Most meeting talk is between "
-                        "the humans and is NOT for Mnema. When unsure, answer NO. Reply with exactly "
-                        "one word: YES or NO.")},
+                    {"role": "system", "content": CLASSIFY_SYS},  # shared w/ live bot — no drift
                     {"role": "user", "content": f'Latest utterance: "{text}"\nDirected at Mnema?'},
                 ]), timeout=4.0)
             return (res.choices[0].message.content or "").strip().lower().startswith("y")
@@ -288,6 +283,15 @@ class TurnRunner:
             "\n\n" + body)[:2500]
         self.messages.append({"role": "system", "content": content})
 
+    def _addressed_directive(self):
+        # STEP 1 mirror of RAGContext._inject_addressed_directive — this turn is addressed, so
+        # answer; never reply with only the silence token.
+        self.messages.append({"role": "system", "content": (
+            "[You're being spoken to directly right now — answer in your own voice. If you "
+            "don't have the information, say so plainly, like 'I don't have that' or 'I can't "
+            "see that from here'. Never reply with only the silence token when you're addressed.]"
+        )})
+
     def _speaker_block(self):
         block = build_speaker_modulation_block(
             self._spk.get("name"), self._spk.get("role"),
@@ -350,13 +354,15 @@ class TurnRunner:
         self.state.tool_calls_this_turn = 0
         self.messages = prune_context(self.messages, max_user_turns=_CONTEXT_USER_TURNS)
 
-        # 3) injections in the live order: once-briefs → reanchor → [Background] → [Speaking now]
+        # 3) injections in the live order: once-briefs → reanchor → [Background] →
+        #    addressed-directive → [Speaking now]
         await self._meeting_context()
         await self._resolve_identity(speaker_name)
         await self._startup_brief()
         await self._work_graph()
         self._reanchor()
         await self._background(text)
+        self._addressed_directive()        # STEP 1: answer, don't go silent
         self._speaker_block()
 
         # 4) append the user turn + run the real LLM tool loop
@@ -371,13 +377,18 @@ class TurnRunner:
             spoken = stripped if stripped is not None else raw
             self.state.spoken_turns = getattr(self.state, "spoken_turns", 0) + 1
 
-        # 6) SpokenOutputNormalizer: strip any model markdown right before TTS
+        # 6) SpokenOutputNormalizer: strip markdown + trailing sign-offs right before TTS
         stripper = SpokenStripper()
         parts = stripper.feed(spoken)
         tail = stripper.flush()
         if tail:
             parts.append(tail)
         clean = "".join(parts).strip()
+
+        # 7) STEP 1 guarantee: an addressed (forced) turn must never be silent — if the model
+        # produced nothing speakable (or the sign-off strip emptied it), speak the honest
+        # fallback (mirrors SilentGate's forced End-fallback).
+        clean = finalize_forced_reply(clean, forced=True)
 
         # record the assistant turn into the running context (like aggregators.assistant())
         self.messages.append({"role": "assistant", "content": clean})

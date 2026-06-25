@@ -75,6 +75,15 @@ def test_silence():
     assert C.score_silence("Sure, I think shipping it makes sense.")[0] == 0
 
 
+def test_silence_scored_once_not_double_counted():
+    # harness patch: a silent answer is scored on ONE axis, not GROUNDED 0 + HUMAN 0
+    assert C.is_silent_answer("<silent>") and C.is_silent_answer("") and C.is_silent_answer("  ")
+    assert not C.is_silent_answer("It's just you.")
+    # non-addressed side-chatter silence = appropriate (2); addressed silence = fail (0), once
+    assert C.score_silence_axis(addressed_expected=False)[0] == 2
+    assert C.score_silence_axis(addressed_expected=True)[0] == 0
+
+
 # ── completeness ─────────────────────────────────────────────────────────────
 def test_completeness():
     parts = Q.by_id("Q16")["expect"]["multipart"]

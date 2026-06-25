@@ -91,6 +91,21 @@ def score_silence(text: str):
     return 0, f"spoke when it should have stayed silent: {t[:60]!r}"
 
 
+def is_silent_answer(text: str) -> bool:
+    """True if an answer is silence (the sentinel or empty)."""
+    return (text or "").strip() in ("", SILENT_TOKEN)
+
+
+def score_silence_axis(addressed_expected: bool):
+    """Harness patch: a SILENT answer is scored ONCE, on the silence/appropriateness axis —
+    never double-counted as GROUNDED 0 + HUMAN_DELIVERY 0 (silence isn't 'ungrounded' or
+    'inhuman', it's either appropriate or not). Side-chatter (non-addressed) silence = 2;
+    silence on a turn that should be answered = 0."""
+    if not addressed_expected:
+        return 2, "correctly stayed silent (non-addressed side-chatter)"
+    return 0, "silence on an addressed/direct question (should have answered honestly)"
+
+
 # ── completeness (multi-part) ────────────────────────────────────────────────
 def score_completeness(text: str, parts: list):
     """parts = list of synonym-groups (each a list of acceptable lowercase substrings); a

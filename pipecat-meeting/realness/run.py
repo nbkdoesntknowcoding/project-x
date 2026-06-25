@@ -103,6 +103,19 @@ def judge_ground_truth(gt: dict, q: dict, result: dict, current_docs: list) -> d
 async def score_row(q, result, gt, judge_client, known_tools, current_docs=None):
     text = result["text"]
     tool_calls = result["tool_calls"]
+
+    # Harness patch: a SILENT answer is scored ONCE on the appropriateness axis — not
+    # triple-counted as GROUNDED 0 + HONEST 0 + HUMAN_DELIVERY 0. (After the STEP 1 bot fix an
+    # addressed turn should never be silent; this keeps the rare case honest, and keeps Q23's
+    # correct silence a clean single pass.)
+    if C.is_silent_answer(text):
+        addressed_expected = q["expect"].get("addressed", True) is not False
+        sc, why = C.score_silence_axis(addressed_expected)
+        return {"id": q["id"], "text": q["text"], "category": q["category"],
+                "answer": text, "tool_calls": tool_calls,
+                "scores": {"SILENCE": {"score": sc, "reason": why, "source": "deterministic"}},
+                "human_heuristic": None}
+
     scores = {}
     judge_jobs = []  # (rubric, coroutine)
 
