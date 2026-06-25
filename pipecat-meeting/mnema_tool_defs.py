@@ -204,32 +204,13 @@ MNEMA_TOOL_DEFINITIONS = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_meeting_context",
-            "description": "Identity of a meeting — its title, project, and participants. Use for 'what meeting is this', 'which project is this meeting for', 'who's on the invite'. Look up by meeting_id (or the live bot's recall_bot_id).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "meeting_id": {"type": "string", "description": "Meeting UUID"},
-                    "recall_bot_id": {"type": "string", "description": "Recall bot id (live bot)"},
-                },
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_meeting_brief",
-            "description": "The room-safe start brief — where we left off last time + related meetings, as plain text, ACL-scoped to what EVERYONE in the room may see. Use at the start of a meeting for 'what happened last time / where did we leave off'. Returns empty when there's nothing the whole room can hear.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "meeting_id": {"type": "string", "description": "Meeting UUID"},
-                    "recall_bot_id": {"type": "string", "description": "Recall bot id (live bot)"},
-                },
-            },
-        },
-    },
+    # NOTE: get_meeting_context (M0) and get_meeting_brief (M3/M5) are deliberately NOT
+    # advertised to the model. The pipeline already fetches both itself and injects them as
+    # context (RAGContext._ensure_meeting_context and _inject_startup_brief / RecapProcessor
+    # call mnema.call(...) directly), so the meeting's title/project/participants and the
+    # "where we left off" brief are ALREADY in the model's context — it never needs to call
+    # a tool for them. Advertising them caused the live tool-thrash (2026-06-25): the model
+    # reached for get_meeting_context, the backend returned -32602 "tool not found", and it
+    # looped into "I'm having trouble retrieving…" filler. The handlers stay registered in
+    # mnema_client._TOOLS so the pipeline's own direct calls keep working.
 ]

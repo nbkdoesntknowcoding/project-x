@@ -84,6 +84,11 @@ class BotState:
         # addressing classifier ("recently engaged" → a bare follow-up is probably still ours).
         self.force_next_response: bool = False
         self.last_response_monotonic: float = 0.0
+        # STEP 3: per-turn tool-call counter, reset at the start of each addressed user turn
+        # (RAGContext) and incremented per Mnema tool call (mnema_client._make_handler). Once
+        # it hits the cap the handler short-circuits with a "answer with what you have" note
+        # instead of letting the model loop tools + narrate "having trouble retrieving…".
+        self.tool_calls_this_turn: int = 0
         # A1.4: optional VAP predictive turn-taking service (set in pipeline.py; a no-op
         # stub unless MEETING_VAP=1 + vap_realtime installed). Fed the human stream + bot
         # TTS; exposes latest_result for the turn logic. None until wired.

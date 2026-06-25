@@ -92,6 +92,8 @@ MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
 from addressing import is_addressed as _addressed  # noqa: E402
 from silence import resolve_leading_silent  # noqa: E402  — pure SILENT_TOKEN gate logic
 from text_norm import to_spoken_plaintext  # noqa: E402  — strip markdown from [Background]
+from context_prune import prune_context  # noqa: E402  — STEP 1: keep per-turn context lean
+from markdown_stream import SpokenStripper  # noqa: E402  — STEP 4: strip model markdown pre-TTS
 from recap import recap_on_start, recap_on_end, build_start_recap, build_end_recap  # noqa: E402
 from local_tools import LOCAL_TOOL_DEFINITIONS, register_local_tools  # noqa: E402  — #6 live-meeting tools
 
@@ -117,6 +119,13 @@ _CLASSIFIER_MODEL = os.environ.get("MEETING_CLASSIFIER_MODEL", "gpt-4o-mini")
 # Layer C drift re-anchor: re-state the persona character every N of Mnema's OWN spoken
 # turns to counter long-context drift. Transient per-turn injection (not cached).
 REANCHOR_EVERY_TURNS = int(os.environ.get("MEETING_REANCHOR_EVERY", "13"))
+
+# STEP 1: rolling conversation window. Keep the last N user turns in the LLM context
+# instead of replaying the whole meeting each turn (which buried the persona). System
+# context — Layer A + the one-shot briefs — is always preserved; only old user/assistant
+# turns age out, and only at user-turn boundaries (tool_call/result pairs never split).
+# Tune via MEETING_CONTEXT_USER_TURNS; 0 disables the window (transient stripping stays on).
+CONTEXT_USER_TURNS = int(os.environ.get("MEETING_CONTEXT_USER_TURNS", "10"))
 
 _CLASSIFY_SYS = (
     "You are the attention gate for a voice assistant named Mnema that sits silently in a "
@@ -312,6 +321,38 @@ class SilentGate(FrameProcessor):
         await self.push_frame(frame, direction)
 
 
+class SpokenOutputNormalizer(FrameProcessor):
+    """STEP 4: the output-side safety net. Every LLMTextFrame the model streams toward TTS
+    passes through SpokenStripper, which converts any stray markdown the model emitted
+    (despite the persona forbidding it — the log caught "- **Title:** …") into spoken
+    plaintext right before synthesis. Sentence/line-buffered, so first-sentence streaming is
+    preserved and no extra latency is added. Non-text frames (TTSSpeakFrame from the recap,
+    control frames) pass straight through. Reset on each LLM response so buffers never leak
+    between turns."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._stripper = SpokenStripper()
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, LLMFullResponseStartFrame):
+            self._stripper = SpokenStripper()  # fresh buffer per response
+            await self.push_frame(frame, direction)
+            return
+        if isinstance(frame, LLMTextFrame):
+            for seg in self._stripper.feed(frame.text):
+                await self.push_frame(LLMTextFrame(seg), direction)
+            return  # original (possibly markdown) frame is swallowed; cleaned segs emitted
+        if isinstance(frame, LLMFullResponseEndFrame):
+            tail = self._stripper.flush()
+            if tail:
+                await self.push_frame(LLMTextFrame(tail + " "), direction)
+            await self.push_frame(frame, direction)
+            return
+        await self.push_frame(frame, direction)
+
+
 class RAGContext(FrameProcessor):
     """Ground answers in the knowledge graph. When the bot is addressed ("Mnema, …"),
     retrieve top-k from Mnema search_docs and inject it as system context *before* the
@@ -319,10 +360,12 @@ class RAGContext(FrameProcessor):
     Only fires when addressed (cheap + matches the silent-unless-addressed persona) and
     graceful-degrades on any error/timeout. Requires a live MNEMA_API_KEY."""
 
-    def __init__(self, mnema: MnemaMCP, state) -> None:
+    def __init__(self, mnema: MnemaMCP, state, context=None) -> None:
         super().__init__()
         self._mnema = mnema
         self._state = state
+        self._context = context                # LLMContext — pruned each turn (STEP 1)
+        self._prune_warned = False             # log the prune-API mismatch at most once
         self._spk_resolved = False             # whoami identity resolved + cached once
         self._spk: dict = {}                   # cached {name, role, team, access_level} for Layer B
         self._work_injected = False            # A2.4 speaker work-graph injected once
@@ -359,19 +402,55 @@ class RAGContext(FrameProcessor):
                         self._state.force_next_response = True
                         addressed = True
                         logger.info("[gate] classifier: addressed — %s", text[:60])
-                # Per-turn context order, after the cached Layer A prefix:
-                #   Layer B speaker block → [Layer C re-anchor, only on the trigger turn] →
-                #   startup brief → speaker work-graph → [Background]. Layer B + grounding are
-                #   per RESPONDING turn; brief/work-graph once; Layer C transient on triggers.
+                # STEP 1 per-turn context order, after the cached Layer A prefix and the
+                # one-shot briefs. First PRUNE last turn's transient blocks + bound history,
+                # then inject this turn's fresh blocks so the persona stays close to the live
+                # question with NO duplicate system blocks:
+                #   (once) startup brief → speaker work-graph
+                #   [Layer C re-anchor, only on the trigger turn]
+                #   [Background] (grounding) → Layer B "[Speaking now]" (LAST, nearest the
+                #   user message). Layer B + grounding are per RESPONDING turn; brief/work-
+                #   graph once; Layer C transient on triggers.
                 if addressed:
+                    self._prune_turn_context()                        # STEP 1: drop stale blocks + bound window
                     await self._ensure_meeting_context()              # M0: meeting id/title/project (once)
                     await self._ensure_identity_resolved()            # whoami → cache (once)
-                    await self._inject_speaker_modulation(direction)  # Layer B (per-turn)
-                    await self._inject_reanchor(direction)            # Layer C (every N spoken turns)
                     await self._inject_startup_brief(direction)       # A2.1 workspace brief (once)
                     await self._inject_work_graph(direction)          # A2.4 speaker work-graph (once)
-                    await self._inject(text, direction)               # A2.2 graph-aware grounding
+                    await self._inject_reanchor(direction)            # Layer C (every N spoken turns)
+                    await self._inject(text, direction)               # A2.2 graph-aware grounding ([Background])
+                    await self._inject_speaker_modulation(direction)  # Layer B (per-turn) — closest to the user msg
         await self.push_frame(frame, direction)
+
+    def _prune_turn_context(self) -> None:
+        """STEP 1: at the START of an addressed turn, drop the PREVIOUS turn's transient
+        system blocks (Layer B '[Speaking now]', Layer C re-anchor, '[Background]') and
+        bound the conversation to the last N user turns — BEFORE this turn's fresh blocks
+        are injected. Net effect: exactly one of each transient block survives, sitting
+        next to the live question, and Layer A stays near the top instead of being buried.
+
+        Operates directly on the shared LLMContext message list (get_messages/set_messages,
+        verified against pipecat 1.2.1). Fully guarded: any API mismatch logs ONCE and
+        no-ops, so this can never block the meeting (same degrade contract as the injects).
+        Layer A + the one-shot briefs are preserved by prune_context (their markers aren't
+        transient); tool_call/tool-result pairs are never split (cuts at user boundaries)."""
+        # STEP 3: new addressed turn → reset the per-turn tool-call budget so the cap counts
+        # only THIS turn's calls.
+        self._state.tool_calls_this_turn = 0
+        ctx = self._context
+        if ctx is None:
+            return
+        try:
+            msgs = ctx.get_messages()
+            pruned = prune_context(msgs, max_user_turns=CONTEXT_USER_TURNS)
+            if len(pruned) != len(msgs):
+                ctx.set_messages(pruned)
+                logger.info("[ctx] pruned %d → %d messages (window=%d turns)",
+                            len(msgs), len(pruned), CONTEXT_USER_TURNS)
+        except Exception as e:  # noqa: BLE001 — never block the meeting on context hygiene
+            if not self._prune_warned:
+                self._prune_warned = True
+                logger.warning("[ctx] prune skipped (LLMContext API mismatch?): %s", e)
 
     async def _inject_startup_brief(self, direction: FrameDirection) -> None:
         """A2.1 startup tier: give the bot a standing model of the workspace — its central
@@ -874,11 +953,12 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
         stt,
         NoiseGate(),            # drop sub-3-char STT noise before it reaches the LLM
         TurnMetricsEarly(metrics),  # stamp end-of-user-speech
-        RAGContext(mnema, state),  # track addressing + inject KG context when addressed
+        RAGContext(mnema, state, context),  # track addressing + inject KG context when addressed (STEP 1: prunes context)
         aggregators.user(),     # VAD here → barge-in detection
         llm,
         SilentGate(state),      # speak only when the turn addressed the bot
         RecapProcessor(mnema, state),  # config-gated start/end recap (default OFF → passthrough)
+        SpokenOutputNormalizer(),  # STEP 4: strip any model-emitted markdown right before TTS
         tts,
         TurnMetricsLate(metrics),   # stamp LLM/TTS milestones → log p50/p95
         web_out,                # stream PCM to the Output Media page; interrupt on barge-in

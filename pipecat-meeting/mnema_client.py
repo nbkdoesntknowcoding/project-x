@@ -28,6 +28,8 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 from recall_io import BotState, current_asker
+from text_norm import normalize_tool_result  # STEP 2: spoken-plaintext tool results
+from tool_guard import over_cap, cap_result, is_failure, annotate_failure  # STEP 3: anti-thrash
 
 logger = logging.getLogger("pipecat-meeting.mnema")
 
@@ -444,6 +446,11 @@ def _trim_for_context(result):
 _DEDUP_TTL = float(os.environ.get("MEETING_TOOL_DEDUP_SEC", "8"))
 _recent_calls: "dict[str, tuple[float, object]]" = {}
 
+# STEP 3: per-turn tool-call cap. Generous enough for a real chain (resolve project →
+# search → fetch the doc) but it bites a runaway loop, short-circuiting further calls with
+# "answer with what you have". 0 disables. Tunable via MEETING_MAX_TOOLS_PER_TURN.
+_MAX_TOOLS_PER_TURN = int(os.environ.get("MEETING_MAX_TOOLS_PER_TURN", "6"))
+
 
 def _dedup_get(cache: dict, key, now: float, ttl: float):
     """Return the cached result for key if still within ttl, else None."""
@@ -468,12 +475,31 @@ def _make_handler(name, fn, mcp: MnemaMCP):
             logger.info("[mnema-tool] %s deduped (identical call within %.0fs)", name, _DEDUP_TTL)
             await params.result_callback(cached)
             return
+        # STEP 3: per-turn cap. Once this turn has spent its tool budget, stop calling and
+        # tell the model to answer with what it has — kills the "5 tools then 'having
+        # trouble retrieving…'" loop from the live log. Replayed dedup hits above don't count.
+        state = getattr(mcp, "_state", None)
+        if state is not None and over_cap(getattr(state, "tool_calls_this_turn", 0), _MAX_TOOLS_PER_TURN):
+            logger.info("[mnema-tool] %s capped (>%d calls this turn) — answer with what you have",
+                        name, _MAX_TOOLS_PER_TURN)
+            await params.result_callback(cap_result(_MAX_TOOLS_PER_TURN))
+            return
+        if state is not None:
+            state.tool_calls_this_turn = getattr(state, "tool_calls_this_turn", 0) + 1
         try:
             result = await fn(mcp, args)
         except Exception as e:  # noqa: BLE001
             logger.exception("[mnema-tool] %s failed: %s", name, e)
             result = {"success": False, "error": str(e)}
-        trimmed = _trim_for_context(result)
+        # STEP 3: a single failed/empty lookup gets a terse "answer with what you have, don't
+        # mention tools" nudge so one miss never becomes a retry storm or mechanics narration.
+        if is_failure(result):
+            result = annotate_failure(result)
+        # STEP 2: strip markdown from the result BEFORE it enters the LLM context, so the
+        # model never sees (and reads aloud) get_doc's "# Heading / **bold** / - bullet"
+        # markup. Same normalizer as the [Background] block; opaque id/token/path values
+        # are preserved so follow-up tool calls still work.
+        trimmed = normalize_tool_result(_trim_for_context(result))
         if dedup_key is not None and _DEDUP_TTL > 0:
             _recent_calls[dedup_key] = (now, trimmed)
             if len(_recent_calls) > 256:  # prune expired entries to stay bounded

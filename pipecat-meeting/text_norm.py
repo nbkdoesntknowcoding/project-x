@@ -62,3 +62,35 @@ def to_spoken_plaintext(s: str) -> str:
     text = _MULTISPACE_RE.sub(" ", text)
     text = _MULTIBLANK_RE.sub("\n\n", text)
     return text.strip()
+
+
+# Keys whose VALUES are opaque machine identifiers the model passes back into later tool
+# calls — never prose. We skip normalizing these so a UUID / token / path is preserved
+# byte-exact (to_spoken_plaintext wouldn't usually alter them, but skipping is safer than
+# relying on that). Everything else that is a string IS spoken text and gets normalized.
+_OPAQUE_KEYS = frozenset({
+    "id", "ids", "doc_id", "docid", "project_id", "projectid", "folder_id", "parent_id",
+    "task_id", "node_id", "meeting_id", "meetingid", "recall_bot_id", "bot_id",
+    "proposal_token", "token", "cid", "slug", "path", "url", "href", "uuid", "key",
+})
+
+
+def normalize_tool_result(obj, _key: str | None = None):
+    """STEP 2: recursively convert every PROSE string in a tool result to spoken plaintext,
+    so raw markdown from get_doc / search_knowledge / list_recent_docs (headings, bold,
+    bullets, tables, links) never reaches the LLM context and gets read aloud. The SAME
+    normalizer as the [Background] block — one normalizer for results and output.
+
+    Structure is preserved (dict/list shape unchanged); only string leaves are cleaned.
+    Values under opaque-identifier keys (id, project_id, token, path, …) are left exactly
+    as-is so the model can still pass them into a follow-up tool call. snake_case / dunder
+    identifiers inside prose are preserved by to_spoken_plaintext itself."""
+    if isinstance(obj, dict):
+        return {k: normalize_tool_result(v, _key=k) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [normalize_tool_result(v, _key=_key) for v in obj]
+    if isinstance(obj, str):
+        if _key is not None and _key.lower() in _OPAQUE_KEYS:
+            return obj
+        return to_spoken_plaintext(obj)
+    return obj
