@@ -202,3 +202,11 @@ def test_input_gate_removed():
 def test_speaking_until_field_removed():
     state = recall_io.BotState()
     assert not hasattr(state, "speaking_until")
+
+
+# ── M0: BotState carries meeting-context fields; absent → degrade (never "unknown") ──
+def test_m0_botstate_meeting_context_defaults():
+    st = recall_io.BotState()
+    assert st.meeting_id is None and st.project_id is None
+    assert st.meeting_focus is None and st.acl_scope is None
+    assert st.attendees == [] and st.meeting_ctx_done is False

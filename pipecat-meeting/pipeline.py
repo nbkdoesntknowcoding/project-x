@@ -363,6 +363,7 @@ class RAGContext(FrameProcessor):
                 #   startup brief → speaker work-graph → [Background]. Layer B + grounding are
                 #   per RESPONDING turn; brief/work-graph once; Layer C transient on triggers.
                 if addressed:
+                    await self._ensure_meeting_context()              # M0: meeting id/title/project (once)
                     await self._ensure_identity_resolved()            # whoami → cache (once)
                     await self._inject_speaker_modulation(direction)  # Layer B (per-turn)
                     await self._inject_reanchor(direction)            # Layer C (every N spoken turns)
@@ -411,6 +412,37 @@ class RAGContext(FrameProcessor):
             ),
             direction,
         )
+
+    async def _ensure_meeting_context(self) -> None:
+        """M0: fetch this meeting's identity ONCE (title / project / participants) via the
+        get_meeting_context MCP tool, keyed by the live recall_bot_id, into BotState. The
+        title supersedes the env/query stopgap for meeting_focus (Layer C); acl_scope bounds
+        the Aspect-6 brief later. Degrades silently — any missing field stays None."""
+        if self._state.meeting_ctx_done:
+            return
+        bot_id = self._state.bot_id
+        if not bot_id:
+            return  # bot_id not bound yet (no audio); retry on a later turn
+        self._state.meeting_ctx_done = True
+        try:
+            res = await asyncio.wait_for(
+                self._mnema.call("get_meeting_context", {"recall_bot_id": bot_id}), timeout=2.5) or {}
+        except Exception as e:  # noqa: BLE001 — never block the meeting on it
+            logger.warning("[meeting] get_meeting_context failed: %s", e)
+            return
+        if res.get("error"):
+            return
+        title = (res.get("title") or "").strip()
+        if title:
+            self._state.meeting_focus = title   # real title supersedes the startup env stopgap
+        self._state.meeting_id = res.get("meetingId")
+        self._state.project_id = res.get("projectId")
+        self._state.acl_scope = res.get("aclScope")
+        self._state.attendees = [p.get("name") for p in (res.get("participants") or [])
+                                 if isinstance(p, dict) and p.get("name")]
+        logger.info("[meeting] context: id=%s project=%s title=%s attendees=%d",
+                    self._state.meeting_id, self._state.project_id, title or "-",
+                    len(self._state.attendees))
 
     async def _ensure_identity_resolved(self) -> None:
         """Resolve the current speaker's identity ONCE via the server `whoami` tool (the bot

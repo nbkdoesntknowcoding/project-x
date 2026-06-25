@@ -63,6 +63,15 @@ class BotState:
         # pipeline), so the bot can answer "who said X" from the live meeting, not the docs.
         self.roster_ever: dict[str, dict] = {}
         self.meeting_log: list[dict] = []
+        # M0 meeting context: fetched once via the get_meeting_context MCP tool (keyed by
+        # bot_id) into these fields. meeting_focus (the title) also feeds Layer C; acl_scope
+        # bounds the Aspect-6 brief. All None/empty until fetched → downstream clauses drop.
+        self.meeting_id: str | None = None
+        self.project_id: str | None = None
+        self.meeting_focus: str | None = None
+        self.acl_scope: str | None = None
+        self.attendees: list = []
+        self.meeting_ctx_done: bool = False
         # The bot's OWN participant id (it joins as "Mnema"). Tracked so we never attribute
         # speech/identity to the bot itself ("who am I → you're Mnema").
         self.bot_participant_id: str | None = None

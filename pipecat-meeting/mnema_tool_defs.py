@@ -204,4 +204,18 @@ MNEMA_TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_meeting_context",
+            "description": "Identity of a meeting — its title, project, and participants. Use for 'what meeting is this', 'which project is this meeting for', 'who's on the invite'. Look up by meeting_id (or the live bot's recall_bot_id).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "meeting_id": {"type": "string", "description": "Meeting UUID"},
+                    "recall_bot_id": {"type": "string", "description": "Recall bot id (live bot)"},
+                },
+            },
+        },
+    },
 ]

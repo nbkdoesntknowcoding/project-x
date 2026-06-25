@@ -57,6 +57,7 @@ import {
   GET_SURPRISING_CONNECTIONS_TOOL_SPEC, getSurprisingConnections,
   GET_CONCEPT_CONTEXT_TOOL_SPEC, getConceptContext,
 } from './tools/graph.js';
+import { GET_MEETING_CONTEXT_TOOL_SPEC, getMeetingContext } from './tools/meeting-context.js';
 
 /**
  * Build a fresh McpServer instance per request, capturing the verified
@@ -683,6 +684,7 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
   registerGraphTool(BUILD_KNOWLEDGE_GRAPH_TOOL_SPEC, buildKnowledgeGraph, false);
   registerGraphTool(GET_SURPRISING_CONNECTIONS_TOOL_SPEC, getSurprisingConnections, false);
   registerGraphTool(GET_CONCEPT_CONTEXT_TOOL_SPEC, getConceptContext, false);   // A2.3 concept hydration
+  registerGraphTool(GET_MEETING_CONTEXT_TOOL_SPEC, getMeetingContext, false);   // M0 meeting context
 
   return mcpServer;
 }
