@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db } from '../db/index.js';
 import { graphNodes, meetingRecords, meetings, projects, workspaces } from '../db/schema.js';
 import {
-  createMeetingRecord, getMeetingRecord, deleteMeetingRecord, deriveAclScope,
+  createMeetingRecord, getMeetingRecord, deleteMeetingRecord, deriveAclScope, recordInputFromSummary,
 } from '../lib/meeting-records.js';
 
 /**
@@ -37,6 +37,22 @@ describe('M1 meeting records', () => {
   it('deriveAclScope: project else workspace', () => {
     expect(deriveAclScope('p1', 'w1')).toBe('project:p1');
     expect(deriveAclScope(null, 'w1')).toBe('workspace:w1');
+  });
+
+  it('M2 recordInputFromSummary: maps summary, derives commitments from owned action items', () => {
+    const m = { id: 'm1', projectId: null, title: 'Standup', startedAt: new Date(), endedAt: new Date(), postMeetingDocId: 'doc-9' };
+    const inp = recordInputFromSummary(
+      m,
+      { keyPoints: ['shipped', 'reviewed'], decisions: ['ship Friday'],
+        actionItems: [{ text: 'email the deck', owner: 'Nischay' }, { text: 'tidy backlog', owner: null }] },
+      [{ name: 'Nischay' }],
+    );
+    expect(inp.summary).toBe('shipped reviewed');
+    expect(inp.decisions).toEqual(['ship Friday']);
+    expect(inp.commitments).toEqual([{ who: 'Nischay', what: 'email the deck' }]); // only the owned one
+    expect(inp.sourceRefs).toMatchObject({ postMeetingDocId: 'doc-9' });
+    // null summary degrades, not "unknown"
+    expect(recordInputFromSummary(m, null, []).summary).toBeNull();
   });
 
   it('writes a record, reads it back, with timestamps + acl_scope + decisions', async () => {

@@ -39,6 +39,37 @@ export function deriveAclScope(projectId: string | null | undefined, workspaceId
   return projectId ? `project:${projectId}` : `workspace:${workspaceId}`;
 }
 
+/**
+ * M2 consolidation mapping (pure): the meeting-end worker's already-extracted summary
+ * (keyPoints / decisions / actionItems) → a MeetingRecordInput. commitments are the action
+ * items that named an owner. No LLM here — the extraction already happened in the worker.
+ */
+export function recordInputFromSummary(
+  meeting: {
+    id: string; projectId: string | null; title: string | null;
+    startedAt: Date | null; endedAt: Date | null; postMeetingDocId?: string | null;
+  },
+  summary: { keyPoints: string[]; decisions: string[]; actionItems: Array<{ text: string; owner?: string | null }> } | null,
+  participants: Array<{ name?: string | null; email?: string | null; userId?: string | null }>,
+): MeetingRecordInput {
+  const actionItems = summary?.actionItems ?? [];
+  return {
+    meetingId: meeting.id,
+    projectId: meeting.projectId,
+    title: meeting.title,
+    participants,
+    startedAt: meeting.startedAt,
+    endedAt: meeting.endedAt,
+    summary: summary && summary.keyPoints.length ? summary.keyPoints.join(' ') : null,
+    decisions: summary?.decisions ?? [],
+    actionItems,
+    commitments: actionItems
+      .filter((a) => a.owner && a.owner.trim())
+      .map((a) => ({ who: a.owner!.trim(), what: a.text })),
+    sourceRefs: { postMeetingDocId: meeting.postMeetingDocId ?? null, transcript: 'meeting_transcripts' },
+  };
+}
+
 // ── minimal idempotent graph helpers (mirrors meeting-graph.ts) ──────────────────
 async function upsertNode(
   tx: Tx, workspaceId: string, entityType: string, entityId: string, label: string,

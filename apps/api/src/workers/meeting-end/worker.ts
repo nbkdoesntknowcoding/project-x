@@ -28,6 +28,7 @@ import {
 } from '../../db/schema.js';
 import { contentHash, emptyYjsState } from '../../lib/yjs.js';
 import { syncMeetingNode } from '../../lib/graph/meeting-graph.js';
+import { createMeetingRecord, recordInputFromSummary } from '../../lib/meeting-records.js';
 import { enqueueExtractDoc, enqueueCluster } from '../../queue/graph.js';
 import {
   recallEnabled, getBotRecording, createAsyncTranscript, getTranscriptArtifact, downloadTranscript,
@@ -68,6 +69,16 @@ async function summarise(turns: TranscriptTurn[]): Promise<MeetingSummary | null
       ? parsed.actionItems.map((a) => ({ text: String((a as { text?: unknown }).text ?? ''), owner: (a as { owner?: string | null }).owner ?? null })).filter((a) => a.text)
       : [],
   };
+}
+
+// ── M2: episodic meeting record (consolidation → meeting_records) ────────────────
+// Reuses the summary already extracted above (no extra LLM call); idempotent on meeting_id.
+async function consolidateMeetingRecord(meeting: MeetingRow, summary: MeetingSummary | null): Promise<void> {
+  const parts = await db
+    .select({ name: meetingParticipants.name, email: meetingParticipants.email, userId: meetingParticipants.resolvedUserId })
+    .from(meetingParticipants)
+    .where(eq(meetingParticipants.meetingId, meeting.id));
+  await createMeetingRecord(db, meeting.workspaceId, recordInputFromSummary(meeting, summary, parts));
 }
 
 // ── Tasks from action items ─────────────────────────────────────────────────────
@@ -307,8 +318,15 @@ export function startMeetingEndWorker(): Worker<MeetingEndJobData> {
 
       // ── 6. Wire into the knowledge graph ─────────────────────────────────────
       const fresh = await db.query.meetings.findFirst({ where: eq(meetings.id, meetingId) });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (fresh) await syncMeetingNode(db as any, workspaceId, meetingId);
+      if (fresh) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await syncMeetingNode(db as any, workspaceId, meetingId);
+        // M2: episodic record (idempotent; this whole worker is background → off the meeting
+        // turn-path). Best-effort — a record-write hiccup must not undo notes/tasks or block
+        // the media purge below.
+        try { await consolidateMeetingRecord(fresh, summary); }
+        catch (e) { console.error('[meeting-end] consolidate meeting_record failed:', e); }
+      }
       enqueueExtractDoc(workspaceId, docId);       // extract concepts from the notes doc
       enqueueCluster(workspaceId, false, 60_000);  // re-cluster shortly after
 
