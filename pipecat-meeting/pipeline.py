@@ -380,6 +380,27 @@ class RAGContext(FrameProcessor):
         if self._startup_done:
             return
         self._startup_done = True
+        # M5 / persona startup tier: the M3 room-safe meeting brief (where we left off) — already
+        # ACL-scoped for THIS room server-side. Injected once so the bot reasons "what happened
+        # last time" from context, no tool call. Best-effort; empty → skipped (degrade).
+        bot_id = getattr(self._state, "bot_id", None)
+        if bot_id:
+            try:
+                bres = await asyncio.wait_for(
+                    self._mnema.call("get_meeting_brief", {"recall_bot_id": bot_id}), timeout=2.5)
+                btext = ((bres or {}).get("content") or "").strip()
+            except Exception as e:  # noqa: BLE001 — optional
+                logger.debug("[startup] meeting brief skipped: %s", e)
+                btext = ""
+            if btext:
+                logger.info("[startup] injected meeting brief (%d chars)", len(btext))
+                await self.push_frame(
+                    LLMMessagesAppendFrame(messages=[{"role": "system", "content": (
+                        "[Last time, for continuity — already scoped to what everyone in this "
+                        "room may see] " + btext[:1000]
+                    )}], run_llm=False),
+                    direction,
+                )
         try:
             res = await asyncio.wait_for(self._mnema.call("get_god_nodes", {"limit": 8}), timeout=2.5)
             brief = ((res or {}).get("content") or "").strip()
@@ -698,15 +719,28 @@ class RecapProcessor(FrameProcessor):
                    for pid in (self._state.participants or {}))
 
     async def _speak_start_recap(self) -> None:
-        # Source: the Aspect 2.1 startup brief (get_god_nodes — a graph query, NOT an LLM
-        # generation). Empty → say nothing (never fabricate).
-        try:
-            res = await asyncio.wait_for(self._mnema.call("get_god_nodes", {"limit": 6}), timeout=2.0)
-            brief = ((res or {}).get("content") or "").strip()
-        except Exception as e:  # noqa: BLE001 — recap must never break the meeting
-            logger.debug("[recap] start brief fetch skipped: %s", e)
-            return
-        text = build_start_recap(brief)
+        # M5: prefer the M3 room-safe meeting brief (where we left off — ACL-scoped server-side,
+        # already plain spoken text). Fall back to the A2.1 god-nodes workspace brief. Empty →
+        # say nothing (never fabricate). NO LLM call (both are graph/record queries).
+        text = ""
+        bot_id = getattr(self._state, "bot_id", None)
+        if bot_id:
+            try:
+                bres = await asyncio.wait_for(
+                    self._mnema.call("get_meeting_brief", {"recall_bot_id": bot_id}), timeout=2.5)
+                brief = ((bres or {}).get("content") or "").strip()
+                if brief:
+                    text = to_spoken_plaintext(brief)[:600]
+            except Exception as e:  # noqa: BLE001 — recap must never break the meeting
+                logger.debug("[recap] meeting brief skipped: %s", e)
+        if not text:
+            try:
+                res = await asyncio.wait_for(self._mnema.call("get_god_nodes", {"limit": 6}), timeout=2.0)
+                gbrief = ((res or {}).get("content") or "").strip()
+            except Exception as e:  # noqa: BLE001
+                logger.debug("[recap] start brief fetch skipped: %s", e)
+                return
+            text = build_start_recap(gbrief)
         if text:
             logger.info("[recap] start recap")
             await self.push_frame(TTSSpeakFrame(text), FrameDirection.DOWNSTREAM)
