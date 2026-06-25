@@ -46,6 +46,7 @@ from pipecat.services.deepgram.stt import DeepgramSTTService, LiveOptions
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.inworld.tts import InworldTTSService  # 1.2.1: class lives in .tts (not re-exported)
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 from pipecat.turns.user_stop import SpeechTimeoutUserTurnStopStrategy
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
@@ -146,20 +147,20 @@ def _build_user_turn_strategies():
     if mode in ("local", "v3", "onnx"):
         try:
             from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
-            from pipecat.turns.user_stop import SmartTurnUserTurnStopStrategy
+            from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
             cpus = int(os.environ.get("MEETING_SMART_TURN_CPUS", "1"))
             analyzer = LocalSmartTurnAnalyzerV3(cpu_count=cpus)
             logger.info("[turn] Smart Turn EOU enabled (local ONNX v3, cpu_count=%d)", cpus)
-            return UserTurnStrategies(stop=[SmartTurnUserTurnStopStrategy(analyzer)])
+            return UserTurnStrategies(stop=[TurnAnalyzerUserTurnStopStrategy(turn_analyzer=analyzer)])
         except Exception as e:  # noqa: BLE001 — never block pipeline startup on this
             logger.warning("[turn] local Smart Turn unavailable (%s) — falling back to VAD silence.", e)
     elif mode in ("fal", "1", "on", "true"):
         try:
             from pipecat.audio.turn.smart_turn.fal_smart_turn import FalSmartTurnAnalyzer
-            from pipecat.turns.user_stop import SmartTurnUserTurnStopStrategy
+            from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
             analyzer = FalSmartTurnAnalyzer(api_key=os.environ.get("FAL_KEY"))
             logger.info("[turn] Smart Turn EOU enabled (Fal-hosted)")
-            return UserTurnStrategies(stop=[SmartTurnUserTurnStopStrategy(analyzer)])
+            return UserTurnStrategies(stop=[TurnAnalyzerUserTurnStopStrategy(turn_analyzer=analyzer)])
         except Exception as e:  # noqa: BLE001
             logger.warning("[turn] Fal Smart Turn unavailable (%s) — falling back to VAD silence.", e)
     silence = float(os.environ.get("MEETING_EOU_SILENCE_SEC", "0.6"))
@@ -848,7 +849,19 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
     aggregators = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(sample_rate=RECALL_INPUT_SAMPLE_RATE),
+            vad_analyzer=SileroVADAnalyzer(
+                sample_rate=RECALL_INPUT_SAMPLE_RATE,
+                # Stiffen the VAD so background noise / brief blips don't register as speech and
+                # falsely interrupt the bot mid-reply (audit: "no audio received while speaking,
+                # forcing speech stop"). Tunable via env. Stricter than pipecat defaults
+                # (conf 0.7 / start 0.2 / stop 0.2 / min_vol 0.6).
+                params=VADParams(
+                    confidence=float(os.environ.get("MEETING_VAD_CONFIDENCE", "0.8")),
+                    start_secs=float(os.environ.get("MEETING_VAD_START_SECS", "0.3")),
+                    stop_secs=float(os.environ.get("MEETING_VAD_STOP_SECS", "0.4")),
+                    min_volume=float(os.environ.get("MEETING_VAD_MIN_VOLUME", "0.7")),
+                ),
+            ),
             user_turn_strategies=_build_user_turn_strategies(),
         ),
     )
