@@ -17,6 +17,23 @@ import asyncio
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from mnema_client import MnemaMCP  # noqa: E402
+from recall_io import BotState  # noqa: E402
+
+
+def _owner_state() -> BotState:
+    """A BotState whose asker is Nischay (owner/host), so MnemaMCP acts-as the same identity
+    the live bot uses. A bare guest key is RLS-scoped to nothing now that list_projects is
+    RLS-consistent — the check must run with the bot's actual visibility, not guest."""
+    s = BotState()
+    s.bot_participant_id = "p_bot"
+    s.participants = {"p_nischay": {
+        "name": "Nischay B K",
+        "email": os.environ.get("REALNESS_SPEAKER_EMAIL", "nischaybk@theboringpeople.in"),
+        "is_host": True,
+    }}
+    s.active_speaker_id = "p_nischay"
+    s.last_speaker_id = "p_nischay"
+    return s
 
 
 def _in_progress(p: dict) -> int:
@@ -35,10 +52,12 @@ async def main(seed: bool) -> int:
     if not os.environ.get("MNEMA_API_URL") or not os.environ.get("MNEMA_API_KEY"):
         print("FATAL: MNEMA_API_URL / MNEMA_API_KEY not set.", file=sys.stderr)
         return 2
-    mcp = MnemaMCP(None)  # raw key (same project-scope the bot's list_project_tasks runs under)
+    mcp = MnemaMCP(_owner_state())  # act-as Nischay (owner) — same visibility as the live bot
     seeded_task = None
     try:
         projs = (await mcp.call("list_projects", {"status": "all"})).get("projects") or []
+        print(f"(acting as Nischay B K (owner); list_projects returned {len(projs)} project(s): "
+              f"{[p.get('slug') for p in projs][:8]})")
         target = next((p for p in projs if _in_progress(p) > 0), None)
 
         if target is None:
