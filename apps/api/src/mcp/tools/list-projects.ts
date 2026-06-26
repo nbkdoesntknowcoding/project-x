@@ -49,36 +49,38 @@ function colorCircle(color: string): string {
 export async function listProjects(ctx: McpAuthContext, rawArgs: Record<string, unknown>) {
   const statusFilter = typeof rawArgs.status === 'string' ? rawArgs.status : 'active';
 
-  // The project LIST stays a plain workspace query (unscoped, as before) so projects are
-  // never RLS-hidden — wrapping it in withTenant could hide projects under the projects-table
-  // RLS and return an empty list. Only the TASK-COUNT aggregation is moved INSIDE withTenant,
-  // so the counts pass through the SAME RLS predicate (SET LOCAL ROLE app_user → workspace_id
-  // = tenant AND app_can_see_project(project_id)) that list_project_tasks enforces. Previously
-  // the counts used a raw db.execute OUTSIDE withTenant and over-reported tasks for projects a
-  // scoped key can't read, CONTRADICTING list_project_tasks (which returned the true set). Now
-  // the counts reflect exactly what list_project_tasks can see, so the two agree.
-  const rows = await db
-    .select()
-    .from(projects)
-    .where(
-      statusFilter === 'all'
-        ? eq(projects.workspaceId, ctx.tenant_id)
-        : and(
-            eq(projects.workspaceId, ctx.tenant_id),
-            eq(projects.status, statusFilter),
-          ),
-    )
-    .orderBy(asc(projects.boardOrder), asc(projects.createdAt));
+  // BOTH the project list AND the task-count aggregation run inside withTenant. This is
+  // REQUIRED: the `projects` table has RLS in prod (added via drizzle-kit push, not in the
+  // migration files), so a raw query OUTSIDE withTenant has no app.tenant_id GUC and the RLS
+  // predicate denies every row → an empty project list. Inside withTenant (SET LOCAL ROLE
+  // app_user + set_config('app.tenant_id', …)) the predicate passes for this tenant, so
+  // projects show AND the task counts pass the SAME RLS predicate that list_project_tasks
+  // enforces — fixing the earlier count contradiction (raw db.execute over-reported tasks a
+  // scoped key couldn't see). Do NOT revert this to a raw db query: that returns 0 projects.
+  const { rows, countRows } = await withTenant(ctx.tenant_id, async (tx) => {
+    const projectRows = await tx
+      .select()
+      .from(projects)
+      .where(
+        statusFilter === 'all'
+          ? eq(projects.workspaceId, ctx.tenant_id)
+          : and(
+              eq(projects.workspaceId, ctx.tenant_id),
+              eq(projects.status, statusFilter),
+            ),
+      )
+      .orderBy(asc(projects.boardOrder), asc(projects.createdAt));
 
-  const countRows = await withTenant(ctx.tenant_id, async (tx) =>
-    (await tx.execute(
+    const counts = (await tx.execute(
       sql`SELECT project_id::text, status, COUNT(*)::int AS cnt
           FROM tasks
           WHERE workspace_id = ${ctx.tenant_id}::uuid
             AND project_id IS NOT NULL
           GROUP BY project_id, status`,
-    )) as unknown as { project_id: string; status: string; cnt: number }[],
-  );
+    )) as unknown as { project_id: string; status: string; cnt: number }[];
+
+    return { rows: projectRows, countRows: counts };
+  });
 
   if (rows.length === 0) {
     return {
