@@ -49,38 +49,37 @@ function colorCircle(color: string): string {
 export async function listProjects(ctx: McpAuthContext, rawArgs: Record<string, unknown>) {
   const statusFilter = typeof rawArgs.status === 'string' ? rawArgs.status : 'active';
 
-  // BOTH the project list AND the task-count aggregation run inside withTenant. This is
-  // REQUIRED: the `projects` table has RLS in prod (added via drizzle-kit push, not in the
-  // migration files), so a raw query OUTSIDE withTenant has no app.tenant_id GUC and the RLS
-  // predicate denies every row → an empty project list. Inside withTenant (SET LOCAL ROLE
-  // app_user + set_config('app.tenant_id', …)) the predicate passes for this tenant, so
-  // projects show AND the task counts pass the SAME RLS predicate that list_project_tasks
-  // enforces — fixing the earlier count contradiction (raw db.execute over-reported tasks a
-  // scoped key couldn't see). Do NOT revert this to a raw db query: that returns 0 projects.
-  const { rows, countRows } = await withTenant(ctx.tenant_id, async (tx) => {
-    const projectRows = await tx
-      .select()
-      .from(projects)
-      .where(
-        statusFilter === 'all'
-          ? eq(projects.workspaceId, ctx.tenant_id)
-          : and(
-              eq(projects.workspaceId, ctx.tenant_id),
-              eq(projects.status, statusFilter),
-            ),
-      )
-      .orderBy(asc(projects.boardOrder), asc(projects.createdAt));
+  // The project LIST runs on the RAW db connection (the DATABASE_URL role, which HAS a SELECT
+  // grant on projects; projects has no RLS — relrowsecurity=f — so a plain workspace filter is
+  // correct and complete). It must NOT run inside withTenant: that does SET LOCAL ROLE
+  // app_user, and app_user was never granted SELECT on `projects` (only docs/tasks/etc. were
+  // set up for it), so the list comes back EMPTY under app_user — the bug we chased.
+  const rows = await db
+    .select()
+    .from(projects)
+    .where(
+      statusFilter === 'all'
+        ? eq(projects.workspaceId, ctx.tenant_id)
+        : and(
+            eq(projects.workspaceId, ctx.tenant_id),
+            eq(projects.status, statusFilter),
+          ),
+    )
+    .orderBy(asc(projects.boardOrder), asc(projects.createdAt));
 
-    const counts = (await tx.execute(
+  // ONLY the task-count aggregation runs inside withTenant, so the counts pass the SAME RLS
+  // predicate (workspace_id = tenant AND app_can_see_project(project_id)) that
+  // list_project_tasks enforces — keeping the two consistent. (app_user DOES have the grant on
+  // tasks, so this is safe.)
+  const countRows = await withTenant(ctx.tenant_id, async (tx) =>
+    (await tx.execute(
       sql`SELECT project_id::text, status, COUNT(*)::int AS cnt
           FROM tasks
           WHERE workspace_id = ${ctx.tenant_id}::uuid
             AND project_id IS NOT NULL
           GROUP BY project_id, status`,
-    )) as unknown as { project_id: string; status: string; cnt: number }[];
-
-    return { rows: projectRows, countRows: counts };
-  });
+    )) as unknown as { project_id: string; status: string; cnt: number }[],
+  );
 
   if (rows.length === 0) {
     return {
