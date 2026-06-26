@@ -55,7 +55,14 @@ async def main(seed: bool) -> int:
     mcp = MnemaMCP(_owner_state())  # act-as Nischay (owner) — same visibility as the live bot
     seeded_task = None
     try:
-        projs = (await mcp.call("list_projects", {"status": "all"})).get("projects") or []
+        try:
+            first = await mcp.call("list_projects", {"status": "all"})
+        except Exception as e:  # noqa: BLE001 — surface API-down cleanly, not as async noise
+            msg = str(e)
+            hint = " (API server is down/unreachable — check `… ps` / `… logs api`)" if "503" in msg or "Connect" in msg else ""
+            print(f"FATAL: could not reach the MCP API: {msg[:200]}{hint}")
+            return 2
+        projs = first.get("projects") or []
         print(f"(acting as Nischay B K (owner); list_projects returned {len(projs)} project(s): "
               f"{[p.get('slug') for p in projs][:8]})")
         target = next((p for p in projs if _in_progress(p) > 0), None)
@@ -105,7 +112,10 @@ async def main(seed: bool) -> int:
                 print(f"(cleanup: seeded task {seeded_task} marked done)")
             except Exception as e:  # noqa: BLE001
                 print(f"(cleanup note: could not complete seeded task {seeded_task}: {e})")
-        await mcp.aclose()
+        try:
+            await mcp.aclose()
+        except Exception:  # noqa: BLE001 — swallow the anyio cancel-scope teardown noise
+            pass
 
 
 if __name__ == "__main__":
