@@ -23,6 +23,7 @@ import { GET_PROJECT_TOOL, getProject } from './get-project.js';
 import { LIST_PROJECTS_TOOL, listProjects } from './list-projects.js';
 import { WHOAMI_TOOL, whoami } from './whoami.js';
 import { REQUEST_DOC_ACCESS_TOOL, requestDocAccess } from './request-doc-access.js';
+import { RECORD_DECISION_TOOL, recordDecisionTool } from './record-decision.js';
 // DOCX/PDF tools (both workspace modes)
 import {
   UPLOAD_DOC_FILE_TOOL, uploadDocFile,
@@ -110,6 +111,7 @@ export const PRODUCTION_TOOLS: readonly ToolDescriptor[] = [
   // Meeting identity: who the request is acting as + their org role/team/access.
   { spec: WHOAMI_TOOL, handler: whoami },
   { spec: REQUEST_DOC_ACCESS_TOOL, handler: requestDocAccess },
+  { spec: RECORD_DECISION_TOOL, handler: recordDecisionTool },  // Decision Memory MD1
   // DOCX/PDF file tools — available in both workspace modes.
   { spec: UPLOAD_DOC_FILE_TOOL, handler: uploadDocFile },
   { spec: EXPORT_DOC_TOOL, handler: exportDoc },

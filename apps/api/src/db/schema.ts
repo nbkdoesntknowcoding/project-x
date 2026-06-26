@@ -1534,6 +1534,14 @@ export const graphNodes = pgTable(
     // 'structural' | 'semantic'
     extractionPass: text('extraction_pass').notNull().default('structural'),
     lastExtractedAt: timestamp('last_extracted_at', { withTimezone: true }),
+    // ── Decision Memory MD1 (temporal decision node; NULL for every non-decision node) ──
+    decidedAt:    timestamp('decided_at', { withTimezone: true }),  // when the decision was made
+    status:       text('status'),                                   // 'current' | 'historical' (decisions only)
+    supersedes:   uuid('supersedes'),                               // → the decision this one replaces
+    supersededBy: uuid('superseded_by'),                            // → the decision that replaced this one
+    decisionText: text('decision_text'),                            // the full decision statement
+    decidedIn:    uuid('decided_in'),                               // → meeting it was decided in (if any)
+    aclScope:     text('acl_scope'),                                // project:<id> | workspace:<id>
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

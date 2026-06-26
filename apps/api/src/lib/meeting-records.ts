@@ -133,9 +133,26 @@ export async function createMeetingRecord(tx: Tx, workspaceId: string, input: Me
     const projNode = await upsertNode(tx, workspaceId, 'project', input.projectId, 'Project', input.projectId);
     await upsertEdge(tx, workspaceId, meetingNode, projNode, 'belongs_to');
   }
+  // MD1 STEP 4: emit decision nodes with the SAME richer temporal shape as record_decision —
+  // decided_at (the meeting's ended_at, else started_at), status current, decided_in = meeting,
+  // decision_text, acl_scope. (Only the node shape changes; decisions still come from the
+  // transcript-extracted summary exactly as before.)
+  const decidedAt = input.endedAt ?? input.startedAt ?? new Date();
   for (let i = 0; i < decisions.length; i++) {
-    const decNode = await upsertNode(tx, workspaceId, 'decision', decisionEntityId(input.meetingId, i), decisions[i]!.slice(0, 200), input.projectId ?? null);
-    await upsertEdge(tx, workspaceId, meetingNode, decNode, 'decided', 1.5);
+    const [dn] = await tx.insert(graphNodes).values({
+      workspaceId, entityType: 'decision', entityId: decisionEntityId(input.meetingId, i),
+      label: decisions[i]!.slice(0, 200), summary: decisions[i]!.slice(0, 500),
+      projectId: input.projectId ?? null, extractionPass: 'structural',
+      decidedAt, status: 'current', decisionText: decisions[i]!, decidedIn: input.meetingId, aclScope,
+    }).onConflictDoUpdate({
+      target: [graphNodes.workspaceId, graphNodes.entityType, graphNodes.entityId],
+      set: {
+        label: decisions[i]!.slice(0, 200), summary: decisions[i]!.slice(0, 500),
+        decisionText: decisions[i]!, decidedAt, status: 'current', decidedIn: input.meetingId,
+        aclScope, projectId: input.projectId ?? null, updatedAt: new Date(),
+      },
+    }).returning({ id: graphNodes.id });
+    await upsertEdge(tx, workspaceId, meetingNode, dn!.id, 'decided', 1.5);
   }
   // Prune decision nodes beyond the current count (idempotent re-consolidation).
   await deleteDecisionNodes(tx, workspaceId, input.meetingId, decisions.length);
