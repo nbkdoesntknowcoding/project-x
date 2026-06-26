@@ -1,5 +1,6 @@
-import { sql, type SQL } from 'drizzle-orm';
+import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import { z } from 'zod';
+import { graphNodes } from '../../db/schema.js';
 import { withTenant } from '../../db/with-tenant.js';
 import type { McpAuthContext } from '../auth.js';
 import { requireScope } from '../scope.js';
@@ -145,6 +146,10 @@ export interface SearchHit {
   // distinguish results across projects and answer about the right one.
   project_id?: string | null;
   project_name?: string | null;
+  // MD2 temporal signal — set ONLY on decision-doc hits (a recorded decision's doc). Lets the
+  // caller prefer the current decision and label a superseded one; absent on every other hit.
+  decision_status?: 'current' | 'historical' | null;
+  decided_at?: string | null;
 }
 
 /** Attach each hit's project (id + name) in one lookup, so results are never mixed up
@@ -205,10 +210,64 @@ export async function searchDocs(
       }
       // Label every hit with its project so the caller never mixes projects.
       await attachProjects(ctx, result);
+      // MD2: layer a temporal preference ON TOP of RRF — annotate decision hits with their
+      // status/date and float current decisions above the historical ones they superseded.
+      // Non-decision hits keep their exact RRF positions (proven byte-identical in the gate).
+      await applyDecisionTemporal(ctx, result);
       return result;
     },
     (result) => ({ mode: result.mode, result_count: result.results.length }),
   );
+}
+
+const DECISION_PATH_RE = /^decision-([0-9a-f]+)\.md$/i;
+
+/**
+ * MD2 — temporal preference, layered ON TOP of RRF (it does NOT alter the relevance ranking
+ * of any non-decision result). For decision-doc hits only: annotate `decision_status` +
+ * `decided_at` from the linked decision node, and float `current` decisions above the
+ * `historical` ones they superseded. A query with no decision hits is a no-op, so non-decision
+ * retrieval is byte-identical to before.
+ */
+async function applyDecisionTemporal(ctx: McpAuthContext, result: SearchResult): Promise<void> {
+  const slots: number[] = [];
+  const entityIds: string[] = [];
+  result.results.forEach((h, i) => {
+    const m = DECISION_PATH_RE.exec(h.path || '');
+    if (m) { slots.push(i); entityIds.push(`decision:${m[1]}`); }
+  });
+  if (slots.length === 0) return; // no decisions → nothing to do; non-decision order untouched
+
+  const rows = await withTenant(ctx.tenant_id, (tx) =>
+    tx.select({ entityId: graphNodes.entityId, status: graphNodes.status, decidedAt: graphNodes.decidedAt })
+      .from(graphNodes)
+      .where(and(
+        eq(graphNodes.workspaceId, ctx.tenant_id),
+        eq(graphNodes.entityType, 'decision'),
+        inArray(graphNodes.entityId, entityIds),
+      )),
+  );
+  const byEntity = new Map(rows.map((r) => [r.entityId, r]));
+
+  for (const i of slots) {
+    const h = result.results[i]!;
+    const m = DECISION_PATH_RE.exec(h.path || '');
+    const n = m ? byEntity.get(`decision:${m[1]}`) : undefined;
+    h.decision_status = (n?.status as 'current' | 'historical' | undefined) ?? null;
+    h.decided_at = n?.decidedAt ? new Date(n.decidedAt).toISOString() : null;
+  }
+
+  // Reorder ONLY the decision slots (current before historical); stable within each status so
+  // RRF order is preserved among same-status decisions. Non-decision slots are never moved.
+  const ordered = slots
+    .map((i) => ({ h: result.results[i]!, rrf: i }))
+    .sort((a, b) => {
+      const pa = a.h.decision_status === 'historical' ? 1 : 0;
+      const pb = b.h.decision_status === 'historical' ? 1 : 0;
+      return pa - pb || a.rrf - b.rrf;
+    })
+    .map((x) => x.h);
+  slots.forEach((slot, k) => { result.results[slot] = ordered[k]!; });
 }
 
 // ---------------------------------------------------------------------------

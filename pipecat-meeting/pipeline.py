@@ -700,6 +700,17 @@ class RAGContext(FrameProcessor):
             head = h.get("title") or ""
             if h.get("heading_path"):
                 head = f"{head} › {h['heading_path']}"
+            # MD2: hand the agent the temporal order for a decision (it's weak at chronology and
+            # must be told, not asked to infer). search_docs already floated `current` above
+            # `historical`; this labels each so the agent states the current one and names the
+            # superseded one as past — never the stale one as the answer.
+            status = h.get("decision_status")
+            if status:
+                day = (h.get("decided_at") or "")[:10]
+                if status == "current":
+                    head = f"[DECISION — CURRENT{f' as of {day}' if day else ''}; this is the standing decision] {head}"
+                else:
+                    head = f"[DECISION — HISTORICAL{f', decided {day}' if day else ''}; SUPERSEDED, do not state as current] {head}"
             blocks.append(f"[project: {proj} | {head}]\n{(h.get('snippet') or '').strip()}")
 
         # A2.2 expansion: follow relationships from the TOP hit's node (1-hop) so answers
