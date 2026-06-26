@@ -81,6 +81,20 @@ export async function listProjects(ctx: McpAuthContext, rawArgs: Record<string, 
     )) as unknown as { project_id: string; status: string; cnt: number }[],
   );
 
+  // TEMP DIAGNOSTIC (remove after): prove what tenant the request resolves to and how many
+  // rows the scoped query returns vs an unscoped count — pinpoints auth-tenant vs query.
+  try {
+    const totalAny = (await db.execute(
+      sql`SELECT COUNT(*)::int AS c FROM projects`,
+    )) as unknown as { c: number }[];
+    // eslint-disable-next-line no-console
+    console.error(`[list_projects DEBUG] tenant_id=${ctx.tenant_id} scoped_rows=${rows.length} `
+      + `total_projects_in_db=${totalAny?.[0]?.c} status=${statusFilter}`);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.error(`[list_projects DEBUG] tenant_id=${ctx.tenant_id} scoped_rows=${rows.length} (count failed: ${String(e).slice(0, 80)})`);
+  }
+
   if (rows.length === 0) {
     return {
       content: 'No projects found in this workspace.',
