@@ -49,37 +49,36 @@ function colorCircle(color: string): string {
 export async function listProjects(ctx: McpAuthContext, rawArgs: Record<string, unknown>) {
   const statusFilter = typeof rawArgs.status === 'string' ? rawArgs.status : 'active';
 
-  // BOTH the project list AND the task-count aggregation run inside withTenant so they pass
-  // through the SAME RLS predicate (SET LOCAL ROLE app_user → workspace_id = tenant AND
-  // app_can_see_project(project_id)) that list_project_tasks enforces. Previously the counts
-  // used a raw db.execute OUTSIDE withTenant, so they bypassed RLS and over-reported tasks for
-  // projects a scoped key (e.g. the project-scoped meeting bot) cannot actually read — the
-  // counts then CONTRADICTED list_project_tasks (which returned the true, often empty, set).
-  // Now both reflect the same visible scope and agree.
-  const { rows, countRows } = await withTenant(ctx.tenant_id, async (tx) => {
-    const projectRows = await tx
-      .select()
-      .from(projects)
-      .where(
-        statusFilter === 'all'
-          ? eq(projects.workspaceId, ctx.tenant_id)
-          : and(
-              eq(projects.workspaceId, ctx.tenant_id),
-              eq(projects.status, statusFilter),
-            ),
-      )
-      .orderBy(asc(projects.boardOrder), asc(projects.createdAt));
+  // The project LIST stays a plain workspace query (unscoped, as before) so projects are
+  // never RLS-hidden — wrapping it in withTenant could hide projects under the projects-table
+  // RLS and return an empty list. Only the TASK-COUNT aggregation is moved INSIDE withTenant,
+  // so the counts pass through the SAME RLS predicate (SET LOCAL ROLE app_user → workspace_id
+  // = tenant AND app_can_see_project(project_id)) that list_project_tasks enforces. Previously
+  // the counts used a raw db.execute OUTSIDE withTenant and over-reported tasks for projects a
+  // scoped key can't read, CONTRADICTING list_project_tasks (which returned the true set). Now
+  // the counts reflect exactly what list_project_tasks can see, so the two agree.
+  const rows = await db
+    .select()
+    .from(projects)
+    .where(
+      statusFilter === 'all'
+        ? eq(projects.workspaceId, ctx.tenant_id)
+        : and(
+            eq(projects.workspaceId, ctx.tenant_id),
+            eq(projects.status, statusFilter),
+          ),
+    )
+    .orderBy(asc(projects.boardOrder), asc(projects.createdAt));
 
-    const counts = (await tx.execute(
+  const countRows = await withTenant(ctx.tenant_id, async (tx) =>
+    (await tx.execute(
       sql`SELECT project_id::text, status, COUNT(*)::int AS cnt
           FROM tasks
           WHERE workspace_id = ${ctx.tenant_id}::uuid
             AND project_id IS NOT NULL
           GROUP BY project_id, status`,
-    )) as unknown as { project_id: string; status: string; cnt: number }[];
-
-    return { rows: projectRows, countRows: counts };
-  });
+    )) as unknown as { project_id: string; status: string; cnt: number }[],
+  );
 
   if (rows.length === 0) {
     return {
