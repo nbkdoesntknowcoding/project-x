@@ -28,7 +28,7 @@ MNEMA_TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "list_projects",
-            "description": "List the projects you can access (id, name, slug). Call this first to resolve a project the user named (e.g. 'the voice clone project') into a project_id before searching/listing within it.",
+            "description": "List the projects you can access (id, name, slug) WITH each project's task counts per status (taskCounts: e.g. in_progress, done, review, backlog). Two uses: (1) resolve a project the user named into a project_id before searching/listing within it; (2) answer cross-project COUNT questions ('how many tasks are in progress / were closed / done across everything') DIRECTLY from these per-project counts in ONE call — sum the relevant status across projects. Do NOT sweep list_project_tasks once per project for a count; these counts already have the answer.",
             "parameters": {"type": "object", "properties": {}},
         },
     },

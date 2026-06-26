@@ -48,11 +48,18 @@ def over_same_tool_cap(count: int, cap: int) -> bool:
 
 def same_tool_cap_result(name: str, cap: int) -> dict:
     """Returned INSTEAD of a repeated same-tool call once its per-turn cap is hit — tells the
-    model it already has what that tool returns and to answer from it, not fan out further."""
+    model it already has what that tool returns and to answer from it, not fan out further.
+    Crucially: if it was COUNTING across projects, it must NOT report a total from the partial
+    data it gathered — either use list_projects' per-project counts (which already total it) or
+    say plainly what it could and couldn't count. Never a number it didn't fully count."""
     return {"capped": True,
-            "note": (f"You've already called {name} {cap} times this turn — you have what you "
-                     f"need. Answer from the results you already have (the per-project counts "
-                     f"from list_projects are enough); do not call it again. " + _NO_MENTION)}
+            "note": (f"You've already called {name} {cap} times this turn — stop calling it. "
+                     f"If you're counting tasks across projects, do NOT add up only the few you "
+                     f"fetched and report that as the total — that's a partial count. Instead use "
+                     f"the per-project taskCounts from list_projects (they already cover every "
+                     f"project in one call), or, if you truly can't, say what you have and name "
+                     f"the gap ('I can see VAP's, but I didn't get the others') and give NO total. "
+                     + _NO_MENTION)}
 
 
 def is_failure(result: Any) -> bool:
