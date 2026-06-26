@@ -69,7 +69,8 @@ QUESTIONS = [
 
     # ── LIVE-STATE (must call a tool) ────────────────────────────────────────
     _q("Q11", "Who's in this meeting right now?", "live_state",
-       [GROUNDED, NO_MARKDOWN, NO_TOOL_NARRATION, TOOL_DISCIPLINE, HUMAN_DELIVERY], must_call_tool=True),
+       [GROUNDED, NO_MARKDOWN, NO_TOOL_NARRATION, TOOL_DISCIPLINE, HUMAN_DELIVERY],
+       must_call_tool=True, roster_question=True),
     _q("Q12", "Who just spoke before me?", "live_state",
        [GROUNDED, NO_MARKDOWN, NO_TOOL_NARRATION, TOOL_DISCIPLINE, HUMAN_DELIVERY], must_call_tool=True),
     _q("Q13", "What's on the board right now?", "live_state",

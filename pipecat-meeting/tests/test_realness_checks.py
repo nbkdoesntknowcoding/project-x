@@ -75,6 +75,16 @@ def test_silence():
     assert C.score_silence("Sure, I think shipping it makes sense.")[0] == 0
 
 
+def test_roster_grounded_just_you_passes():
+    # STEP 3: 'just you' is the CORRECT answer to a solo-roster question → GROUNDED 2
+    for ans in ["It's just you in the meeting right now, Nischay.", "Only you are here.",
+                "Right now it's just you."]:
+        assert C.score_roster_grounded(ans, "Nischay B K")[0] == 2, ans
+    # naming an absent person, or claiming others present → 0
+    assert C.score_roster_grounded("Alex Kim is here too.", "Nischay B K")[0] == 0
+    assert C.score_roster_grounded("There are three of us.", "Nischay B K")[0] == 0
+
+
 def test_silence_scored_once_not_double_counted():
     # harness patch: a silent answer is scored on ONE axis, not GROUNDED 0 + HUMAN 0
     assert C.is_silent_answer("<silent>") and C.is_silent_answer("") and C.is_silent_answer("  ")

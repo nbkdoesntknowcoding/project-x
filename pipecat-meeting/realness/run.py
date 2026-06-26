@@ -143,6 +143,10 @@ async def score_row(q, result, gt, judge_client, known_tools, current_docs=None)
         elif rubric == Q.COMPLETENESS:
             sc, why = C.score_completeness(text, q["expect"].get("multipart", []))
             scores[rubric] = {"score": sc, "reason": why, "source": "deterministic"}
+        elif rubric == Q.GROUNDED and q["expect"].get("roster_question"):
+            # deterministic: 'just you' is the CORRECT answer to a solo-roster question
+            sc, why = C.score_roster_grounded(text, SPEAKER_NAME)
+            scores[rubric] = {"score": sc, "reason": why, "source": "deterministic"}
         elif rubric in Q.JUDGE_RUBRICS:
             judge_jobs.append((rubric, judge_one(
                 judge_client, JUDGE_MODEL, rubric, q["text"], text,

@@ -42,7 +42,7 @@ from context_prune import prune_context
 from text_norm import to_spoken_plaintext
 from markdown_stream import SpokenStripper
 from silence import resolve_leading_silent, finalize_forced_reply
-from addressing import is_addressed, CLASSIFY_SYS
+from addressing import is_addressed, is_question_or_request
 from llm_config import resolve_model, resolve_api_key, resolve_base_url
 from mnema_client import MnemaMCP, register_mnema_tools, parse_whoami_identity
 from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS
@@ -125,28 +125,15 @@ class TurnRunner:
         # the running conversation (system persona is message 0, like LLMContext)
         self.messages = [{"role": "system", "content": self.persona}]
 
-    # ── addressing gate (mirrors RAGContext + _classify_addressed) ───────────
-    async def _addressed(self, text, expect):
-        if expect.get("addressed") is False and not is_addressed(text):
-            # side-chatter test: only a wake word would override
-            return False
+    # ── addressing gate — DETERMINISTIC, mirrors the live RAGContext gate exactly ──
+    async def _addressed(self, text, expect=None):
+        # wake word OR a direct question/assistant-request — both pure (no LLM), so the
+        # harness measures the SAME deterministic decision the bot makes. No more flicker.
         if is_addressed(text):
             return True
-        if not (_STRICT and os.environ.get("MEETING_SEMANTIC_ADDRESSING", "1") != "0"):
-            return True  # non-strict → always respond
-        # semantic classifier — same prompt as pipeline._CLASSIFY_SYS
-        try:
-            res = await asyncio.wait_for(self.client.chat.completions.create(
-                model=os.environ.get("MEETING_CLASSIFIER_MODEL", "gpt-4o-mini"),
-                max_tokens=1, temperature=0,
-                messages=[
-                    {"role": "system", "content": CLASSIFY_SYS},  # shared w/ live bot — no drift
-                    {"role": "user", "content": f'Latest utterance: "{text}"\nDirected at Mnema?'},
-                ]), timeout=4.0)
-            return (res.choices[0].message.content or "").strip().lower().startswith("y")
-        except Exception as e:  # noqa: BLE001
-            logger.warning("[addr] classify failed (NO): %s", e)
-            return False
+        if not _STRICT:
+            return True
+        return is_question_or_request(text)
 
     # ── context injections (mirror RAGContext helpers) ───────────────────────
     async def _meeting_context(self):

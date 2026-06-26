@@ -96,6 +96,27 @@ def is_silent_answer(text: str) -> bool:
     return (text or "").strip() in ("", SILENT_TOKEN)
 
 
+_ROSTER_SOLO_PHRASES = (
+    "just you", "only you", "just yourself", "it's you", "its you", "you're the only",
+    "youre the only", "no one else", "nobody else", "only one here", "just the two of us",
+)
+
+
+def score_roster_grounded(answer: str, asker_name: str | None = None):
+    """Deterministic GROUNDED for the 'who's in the meeting?' question when the roster is ONLY
+    the asker. 'It's just you' / 'only you' is CORRECT (she excludes herself) → 2. Naming the
+    asker alone → 2. Naming someone who isn't present, or claiming others → 0. This replaces a
+    flaky judge call that kept scoring the correct 'just you' answer as a contradiction (0)."""
+    low = (answer or "").lower()
+    if any(p in low for p in _ROSTER_SOLO_PHRASES):
+        return 2, "correctly reports only the asker is present ('just you')"
+    if asker_name:
+        first = asker_name.split()[0].lower()
+        if first in low and " and " not in low and "," not in low.split(first, 1)[-1][:6]:
+            return 2, "names only the asker as present"
+    return 0, f"did not correctly report the solo roster: {low[:60]!r}"
+
+
 def score_silence_axis(addressed_expected: bool):
     """Harness patch: a SILENT answer is scored ONCE, on the silence/appropriateness axis —
     never double-counted as GROUNDED 0 + HUMAN_DELIVERY 0 (silence isn't 'ungrounded' or
