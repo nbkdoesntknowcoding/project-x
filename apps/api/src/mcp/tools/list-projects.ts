@@ -6,7 +6,6 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { db } from '../../db/index.js';
 import { projects, tasks } from '../../db/schema.js';
-import { withTenant } from '../../db/with-tenant.js';
 import type { McpAuthContext } from '../auth.js';
 
 export const LIST_PROJECTS_TOOL = {
@@ -49,11 +48,6 @@ function colorCircle(color: string): string {
 export async function listProjects(ctx: McpAuthContext, rawArgs: Record<string, unknown>) {
   const statusFilter = typeof rawArgs.status === 'string' ? rawArgs.status : 'active';
 
-  // The project LIST runs on the RAW db connection (the DATABASE_URL role, which HAS a SELECT
-  // grant on projects; projects has no RLS — relrowsecurity=f — so a plain workspace filter is
-  // correct and complete). It must NOT run inside withTenant: that does SET LOCAL ROLE
-  // app_user, and app_user was never granted SELECT on `projects` (only docs/tasks/etc. were
-  // set up for it), so the list comes back EMPTY under app_user — the bug we chased.
   const rows = await db
     .select()
     .from(projects)
@@ -67,40 +61,21 @@ export async function listProjects(ctx: McpAuthContext, rawArgs: Record<string, 
     )
     .orderBy(asc(projects.boardOrder), asc(projects.createdAt));
 
-  // ONLY the task-count aggregation runs inside withTenant, so the counts pass the SAME RLS
-  // predicate (workspace_id = tenant AND app_can_see_project(project_id)) that
-  // list_project_tasks enforces — keeping the two consistent. (app_user DOES have the grant on
-  // tasks, so this is safe.)
-  const countRows = await withTenant(ctx.tenant_id, async (tx) =>
-    (await tx.execute(
-      sql`SELECT project_id::text, status, COUNT(*)::int AS cnt
-          FROM tasks
-          WHERE workspace_id = ${ctx.tenant_id}::uuid
-            AND project_id IS NOT NULL
-          GROUP BY project_id, status`,
-    )) as unknown as { project_id: string; status: string; cnt: number }[],
-  );
-
-  // TEMP DIAGNOSTIC (remove after): prove what tenant the request resolves to and how many
-  // rows the scoped query returns vs an unscoped count — pinpoints auth-tenant vs query.
-  try {
-    const totalAny = (await db.execute(
-      sql`SELECT COUNT(*)::int AS c FROM projects`,
-    )) as unknown as { c: number }[];
-    // eslint-disable-next-line no-console
-    console.error(`[list_projects DEBUG] tenant_id=${ctx.tenant_id} scoped_rows=${rows.length} `
-      + `total_projects_in_db=${totalAny?.[0]?.c} status=${statusFilter}`);
-  } catch (e) {
-    // eslint-disable-next-line no-console
-    console.error(`[list_projects DEBUG] tenant_id=${ctx.tenant_id} scoped_rows=${rows.length} (count failed: ${String(e).slice(0, 80)})`);
-  }
-
   if (rows.length === 0) {
     return {
       content: 'No projects found in this workspace.',
       structuredContent: { projects: [] },
     };
   }
+
+  // Aggregate task counts per project
+  const countRows = await db.execute(
+    sql`SELECT project_id::text, status, COUNT(*)::int AS cnt
+        FROM tasks
+        WHERE workspace_id = ${ctx.tenant_id}::uuid
+          AND project_id IS NOT NULL
+        GROUP BY project_id, status`,
+  ) as unknown as { project_id: string; status: string; cnt: number }[];
 
   const countsMap: Record<string, Record<string, number>> = {};
   for (const r of countRows) {
