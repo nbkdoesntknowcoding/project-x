@@ -65,18 +65,25 @@ async def main() -> int:
         nd_decisionless = [h for h in nd if not (h.get("path") or "").startswith("decision-")]
         no_temporal = all(h.get("decision_status") in (None,) for h in nd_decisionless)
         ranks = [h.get("rank") for h in nd_decisionless if h.get("rank") is not None]
-        rrf_order = all(ranks[i] <= ranks[i + 1] for i in range(len(ranks) - 1)) if len(ranks) > 1 else True
+        # hybrid orders rrf_score DESC (higher rank = better), so the sequence is non-increasing.
+        rrf_order = all(ranks[i] >= ranks[i + 1] for i in range(len(ranks) - 1)) if len(ranks) > 1 else True
         check("non-decision hits have NO decision_status (pass is a no-op)", no_temporal, f"{len(nd_decisionless)} non-decision hits")
-        check("non-decision hits stay in RRF rank order", rrf_order)
+        check("non-decision hits stay in RRF (rrf_score DESC) order", rrf_order)
 
         print("E2E — record the REAL Inworld decision through the tool, then retrieve it:")
         rec = await mcp.call("record_decision", {"decision_text": INWORLD, "project_id": PROJECT}) or {}
         print("    record_decision ->", sc(rec))
         check("Inworld decision recorded as a current node + doc", sc(rec).get("status") == "current" and bool(sc(rec).get("decision_node_id")))
-        tts = await search(mcp, "did we settle the TTS provider for the voice agent")
-        inworld_hit = next((h for h in tts if "inworld" in ((h.get("title") or "") + (h.get("snippet") or "")).lower()), None)
-        print(f"    TTS query top: {[ (h.get('decision_status'), h.get('title')) for h in tts[:3] ]}")
-        check("TTS query returns the Inworld decision as CURRENT",
+        # Semantic recall needs the embedding job to land (Voyage call, async). Poll up to ~60s.
+        inworld_hit = None
+        for attempt in range(20):
+            tts = await search(mcp, "did we settle the TTS provider for the voice agent")
+            inworld_hit = next((h for h in tts if "inworld" in ((h.get("title") or "") + (h.get("snippet") or "")).lower()), None)
+            if inworld_hit is not None:
+                print(f"    found after {attempt * 3}s; top: {[(h.get('decision_status'), h.get('title')) for h in tts[:3]]}")
+                break
+            await asyncio.sleep(3)
+        check("TTS query returns the Inworld decision as CURRENT (after embedding lands)",
               inworld_hit is not None and inworld_hit.get("decision_status") == "current")
 
         print("\nMD2 GATE:", "ALL PASS" if not fails else f"FAILED ({', '.join(fails)})")

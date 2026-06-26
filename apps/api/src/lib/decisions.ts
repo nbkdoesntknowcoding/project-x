@@ -19,6 +19,7 @@ import { db } from '../db/index.js';
 import { docs, folders, graphNodes, graphEdges } from '../db/schema.js';
 import { contentHash, emptyYjsState } from './yjs.js';
 import { enqueueExtractDoc } from '../queue/graph.js';
+import { enqueueEmbeddingJob } from '../queue/embeddings.js';
 
 export interface RecordDecisionInput {
   decisionText: string;
@@ -173,7 +174,10 @@ export async function recordDecision(workspaceId: string, input: RecordDecisionI
     supersededOldId = oldId;
   }
 
-  // umbrella-connect sooner than the nightly cron (best-effort; lag is acceptable either way).
+  // Make the decision retrievable: embed it for semantic search (the path a natural question
+  // like "did we settle the TTS provider?" hits — keyword can't, it ANDs words the doc lacks)
+  // AND umbrella-connect it via graph extraction. Both best-effort; a queue blip only adds lag.
+  try { await enqueueEmbeddingJob({ doc_id: docId, tenant_id: workspaceId, content_hash: contentHash(md) }); } catch { /* queue optional */ }
   try { enqueueExtractDoc(workspaceId, docId); } catch { /* queue optional */ }
 
   return { nodeId, docId, entityId, status, supersededOldId };
