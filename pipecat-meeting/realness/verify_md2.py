@@ -78,7 +78,11 @@ async def main() -> int:
         inworld_hit = None
         for attempt in range(20):
             tts = await search(mcp, "did we settle the TTS provider for the voice agent")
-            inworld_hit = next((h for h in tts if "inworld" in ((h.get("title") or "") + (h.get("snippet") or "")).lower()), None)
+            # the DECISION doc specifically (path decision-*.md) — not a research/build doc that
+            # merely mentions Inworld in its text.
+            inworld_hit = next((h for h in tts
+                                if (h.get("path") or "").startswith("decision-")
+                                and "inworld" in ((h.get("title") or "") + (h.get("snippet") or "")).lower()), None)
             if inworld_hit is not None:
                 print(f"    found after {attempt * 3}s; top: {[(h.get('decision_status'), h.get('title')) for h in tts[:3]]}")
                 break
