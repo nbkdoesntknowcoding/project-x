@@ -1,9 +1,10 @@
 """
 addressing.py — wake-word / "is the bot addressed" detection (A1.6).
 
-Extracted from pipeline.py so the deterministic addressing logic is unit-testable
-without importing the heavy pipecat/LLM stack. The wake word is the FAST-PATH; the
-semantic LLM classifier (pipeline._classify_addressed) handles implicit address.
+Extracted from pipeline.py so the addressing logic is unit-testable without importing
+the heavy pipecat stack. Two PURE, deterministic paths: the wake word (is_addressed) and
+a direct question / assistant-request (is_question_or_request). The old LLM classifier was
+removed in STEP 1 — it was non-deterministic and flickered ADDRESSED/silent across runs.
 """
 import re
 
@@ -25,33 +26,55 @@ GREETINGS = (
     "thanks", "cheers", "welcome",
 )
 
-# Semantic-addressing classifier system prompt — the SINGLE source of truth shared by the
-# live pipeline (_classify_addressed) and the realness harness mirror (turn._addressed) so
-# the two never drift. Tightened (STEP 1): a direct QUESTION/REQUEST to her without a wake
-# word counts as addressed (was wrongly dropped to silence on fresh/no-wake turns); ambient
-# declarative cross-talk between people stays non-addressed.
-CLASSIFY_SYS = (
-    "You are the attention gate for a voice assistant named Mnema that sits in a live meeting. "
-    "Decide if the latest utterance is directed AT Mnema (answer YES) or is humans talking to "
-    "EACH OTHER (answer NO).\n"
-    "Answer YES when it is a QUESTION, REQUEST, or COMMAND that an assistant would be asked — "
-    "especially about the workspace, the meeting, status, history, docs, tasks, who's here, or "
-    "what was said; about recalling/looking up/summarising/noting something; or a direct "
-    "follow-up to what Mnema just said. A direct question does NOT need her name to count — a "
-    "mid-meeting question like 'what did we decide on the budget?' or 'who just spoke?' or "
-    "'remind me what we shipped' is FOR her. Lean YES on clear questions and requests. A "
-    "GREETING that names her — 'morning, Nema', 'hey Mnema', 'thanks Nema' — is also FOR her "
-    "(YES); answer it.\n"
-    "Answer NO for ambient cross-talk between people: opinions, decisions, and statements they "
-    "say to each other ('yeah I think we should just ship it', 'let's move on'), back-channels "
-    "('right', 'totally'), and chit-chat not seeking information. A bare declarative statement "
-    "to the room is NOT for Mnema.\n"
-    "Reply with exactly one word: YES or NO."
-)
+# NOTE: the LLM addressing classifier (and its CLASSIFY_SYS prompt) was REMOVED in STEP 1 —
+# it was non-deterministic (gpt-4o-mini, no seed) and flickered ADDRESSED/silent across runs.
+# The deterministic is_question_or_request rule below replaces it.
 
 
 def is_wake(tok: str) -> bool:
     return tok in WAKE_WORDS or bool(WAKE_RE.fullmatch(tok))
+
+
+# ── deterministic "is this a direct question / request to the assistant" ─────────
+# STEP 1: replaces the gpt-4o-mini addressing classifier on the non-wake path. That LLM call
+# (temperature 0 but NO seed) was NOT bit-deterministic, so a borderline question like "who
+# just spoke before me?" flipped ADDRESSED/silent across runs. This rule is PURE → identical
+# input always yields identical classification. A direct question or an assistant-style request
+# is ADDRESSED; a bare declarative / back-channel ("yeah I think we should just ship it",
+# "right", "totally") is NOT — that stays the conservative, silent side.
+_INTERROGATIVES = frozenset((
+    "who", "what", "whats", "what's", "when", "where", "why", "which", "whose", "whom",
+    "how", "hows", "how's", "whatre", "what're",
+))
+_AUX_FRONTED = frozenset((
+    "is", "are", "am", "was", "were", "do", "does", "did", "can", "could", "would", "will",
+    "should", "shall", "may", "might", "have", "has", "had", "won't", "wont", "isn't", "aren't",
+))
+_REQUEST_VERBS = frozenset((
+    "remind", "tell", "show", "give", "list", "read", "walk", "catch", "pull", "find", "look",
+    "fetch", "summarize", "summarise", "check", "explain", "describe", "recap", "share",
+    "bring", "send", "note", "save", "search", "open", "fill", "draft", "remember",
+))
+
+
+def is_question_or_request(text: str) -> bool:
+    """True if `text` is a direct question or an assistant-style request — deterministically.
+    Question mark, leading interrogative (who/what/how…), aux-fronted question (is/do/can/
+    should…), or an imperative request verb (remind/tell/show…), skipping leading greeting
+    fillers. A bare declarative or back-channel → False (ambient → stays silent)."""
+    t = (text or "").strip().lower()
+    if not t:
+        return False
+    if t.endswith("?"):
+        return True
+    tokens = re.findall(r"[a-z']+", t)
+    i = 0
+    while i < len(tokens) and tokens[i] in GREETINGS:   # skip "so", "hey", "okay", "yeah" …
+        i += 1
+    if i >= len(tokens):
+        return False
+    first = tokens[i]
+    return first in _INTERROGATIVES or first in _AUX_FRONTED or first in _REQUEST_VERBS
 
 
 def is_addressed(text: str) -> bool:

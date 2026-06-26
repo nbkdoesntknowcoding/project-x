@@ -11,19 +11,25 @@ import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from addressing import is_addressed, is_wake, CLASSIFY_SYS  # noqa: E402
+from addressing import is_addressed, is_wake, is_question_or_request  # noqa: E402
 
 
-# ── STEP 1: the shared classifier prompt leans YES on questions, NO on cross-talk ──
-def test_classify_prompt_is_shared_and_tuned():
-    # the prompt is the single source of truth for both the live bot and the harness mirror
-    assert isinstance(CLASSIFY_SYS, str) and len(CLASSIFY_SYS) > 100
-    low = CLASSIFY_SYS.lower()
-    # leans YES on direct questions without a wake word
-    assert "does not need her name" in low or "without a wake word" not in low  # tolerant
-    assert "question" in low and "request" in low
-    # explicitly keeps ambient declaratives non-addressed (the Q23 class)
-    assert "just ship it" in low and "cross-talk" in low
+# ── STEP 1: deterministic addressing — direct question/request = addressed, every time ──
+def test_question_or_request_is_deterministic_and_correct():
+    # the gate is a PURE function: same input → same output (no LLM, no flicker)
+    q = "who just spoke before me?"
+    assert all(is_question_or_request(q) for _ in range(5))     # identical across repeats
+    for addressed in ["what is on the board?", "what's in progress", "remind me what we shipped",
+                      "catch me up", "is anything blocked", "did we ship the build",
+                      "how's the voice agent coming along", "tell me the latest"]:
+        assert is_question_or_request(addressed), addressed
+    # bare declaratives / back-channels are NOT a question/request (stay silent)
+    for ambient in ["yeah I think we should just ship it", "right", "totally",
+                    "okay sounds good", "we should ship it", "let's move on"]:
+        assert not is_question_or_request(ambient), ambient
+    # leading greeting fillers are skipped before judging the first real token
+    assert is_question_or_request("so what did we decide")
+    assert not is_question_or_request("yeah we are good")
 
 
 def test_side_chatter_not_wake_addressed():

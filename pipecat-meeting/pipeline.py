@@ -89,7 +89,7 @@ MEETING_WS_SECRET = os.environ.get("MEETING_WS_SECRET", "")
 # A1.6: wake-word ("is the bot addressed") detection lives in addressing.py so it is
 # unit-testable without the heavy pipecat/LLM imports. is_addressed = the fast-path;
 # the semantic LLM classifier (_classify_addressed below) handles implicit address.
-from addressing import is_addressed as _addressed, CLASSIFY_SYS as _CLASSIFY_SYS  # noqa: E402
+from addressing import is_addressed as _addressed, is_question_or_request  # noqa: E402
 from silence import resolve_leading_silent  # noqa: E402  — pure SILENT_TOKEN gate logic
 from text_norm import to_spoken_plaintext  # noqa: E402  — strip markdown from [Background]
 from context_prune import prune_context  # noqa: E402  — STEP 1: keep per-turn context lean
@@ -112,12 +112,9 @@ _LIVE_DATA_RE = re.compile(
 # Addressed-only ("speak only when spoken to") is the default. Set MEETING_REQUIRE_ADDRESS=0
 # to go back to the legacy always-respond mode.
 _STRICT = os.environ.get("MEETING_REQUIRE_ADDRESS", "1") != "0"
-# A1.6: semantic addressing. The fast LLM classifier judges, per turn, whether a
-# non-wake-word utterance is directed at the bot (catches implicit address like "can you
-# pull up the Q3 doc?"). Gated by env so it can be disabled if latency matters (the
-# persona's <silent> path still decides); default on. Fail-closed (NO) on any error.
-_SEMANTIC_ADDRESSING = os.environ.get("MEETING_SEMANTIC_ADDRESSING", "1") != "0"
-_CLASSIFIER_MODEL = os.environ.get("MEETING_CLASSIFIER_MODEL", "gpt-4o-mini")
+# A1.6 addressing is now DETERMINISTIC (STEP 1): wake word (is_addressed) OR a direct
+# question/assistant-request (is_question_or_request), both pure. The old gpt-4o-mini
+# semantic classifier was removed — it flickered across runs (no seed). See the gate below.
 
 # Layer C drift re-anchor: re-state the persona character every N of Mnema's OWN spoken
 # turns to counter long-context drift. Transient per-turn injection (not cached).
@@ -173,44 +170,11 @@ def _build_user_turn_strategies():
     logger.info("[turn] VAD-silence endpointing (user_speech_timeout=%.2fs)", silence)
     return UserTurnStrategies(stop=[SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=silence)])
 
-_classifier_client = None
-
-
-def _get_classifier():
-    global _classifier_client
-    if _classifier_client is None:
-        from openai import AsyncOpenAI
-        _classifier_client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    return _classifier_client
-
-
-async def _classify_addressed(text: str, recently_engaged: bool, speaker: str | None = None) -> bool:
-    """Ask the fast model whether `text` is directed at the bot. Fail-closed (NO) on any
-    error/timeout so a classifier hiccup never makes the bot blurt into the room — the
-    deterministic wake word still works as the manual override. A1.3 gives exact
-    attribution, so the speaker's name is passed for sharper judgment."""
-    try:
-        hint = ("The user has just been talking with Mnema, so a bare follow-up question "
-                "is probably still for Mnema." if recently_engaged
-                else "There is no recent exchange with Mnema.")
-        who = f"The speaker is {speaker}. " if speaker else ""
-        res = await asyncio.wait_for(
-            _get_classifier().chat.completions.create(
-                model=_CLASSIFIER_MODEL, max_tokens=1, temperature=0,
-                messages=[
-                    {"role": "system", "content": _CLASSIFY_SYS},
-                    {"role": "user", "content": f"{who}{hint}\nLatest utterance: \"{text}\"\nDirected at Mnema?"},
-                ],
-            ),
-            timeout=2.0,
-        )
-        return (res.choices[0].message.content or "").strip().lower().startswith("y")
-    except Exception as e:  # noqa: BLE001 — never block the meeting on the gate
-        logger.warning("[classify] failed (defaulting to NO): %s", e)
-        return False
-
-
-# _addressed (wake-word fast-path) is imported from addressing.py — see top of file.
+# STEP 1: the old gpt-4o-mini addressing classifier (_classify_addressed / _get_classifier)
+# was REMOVED — it was the source of the <silent> flicker (an unsneeded LLM call, temperature 0
+# but NO seed, so borderline questions flipped ADDRESSED/silent across runs). The gate is now
+# the two PURE functions imported from addressing.py: is_addressed (wake word) and
+# is_question_or_request (direct question / assistant-style request). Both are deterministic.
 
 
 def _mnema_tools_schema() -> ToolsSchema:
@@ -403,25 +367,24 @@ class RAGContext(FrameProcessor):
                 self._state.meeting_log.append({"speaker": spk, "text": text})
                 if len(self._state.meeting_log) > 300:
                     del self._state.meeting_log[0]
-                # A1.6 semantic addressing. Two paths set the PER-TURN force flag so the
-                # next response is spoken (the persona's <silent> still suppresses clear
-                # side-talk when neither fires):
-                #   (a) wake word — instant, deterministic fast-path ("Mnema, …").
-                #   (b) else the fast LLM classifier judges implicit address ("can you pull
-                #       up the Q3 doc?"). Gated by env, fail-closed (NO), skipped if the
-                #       fast-path already fired. Replaces the old 6s force_until window.
+                # A1.6 addressing — now FULLY DETERMINISTIC (STEP 1). Two pure paths set the
+                # PER-TURN force flag so the next response is spoken:
+                #   (a) wake word — vocative "Mnema, …" / "morning, Nema".
+                #   (b) a direct question or assistant-style request (is_question_or_request).
+                # Both are pure functions → identical input always classifies the same way. The
+                # old gpt-4o-mini classifier (temperature 0 but NO seed) was non-deterministic
+                # and flickered ADDRESSED/silent on borderline questions like "who just spoke
+                # before me?" across runs — that LLM call is removed from the decision. A bare
+                # declarative / back-channel stays non-addressed (silent), conservatively.
                 addressed = False
                 if _addressed(text):
                     self._state.force_next_response = True
                     addressed = True
                     logger.info("[gate] wake word: %s", text[:60])
-                elif _STRICT and _SEMANTIC_ADDRESSING:
-                    recently = (time.monotonic() - self._state.last_response_monotonic) < 30.0
-                    speaker = (current_asker(self._state).get("name") or None)
-                    if await _classify_addressed(text, recently, speaker):
-                        self._state.force_next_response = True
-                        addressed = True
-                        logger.info("[gate] classifier: addressed — %s", text[:60])
+                elif _STRICT and is_question_or_request(text):
+                    self._state.force_next_response = True
+                    addressed = True
+                    logger.info("[gate] direct question/request: %s", text[:60])
                 # STEP 1 per-turn context order, after the cached Layer A prefix and the
                 # one-shot briefs. First PRUNE last turn's transient blocks + bound history,
                 # then inject this turn's fresh blocks so the persona stays close to the live
