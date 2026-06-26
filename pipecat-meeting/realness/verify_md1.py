@@ -31,6 +31,16 @@ async def call(mcp, args):
     return await mcp.call("record_decision", args) or {}
 
 
+def sc(r):
+    """The tool's structuredContent (the MCP result nests it under 'structuredContent')."""
+    return (r.get("structuredContent") if isinstance(r, dict) else None) or (r if isinstance(r, dict) else {})
+
+
+def err(r):
+    """True-ish error from either the MCP layer (success:false/error) or the tool (structuredContent.error)."""
+    return (r.get("error") if isinstance(r, dict) else None) or sc(r).get("error")
+
+
 async def main() -> int:
     if not os.environ.get("MNEMA_API_URL") or not os.environ.get("MNEMA_API_KEY"):
         print("FATAL: MNEMA_API_URL / MNEMA_API_KEY not set.", file=sys.stderr)
@@ -45,12 +55,13 @@ async def main() -> int:
 
     try:
         a = await call(mcp, {"decision_text": ALPHA, "project_id": MNEMA_PROJECT})
-        print("record alpha ->", a)
-        check("alpha is a current dated node + doc", a.get("status") == "current" and bool(a.get("decision_node_id")) and bool(a.get("doc_id")))
-        a_id = a.get("decision_node_id")
+        print("record alpha ->", sc(a))
+        a_id = sc(a).get("decision_node_id")
+        check("alpha is a current dated node + doc", sc(a).get("status") == "current" and bool(a_id) and bool(sc(a).get("doc_id")))
 
         a2 = await call(mcp, {"decision_text": ALPHA, "project_id": MNEMA_PROJECT})
-        check("idempotent re-record (no duplicate node)", a2.get("decision_node_id") == a_id, f"{a2.get('decision_node_id')} == {a_id}")
+        check("idempotent re-record (no duplicate node)", sc(a2).get("decision_node_id") == a_id and bool(a_id),
+              f"{sc(a2).get('decision_node_id')} == {a_id}")
 
         s = await mcp.call("search_docs", {"query": "MD1-TEST alpha decision", "mode": "hybrid", "limit": 5}) or {}
         hits = s.get("results") or []
@@ -58,19 +69,19 @@ async def main() -> int:
         check("retrievable by search_docs immediately", found, f"{len(hits)} hits")
 
         b = await call(mcp, {"decision_text": BETA, "project_id": MNEMA_PROJECT, "supersedes": a_id})
-        print("record beta (supersedes alpha) ->", b)
+        print("record beta (supersedes alpha) ->", sc(b))
+        b_id = sc(b).get("decision_node_id")
         check("supersede: beta current + names alpha as superseded",
-              b.get("status") == "current" and b.get("superseded_old_id") == a_id)
-        b_id = b.get("decision_node_id")
+              sc(b).get("status") == "current" and sc(b).get("superseded_old_id") == a_id)
 
         e1 = await call(mcp, {"decision_text": "[MD1-TEST] gamma", "project_id": MNEMA_PROJECT, "supersedes": NONEXISTENT})
-        check("edge: supersede non-existent rejected (nothing orphaned)", bool(e1.get("error")), str(e1)[:80])
+        check("edge: supersede non-existent rejected (nothing orphaned)", bool(err(e1)), str(err(e1))[:90])
 
         e2 = await call(mcp, {"decision_text": ALPHA, "project_id": MNEMA_PROJECT, "supersedes": a_id})
-        check("edge: self-supersede rejected", bool(e2.get("error")), str(e2)[:80])
+        check("edge: self-supersede rejected", bool(err(e2)), str(err(e2))[:90])
 
         e3 = await call(mcp, {"decision_text": ALPHA, "project_id": MNEMA_PROJECT, "supersedes": b_id})
-        check("edge: cycle (alpha→beta→alpha) rejected", bool(e3.get("error")), str(e3)[:80])
+        check("edge: cycle (alpha→beta→alpha) rejected", bool(err(e3)), str(err(e3))[:90])
 
         print("\nMD1 GATE:", "ALL PASS" if not fails else f"FAILED ({', '.join(fails)})")
         if a_id and b_id:
