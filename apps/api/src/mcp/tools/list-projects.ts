@@ -41,8 +41,10 @@ const COLOR_CIRCLE: Record<string, string> = {
   '#52525b': '⬜',
 };
 
-function colorCircle(color: string): string {
-  return COLOR_CIRCLE[color.toLowerCase()] ?? '▪️';
+function colorCircle(color: string | null | undefined): string {
+  // null-safe: a project with a NULL/empty color was crashing the whole tool here
+  // (null.toLowerCase() → TypeError → list_projects returned 0 even though the rows exist).
+  return COLOR_CIRCLE[(color ?? '').toLowerCase()] ?? '▪️';
 }
 
 export async function listProjects(ctx: McpAuthContext, rawArgs: Record<string, unknown>) {
