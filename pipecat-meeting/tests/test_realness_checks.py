@@ -51,14 +51,24 @@ def test_tool_discipline():
     assert C.score_tool_discipline([], True, known)[0] == 0
     # ghost tool → fail (the get_meeting_context 404 class)
     assert C.score_tool_discipline([{"name": "get_meeting_context"}], False, known)[0] == 0
-    # >2 chained → thrash fail
+    # STEP 2 (cap-aware): 3 DIFFERENT tools is a legit chain, not thrash → pass
     assert C.score_tool_discipline(
         [{"name": "search_knowledge"}, {"name": "list_recent_docs"}, {"name": "list_project_tasks"}],
-        False, known)[0] == 0
+        False, known)[0] == 2
+    # thrash = same tool CHOSEN >2x with no cap firing → fail
+    assert C.score_tool_discipline(
+        [{"name": "list_project_tasks", "args": {"p": i}} for i in range(3)], False, known)[0] == 0
+    # but if the over-the-cap calls were CAPPED (cap fired), it's the system stopping her → pass
+    capped_sweep = [
+        {"name": "list_project_tasks", "args": {"p": "a"}, "result": '{"tasks":[]}'},
+        {"name": "list_project_tasks", "args": {"p": "b"}, "result": '{"tasks":[]}'},
+        {"name": "list_project_tasks", "args": {"p": "c"}, "result": '{"capped": true}'},
+        {"name": "list_project_tasks", "args": {"p": "d"}, "result": '{"capped": true}'},
+    ]
+    assert C.score_tool_discipline(capped_sweep, False, known)[0] == 2
     # 2 is allowed
     assert C.score_tool_discipline(
-        [{"name": "list_projects" if False else "search_knowledge"}, {"name": "list_recent_docs"}],
-        False, known)[0] == 2
+        [{"name": "search_knowledge"}, {"name": "list_recent_docs"}], False, known)[0] == 2
 
 
 def test_known_tools_excludes_removed_meeting_context():

@@ -6,6 +6,7 @@ The subjective rubrics (grounded/honest/recitation/human nuance) go through the 
 """
 import re
 import statistics
+from collections import Counter
 
 from meeting_persona import SILENT_TOKEN
 
@@ -63,22 +64,40 @@ def all_known_tools() -> set:
     return {t["function"]["name"] for t in MNEMA_TOOL_DEFINITIONS + LOCAL_TOOL_DEFINITIONS}
 
 
-def score_tool_discipline(tool_calls: list, must_call_tool: bool, known: set | None = None):
-    """tool_calls = [{'name':..., 'args':...}, …] actually made for ONE question.
-    Fail (0) on: a call to a non-existent/unadvertised tool (the get_meeting_context 404
-    class), OR more than 2 tools chained (the 5-tool thrash). If the question REQUIRES a
-    live tool and none was called → 0. Otherwise 2."""
+def _is_capped(call: dict) -> bool:
+    """True if this tool call was SHORT-CIRCUITED by the per-turn cap (returned {'capped':true})
+    rather than actually executed — i.e. the cap stopping a fan-out, NOT the bot thrashing."""
+    r = call.get("result")
+    if isinstance(r, dict):
+        return bool(r.get("capped"))
+    if isinstance(r, str):
+        return '"capped": true' in r or '"capped":true' in r
+    return False
+
+
+def score_tool_discipline(tool_calls: list, must_call_tool: bool, known: set | None = None,
+                          cap_threshold: int = 2):
+    """STEP 2 (cap-aware): CAPPED calls are the system stopping a fan-out — they are NOT thrash
+    and don't count toward the threshold. Thrash = repeated CHOSEN (executed) calls to the SAME
+    tool BEYOND the cap when the answer was already available; with the cap in place this can't
+    normally happen, so a turn that hit the cap and answered gracefully PASSES. Still fail on a
+    ghost tool, or a live-state question with no tool called."""
     known = known if known is not None else all_known_tools()
-    names = [c.get("name") for c in (tool_calls or [])]
+    calls = tool_calls or []
+    chosen = [c for c in calls if not _is_capped(c)]
+    capped = [c for c in calls if _is_capped(c)]
+    names = [c.get("name") for c in chosen]
     ghosts = [n for n in names if n not in known]
     if ghosts:
         return 0, f"called non-existent tool(s): {', '.join(ghosts)}"
-    if len(names) > 2:
-        return 0, f"thrash: {len(names)} tools chained ({', '.join(names)})"
-    if must_call_tool and not names:
+    # thrash only if she CHOSE the same tool more than the cap allows (cap failed to stop it)
+    over = [n for n, c in Counter(names).items() if c > cap_threshold]
+    if over:
+        return 0, f"thrash: chose {', '.join(over)} more than {cap_threshold}x (cap didn't stop it)"
+    if must_call_tool and not names and not capped:
         return 0, "live-state question but NO tool called (answered from memory)"
-    detail = f"{len(names)} tool(s): {', '.join(names) or 'none'}"
-    return 2, detail
+    cap_note = f" + {len(capped)} capped (cap fired — legitimate)" if capped else ""
+    return 2, f"{len(names)} chosen tool(s){cap_note}: {', '.join(names) or 'none'}"
 
 
 # ── silence ──────────────────────────────────────────────────────────────────
