@@ -75,5 +75,9 @@ export async function recordDecisionTool(ctx: McpAuthContext, rawArgs: Record<st
         return { content: `Could not record the decision: ${(e as Error).message}`, structuredContent: { error: 'record_failed', message: (e as Error).message } };
       }
     },
+    (result) => {
+      const sc = (result?.structuredContent ?? {}) as Record<string, unknown>;
+      return { decision_node_id: sc.decision_node_id ?? null, error: sc.error ?? null };
+    },
   );
 }
