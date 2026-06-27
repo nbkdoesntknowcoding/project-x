@@ -830,6 +830,32 @@ export const docAccessRequests = pgTable(
   }),
 );
 
+// Phase 3b — confirm/reject loop for meeting-proposed decisions. SIBLING to doc_access_requests
+// (the ACL path is byte-unchanged). One pending approval per decision node; confirm flips the
+// decision proposed→current + applies the deferred supersede, reject tombstones it.
+export const decisionApprovals = pgTable(
+  'decision_approvals',
+  {
+    id:               uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId:      uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    decisionNodeId:   uuid('decision_node_id').notNull().references(() => graphNodes.id, { onDelete: 'cascade' }),
+    docId:            uuid('doc_id').references(() => docs.id, { onDelete: 'set null' }),
+    proposerId:       uuid('proposer_id').references(() => users.id),   // who may confirm
+    meetingId:        uuid('meeting_id').references(() => meetings.id, { onDelete: 'set null' }),
+    supersedesTarget: uuid('supersedes_target').references(() => graphNodes.id, { onDelete: 'set null' }), // mirrors stashed node.supersedes
+    status:           text('status').notNull().default('pending'), // 'pending' | 'confirmed' | 'rejected'
+    resolvedBy:       uuid('resolved_by').references(() => users.id),
+    resolvedAt:       timestamp('resolved_at', { withTimezone: true }),
+    createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    // at most one PENDING approval per decision node (idempotent re-consolidation)
+    pendingUq:    uniqueIndex('decision_approvals_pending_uq').on(table.decisionNodeId).where(sql`status = 'pending'`),
+    proposerIdx:  index('decision_approvals_proposer_idx').on(table.proposerId, table.status),
+    workspaceIdx: index('decision_approvals_workspace_idx').on(table.workspaceId),
+  }),
+);
+
 export const toolAudit = pgTable(
   'tool_audit',
   {

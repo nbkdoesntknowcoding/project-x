@@ -107,6 +107,21 @@ async function validateSupersede(
 }
 
 /**
+ * Apply a supersede (keep-both-and-link): the new decision becomes `current` and supersedes the
+ * old; the old flips to `historical` with `superseded_by` + a `supersedes` edge. This is the
+ * SINGLE supersede implementation — called at record-time (current-mode recordDecision) AND at
+ * confirm-time (Phase 3b confirm of a proposed decision). Never duplicate this logic.
+ */
+export async function applySupersede(workspaceId: string, newNodeId: string, oldId: string): Promise<void> {
+  await db.update(graphNodes).set({ supersedes: oldId, status: 'current', updatedAt: new Date() }).where(eq(graphNodes.id, newNodeId));
+  await db.update(graphNodes).set({ supersededBy: newNodeId, status: 'historical', updatedAt: new Date() }).where(eq(graphNodes.id, oldId));
+  await db.insert(graphEdges).values({
+    workspaceId, fromNodeId: newNodeId, toNodeId: oldId, edgeType: 'supersedes',
+    provenance: 'EXTRACTED', confidenceScore: 1.0, weight: 1.5,
+  }).onConflictDoNothing();
+}
+
+/**
  * Record a decision. Idempotent on (project, text). When `supersedes` is given, keeps both
  * decisions, links them, and flips the old one to `historical` (never deletes/mutates its
  * content). Returns the node + doc ids.
@@ -197,12 +212,8 @@ export async function recordDecision(workspaceId: string, input: RecordDecisionI
       await db.update(graphNodes).set({ supersedes: oldId, updatedAt: new Date() }).where(eq(graphNodes.id, nodeId));
       supersedeDeferred = oldId;
     } else {
-      await db.update(graphNodes).set({ supersedes: oldId, status: 'current', updatedAt: new Date() }).where(eq(graphNodes.id, nodeId));
-      await db.update(graphNodes).set({ supersededBy: nodeId, status: 'historical', updatedAt: new Date() }).where(eq(graphNodes.id, oldId));
-      await db.insert(graphEdges).values({
-        workspaceId, fromNodeId: nodeId, toNodeId: oldId, edgeType: 'supersedes',
-        provenance: 'EXTRACTED', confidenceScore: 1.0, weight: 1.5,
-      }).onConflictDoNothing();
+      // current-mode: apply now via the SINGLE shared implementation (also used by confirm-time).
+      await applySupersede(workspaceId, nodeId, oldId);
       supersededOldId = oldId;
     }
   }

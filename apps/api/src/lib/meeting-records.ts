@@ -16,7 +16,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../db/schema.js';
 import { recordDecision } from './decisions.js';
 
-const { meetingRecords, graphNodes, graphEdges } = schema;
+const { meetingRecords, graphNodes, graphEdges, docs } = schema;
 
 // Accepts the top-level db or a transaction (both are PostgresJsDatabase-compatible).
 type Tx = PostgresJsDatabase<typeof schema>;
@@ -102,7 +102,13 @@ async function upsertEdge(tx: Tx, workspaceId: string, fromNodeId: string, toNod
  * decision). Returns the record id. Stale decision nodes (from a previous, longer decision
  * list for the same meeting) are pruned so re-consolidation stays clean.
  */
-export async function createMeetingRecord(tx: Tx, workspaceId: string, input: MeetingRecordInput): Promise<string> {
+/** A proposed decision recordDecision produced for a meeting — surfaced so the worker can raise a
+ *  decision_approvals row (it has the meeting/approver context this fn doesn't). */
+export interface ProposedDecisionRef { nodeId: string; docId: string; supersedeDeferred?: string; }
+
+export async function createMeetingRecord(
+  tx: Tx, workspaceId: string, input: MeetingRecordInput,
+): Promise<{ recordId: string; proposed: ProposedDecisionRef[] }> {
   const aclScope = deriveAclScope(input.projectId ?? null, workspaceId);
   const decisions = (input.decisions ?? []).map((d) => String(d).trim()).filter(Boolean);
   const values = {
@@ -141,19 +147,21 @@ export async function createMeetingRecord(tx: Tx, workspaceId: string, input: Me
   // recordDecision uses the module `db`; createMeetingRecord is called with `db` (no open tx), so
   // these interleave on the same pool safely.
   const decidedAt = input.endedAt ?? input.startedAt ?? new Date();
+  const proposed: ProposedDecisionRef[] = [];
   for (const text of decisions) {
     const res = await recordDecision(workspaceId, {
       decisionText: text, projectId: input.projectId ?? null, status: 'proposed',
       decidedIn: input.meetingId, decidedAt,
     });
     await upsertEdge(tx, workspaceId, meetingNode, res.nodeId, 'decided', 1.5);
+    proposed.push({ nodeId: res.nodeId, docId: res.docId, supersedeDeferred: res.supersedeDeferred });
   }
   // Drop any legacy meeting-indexed decision nodes (the pre-converge `${meetingId}:decision:${i}`
   // scheme) so re-consolidation is clean — converged decisions are keyed by recordDecision's
   // content hash, not by meeting index.
   await deleteDecisionNodes(tx, workspaceId, input.meetingId, 0);
 
-  return rec!.id;
+  return { recordId: rec!.id, proposed };
 }
 
 /** Read the episodic record by record id or meeting id (workspace-scoped). */
@@ -189,14 +197,46 @@ async function deleteDecisionNodes(tx: Tx, workspaceId: string, meetingId: strin
 }
 
 /**
+ * Converged (Phase 3a+) meeting decisions are keyed by content hash, not meeting index, so they're
+ * identified by `decided_in` (NOT the legacy `meetingId:decision:i` entityId). Right-to-be-forgotten
+ * must remove them fully: the decision node + its edges + its decision doc (and the doc graph node).
+ * decision_approvals rows cascade off the decision node FK. Pure cleanup; no-op when there are none.
+ */
+async function deleteConvergedDecisions(tx: Tx, workspaceId: string, meetingId: string): Promise<void> {
+  const nodes = await tx.select({ id: graphNodes.id }).from(graphNodes).where(and(
+    eq(graphNodes.workspaceId, workspaceId), eq(graphNodes.entityType, 'decision'), eq(graphNodes.decidedIn, meetingId),
+  ));
+  const ids = nodes.map((n) => n.id);
+  if (ids.length === 0) return;
+  // the decision docs: each decision node ──documented_by──▶ its doc node (entityId = doc uuid).
+  const docEdges = await tx.select({ toNodeId: graphEdges.toNodeId }).from(graphEdges)
+    .where(and(inArray(graphEdges.fromNodeId, ids), eq(graphEdges.edgeType, 'documented_by')));
+  const docNodeIds = docEdges.map((e) => e.toNodeId);
+  let docUuids: string[] = [];
+  if (docNodeIds.length) {
+    const docNodes = await tx.select({ entityId: graphNodes.entityId }).from(graphNodes)
+      .where(and(eq(graphNodes.workspaceId, workspaceId), eq(graphNodes.entityType, 'doc'), inArray(graphNodes.id, docNodeIds)));
+    docUuids = docNodes.map((n) => n.entityId);
+  }
+  await tx.delete(graphEdges).where(inArray(graphEdges.fromNodeId, ids));
+  await tx.delete(graphEdges).where(inArray(graphEdges.toNodeId, ids));
+  await tx.delete(graphNodes).where(inArray(graphNodes.id, ids)); // cascades decision_approvals
+  if (docUuids.length) {
+    await tx.delete(graphNodes).where(and(eq(graphNodes.workspaceId, workspaceId), eq(graphNodes.entityType, 'doc'), inArray(graphNodes.entityId, docUuids)));
+    await tx.delete(docs).where(inArray(docs.id, docUuids));
+  }
+}
+
+/**
  * Right-to-be-forgotten: delete the episodic record AND its linked semantic nodes (the
- * discrete decision nodes + their edges). The shared `meeting` node is left to syncMeetingNode
- * (it represents the meeting, not just this record). Returns true if a record was deleted.
+ * discrete decision nodes + their edges + decision docs). The shared `meeting` node is left to
+ * syncMeetingNode (it represents the meeting, not just this record). Returns true if deleted.
  */
 export async function deleteMeetingRecord(tx: Tx, workspaceId: string, recordId: string): Promise<boolean> {
   const rec = await getMeetingRecord(tx, workspaceId, { id: recordId });
   if (!rec) return false;
-  await deleteDecisionNodes(tx, workspaceId, rec.meetingId, 0);
+  await deleteDecisionNodes(tx, workspaceId, rec.meetingId, 0);          // legacy meetingId:decision:i (pre-converge)
+  await deleteConvergedDecisions(tx, workspaceId, rec.meetingId);        // converged decision:<hash> + docs
   await tx.delete(meetingRecords).where(and(eq(meetingRecords.workspaceId, workspaceId), eq(meetingRecords.id, recordId)));
   return true;
 }

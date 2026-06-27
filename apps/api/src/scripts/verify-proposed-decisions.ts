@@ -10,7 +10,7 @@
  */
 import { and, eq, inArray, like } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { graphNodes, graphEdges, docs } from '../db/schema.js';
+import { graphNodes, graphEdges, docs, decisionApprovals } from '../db/schema.js';
 import { recordDecision } from '../lib/decisions.js';
 
 const WS = process.env.VERIFY_WS;
@@ -72,6 +72,18 @@ async function main(): Promise<void> {
     check('regression: tool-path supersede APPLIES now (new current)', sup.status === 'current' && sup.supersededOldId === base.nodeId);
     check('regression: tool-path supersede flipped OLD → historical', baseAfter2?.status === 'historical');
     check('regression: tool-path wrote the supersedes edge', !!(await edge(sup.nodeId, base.nodeId, 'supersedes')));
+
+    // ── STEP 1: decision_approvals sibling table + partial-unique (one pending per decision) ──
+    await db.insert(decisionApprovals).values({
+      workspaceId: WS!, decisionNodeId: prop.nodeId, docId: prop.docId,
+      proposerId: null, meetingId: null, supersedesTarget: prop.supersedeDeferred ?? null, status: 'pending',
+    }).onConflictDoNothing();
+    await db.insert(decisionApprovals).values({   // 2nd pending for the SAME decision → must be rejected
+      workspaceId: WS!, decisionNodeId: prop.nodeId, status: 'pending',
+    }).onConflictDoNothing();
+    const appr = await db.select({ id: decisionApprovals.id }).from(decisionApprovals)
+      .where(and(eq(decisionApprovals.decisionNodeId, prop.nodeId), eq(decisionApprovals.status, 'pending')));
+    check('STEP1: exactly ONE pending decision_approvals row (partial-unique held)', appr.length === 1, `rows=${appr.length}`);
 
     console.log('\nPROPOSED-DB GATE:', fails.length ? `FAILED (${fails.join(', ')})` : 'ALL PASS');
   } finally {

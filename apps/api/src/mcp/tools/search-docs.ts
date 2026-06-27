@@ -148,7 +148,7 @@ export interface SearchHit {
   project_name?: string | null;
   // MD2 temporal signal — set ONLY on decision-doc hits (a recorded decision's doc). Lets the
   // caller prefer the current decision and label a superseded one; absent on every other hit.
-  decision_status?: 'current' | 'historical' | 'proposed' | null;
+  decision_status?: 'current' | 'historical' | 'proposed' | 'rejected' | null;
   decided_at?: string | null;
 }
 
@@ -253,7 +253,7 @@ async function applyDecisionTemporal(ctx: McpAuthContext, result: SearchResult):
     const h = result.results[i]!;
     const m = DECISION_PATH_RE.exec(h.path || '');
     const n = m ? byEntity.get(`decision:${m[1]}`) : undefined;
-    h.decision_status = (n?.status as 'current' | 'historical' | 'proposed' | undefined) ?? null;
+    h.decision_status = (n?.status as 'current' | 'historical' | 'proposed' | 'rejected' | undefined) ?? null;
     h.decided_at = n?.decidedAt ? new Date(n.decidedAt).toISOString() : null;
   }
 

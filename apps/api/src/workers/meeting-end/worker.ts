@@ -23,8 +23,8 @@ import OpenAI from 'openai';
 import { config } from '../../config/env.js';
 import { db } from '../../db/index.js';
 import {
-  docs, folders, meetings, meetingParticipants, meetingTranscripts, notifications, projects, tasks,
-  workspaceMembers, type MeetingSummary,
+  decisionApprovals, docs, folders, meetings, meetingParticipants, meetingTranscripts, notifications,
+  projects, tasks, workspaceMembers, type MeetingSummary,
 } from '../../db/schema.js';
 import { contentHash, emptyYjsState } from '../../lib/yjs.js';
 import { syncMeetingNode } from '../../lib/graph/meeting-graph.js';
@@ -78,26 +78,36 @@ async function consolidateMeetingRecord(meeting: MeetingRow, summary: MeetingSum
     .select({ name: meetingParticipants.name, email: meetingParticipants.email, userId: meetingParticipants.resolvedUserId })
     .from(meetingParticipants)
     .where(eq(meetingParticipants.meetingId, meeting.id));
-  await createMeetingRecord(db, meeting.workspaceId, recordInputFromSummary(meeting, summary, parts));
+  const { proposed } = await createMeetingRecord(db, meeting.workspaceId, recordInputFromSummary(meeting, summary, parts));
 
-  // Phase 3a: the meeting's decisions just landed as 'proposed' (human-verify gate). Notify the
-  // approver so they're reviewed, not silently sitting unconfirmed. Surface = the existing
-  // notifications inbox → /app/requests (the confirm/reject wiring is Phase 3b).
-  const proposedCount = (summary?.decisions ?? []).filter((d) => String(d).trim()).length;
-  if (proposedCount > 0) {
+  // Phase 3b: the meeting's decisions just landed as 'proposed' (human-verify gate). Raise a
+  // decision_approvals row per proposed decision (the inbox at /app/requests) + notify the approver.
+  if (proposed.length > 0) {
     const approverId = await resolveDecisionApprover(meeting);
     if (approverId) {
+      for (const p of proposed) {
+        // one PENDING approval per decision node; partial-unique → re-consolidation makes no dup.
+        await db.insert(decisionApprovals).values({
+          workspaceId: meeting.workspaceId,
+          decisionNodeId: p.nodeId,
+          docId: p.docId,
+          proposerId: approverId,           // the meeting owner (not the bot) — who may confirm
+          meetingId: meeting.id,
+          supersedesTarget: p.supersedeDeferred ?? null,
+          status: 'pending',
+        }).onConflictDoNothing();
+      }
       await db.insert(notifications).values({
         workspaceId: meeting.workspaceId,
         recipientId: approverId,
         actorId: approverId,        // system-originated; self-attributed (actor_id is NOT NULL)
         kind: 'decision_review',
-        title: `${proposedCount} decision${proposedCount > 1 ? 's' : ''} to review`,
-        body: `Mnema captured ${proposedCount} proposed decision${proposedCount > 1 ? 's' : ''} from "${meeting.title ?? 'a meeting'}". Confirm or discard.`,
+        title: `${proposed.length} decision${proposed.length > 1 ? 's' : ''} to review`,
+        body: `Mnema captured ${proposed.length} proposed decision${proposed.length > 1 ? 's' : ''} from "${meeting.title ?? 'a meeting'}". Confirm or discard.`,
         link: '/app/requests',
       });
     } else {
-      console.warn(`[meeting-end] ${proposedCount} proposed decisions for meeting ${meeting.id} but no approver resolved (no organizer, no workspace admin)`); // eslint-disable-line no-console
+      console.warn(`[meeting-end] ${proposed.length} proposed decisions for meeting ${meeting.id} but no approver resolved (no organizer, no workspace admin)`); // eslint-disable-line no-console
     }
   }
 }

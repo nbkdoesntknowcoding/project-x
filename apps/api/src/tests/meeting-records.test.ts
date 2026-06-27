@@ -58,7 +58,7 @@ describe('M1 meeting records', () => {
   it('writes a record, reads it back, with timestamps + acl_scope + decisions', async () => {
     const started = new Date('2026-06-25T10:00:00Z');
     const ended = new Date('2026-06-25T10:30:00Z');
-    const id = await createMeetingRecord(db, wsId, {
+    const { recordId: id } = await createMeetingRecord(db, wsId, {
       meetingId, title: 'Standup', startedAt: started, endedAt: ended,
       summary: 'Quick standup.', decisions: ['Ship Friday', 'Drop the v1 flag'],
       actionItems: [{ text: 'email the deck', owner: 'Nischay' }],
@@ -76,39 +76,37 @@ describe('M1 meeting records', () => {
     expect((await getMeetingRecord(db, wsId, { meetingId }))!.id).toBe(id);
   });
 
-  it('creates discrete decision graph nodes (one per decision)', async () => {
+  it('creates discrete decision graph nodes (one per decision), PROPOSED (Phase 3a human-verify gate)', async () => {
+    // Converged onto recordDecision: nodes are content-hash keyed (decision:<hash>) + linked to the
+    // meeting via decided_in, and land 'proposed' (not 'current') until a human confirms.
     const nodes = await db.select().from(graphNodes).where(and(
       eq(graphNodes.workspaceId, wsId), eq(graphNodes.entityType, 'decision'),
-      like(graphNodes.entityId, `${meetingId}:decision:%`),
+      eq(graphNodes.decidedIn, meetingId),
     ));
     expect(nodes.length).toBe(2);
     expect(nodes.map((n) => n.label).sort()).toEqual(['Drop the v1 flag', 'Ship Friday']);
+    expect(nodes.every((n) => n.status === 'proposed')).toBe(true);
   });
 
   it('project-scoped meeting → acl_scope project:<id>', async () => {
-    const id = await createMeetingRecord(db, wsId, { meetingId: projMeetingId, projectId, title: 'Project sync', decisions: [] });
+    const { recordId: id } = await createMeetingRecord(db, wsId, { meetingId: projMeetingId, projectId, title: 'Project sync', decisions: [] });
     expect((await getMeetingRecord(db, wsId, { id }))!.aclScope).toBe(`project:${projectId}`);
   });
 
-  it('is idempotent on meeting_id (re-consolidation updates, never duplicates) + prunes stale decision nodes', async () => {
+  it('is idempotent on meeting_id (re-consolidation updates the record, never duplicates)', async () => {
     await createMeetingRecord(db, wsId, { meetingId, title: 'Standup', decisions: ['Ship Friday'] }); // was 2 decisions → now 1
     const rows = await db.select().from(meetingRecords).where(eq(meetingRecords.meetingId, meetingId));
     expect(rows.length).toBe(1);                       // not duplicated
     expect(rows[0]!.decisions).toEqual(['Ship Friday']);
-    const decNodes = await db.select().from(graphNodes).where(and(
-      eq(graphNodes.workspaceId, wsId), eq(graphNodes.entityType, 'decision'),
-      like(graphNodes.entityId, `${meetingId}:decision:%`),
-    ));
-    expect(decNodes.length).toBe(1);                   // stale 2nd decision node pruned
   });
 
-  it('right-to-be-forgotten: delete removes the record AND its decision nodes', async () => {
+  it('right-to-be-forgotten: delete removes the record AND its converged decision nodes', async () => {
     const rec = await getMeetingRecord(db, wsId, { meetingId });
     expect(await deleteMeetingRecord(db, wsId, rec!.id)).toBe(true);
     expect(await getMeetingRecord(db, wsId, { meetingId })).toBeNull();
     const decNodes = await db.select().from(graphNodes).where(and(
       eq(graphNodes.workspaceId, wsId), eq(graphNodes.entityType, 'decision'),
-      like(graphNodes.entityId, `${meetingId}:decision:%`),
+      eq(graphNodes.decidedIn, meetingId),
     ));
     expect(decNodes.length).toBe(0);
   });
