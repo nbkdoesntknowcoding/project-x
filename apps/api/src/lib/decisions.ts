@@ -122,6 +122,19 @@ export async function applySupersede(workspaceId: string, newNodeId: string, old
 }
 
 /**
+ * Phase 3b confirm-time: is the stashed supersede target still a CURRENT decision we can flip?
+ * Returns false (SKIP, never throw) if it's missing, not a decision, or no longer current — so a
+ * confirm whose target was already superseded/rejected/deleted between propose and confirm leaves
+ * the chain untouched instead of corrupting it.
+ */
+export async function supersedeTargetStillApplicable(workspaceId: string, oldId: string): Promise<boolean> {
+  const old = await db.query.graphNodes.findFirst({
+    where: and(eq(graphNodes.workspaceId, workspaceId), eq(graphNodes.id, oldId), eq(graphNodes.entityType, 'decision')),
+  });
+  return !!old && old.status === 'current';
+}
+
+/**
  * Record a decision. Idempotent on (project, text). When `supersedes` is given, keeps both
  * decisions, links them, and flips the old one to `historical` (never deletes/mutates its
  * content). Returns the node + doc ids.

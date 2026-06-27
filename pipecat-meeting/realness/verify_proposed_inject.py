@@ -31,6 +31,9 @@ CURRENT = {"title": "Decision — TTS provider is Inworld", "path": "decision-aa
 PROPOSED = {"title": "Decision — switch CRM to Salesforce", "path": "decision-bbbb.md",
             "project_name": "Mnema", "decision_status": "proposed", "decided_at": "2026-06-27T00:00:00Z",
             "snippet": "switch CRM to Salesforce (captured from the standup)"}
+REJECTED = {"title": "Decision — abandon the mobile rewrite REJECTEDMARKER", "path": "decision-cccc.md",
+            "project_name": "Mnema", "decision_status": "rejected", "decided_at": "2026-06-27T00:00:00Z",
+            "snippet": "abandon the mobile rewrite REJECTEDMARKER (discarded by reviewer)"}
 
 
 class FakeMnema:
@@ -86,6 +89,12 @@ async def main() -> int:
     check("pipeline.py only sets has_current_decision for 'current' (not proposed)",
           bool(re.search(r"status == \"current\":[\s\S]{0,200}has_current_decision = True", pipe_src))
           and "proposed" in pipe_src)
+
+    print("STEP 5a — a REJECTED decision is fully skipped (never injected), mirror in sync:")
+    rej = await bg([REJECTED])
+    check("rejected decision is NOT injected at all (no label, no content)", "REJECTEDMARKER" not in rej)
+    check("pipeline.py also skips rejected before labeling (mirror sync)",
+          bool(re.search(r'status == "rejected":[\s\S]{0,80}continue', pipe_src)))
 
     print("\nPROPOSED-INJECT GATE:", "ALL PASS" if not fails else f"FAILED ({', '.join(fails)})")
     return 0 if not fails else 1

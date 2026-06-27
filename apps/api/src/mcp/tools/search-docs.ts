@@ -268,6 +268,11 @@ async function applyDecisionTemporal(ctx: McpAuthContext, result: SearchResult):
     .sort((a, b) => tier(a.h.decision_status) - tier(b.h.decision_status) || a.rrf - b.rrf)
     .map((x) => x.h);
   slots.forEach((slot, k) => { result.results[slot] = ordered[k]!; });
+
+  // STEP 5 defense-in-depth: a 'rejected' decision must NEVER surface. The primary guard is the
+  // doc soft-delete on reject (search_docs filters deleted_at, so a rejected decision's doc never
+  // even reaches here) — this drops it outright in case a doc ever lingered un-archived.
+  result.results = result.results.filter((h) => h.decision_status !== 'rejected');
 }
 
 // ---------------------------------------------------------------------------

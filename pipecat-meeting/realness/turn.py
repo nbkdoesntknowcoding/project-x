@@ -256,6 +256,10 @@ class TurnRunner:
             # decision — it's weak at chronology and must be told. Labels current vs superseded so
             # it states the standing one and names the old one as past, never the stale one.
             status = h.get("decision_status")
+            # A 'rejected' decision is a tombstone — fully invisible; never inject it (defense in
+            # depth; the soft-deleted doc normally never reaches retrieval).
+            if status == "rejected":
+                continue
             if status:
                 day = (h.get("decided_at") or "")[:10]
                 if status == "current":

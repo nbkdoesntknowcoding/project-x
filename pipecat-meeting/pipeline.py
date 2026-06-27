@@ -706,6 +706,10 @@ class RAGContext(FrameProcessor):
             # `historical`; this labels each so the agent states the current one and names the
             # superseded one as past — never the stale one as the answer.
             status = h.get("decision_status")
+            # A 'rejected' decision is a tombstone — fully invisible; never inject it (defense in
+            # depth; the soft-deleted doc normally never reaches retrieval).
+            if status == "rejected":
+                continue
             if status:
                 day = (h.get("decided_at") or "")[:10]
                 if status == "current":
