@@ -148,7 +148,7 @@ export interface SearchHit {
   project_name?: string | null;
   // MD2 temporal signal — set ONLY on decision-doc hits (a recorded decision's doc). Lets the
   // caller prefer the current decision and label a superseded one; absent on every other hit.
-  decision_status?: 'current' | 'historical' | null;
+  decision_status?: 'current' | 'historical' | 'proposed' | null;
   decided_at?: string | null;
 }
 
@@ -253,19 +253,19 @@ async function applyDecisionTemporal(ctx: McpAuthContext, result: SearchResult):
     const h = result.results[i]!;
     const m = DECISION_PATH_RE.exec(h.path || '');
     const n = m ? byEntity.get(`decision:${m[1]}`) : undefined;
-    h.decision_status = (n?.status as 'current' | 'historical' | undefined) ?? null;
+    h.decision_status = (n?.status as 'current' | 'historical' | 'proposed' | undefined) ?? null;
     h.decided_at = n?.decidedAt ? new Date(n.decidedAt).toISOString() : null;
   }
 
-  // Reorder ONLY the decision slots (current before historical); stable within each status so
-  // RRF order is preserved among same-status decisions. Non-decision slots are never moved.
+  // Reorder ONLY the decision slots; stable within each status so RRF order is preserved among
+  // same-status decisions. Non-decision slots are never moved. Order: current (the standing
+  // decision) first, then historical, then PROPOSED last — a proposed (unverified, human-gate)
+  // decision must NEVER outrank a current one. The inject layer additionally labels proposed as
+  // not-yet-confirmed so the agent never states it as settled.
+  const tier = (s?: string | null): number => (s === 'current' ? 0 : s === 'proposed' ? 2 : 1);
   const ordered = slots
     .map((i) => ({ h: result.results[i]!, rrf: i }))
-    .sort((a, b) => {
-      const pa = a.h.decision_status === 'historical' ? 1 : 0;
-      const pb = b.h.decision_status === 'historical' ? 1 : 0;
-      return pa - pb || a.rrf - b.rrf;
-    })
+    .sort((a, b) => tier(a.h.decision_status) - tier(b.h.decision_status) || a.rrf - b.rrf)
     .map((x) => x.h);
   slots.forEach((slot, k) => { result.results[slot] = ordered[k]!; });
 }

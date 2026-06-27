@@ -261,6 +261,9 @@ class TurnRunner:
                 if status == "current":
                     head = f"[DECISION — CURRENT{f' as of {day}' if day else ''}; this is the standing decision] {head}"
                     has_current_decision = True
+                elif status == "proposed":
+                    # Human-verify gate: NOT confirmed. The agent must never state this as settled.
+                    head = f"[PROPOSED DECISION — NOT yet confirmed{f', proposed {day}' if day else ''}; do NOT state as settled, say it's awaiting confirmation] {head}"
                 else:
                     head = f"[DECISION — HISTORICAL{f', decided {day}' if day else ''}; SUPERSEDED, do not state as current] {head}"
             blocks.append(f"[project: {proj} | {head}]\n{(h.get('snippet') or '').strip()}")

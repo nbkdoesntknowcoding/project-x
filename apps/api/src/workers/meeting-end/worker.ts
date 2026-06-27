@@ -17,14 +17,14 @@
  */
 import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
-import { and, asc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import OpenAI from 'openai';
 import { config } from '../../config/env.js';
 import { db } from '../../db/index.js';
 import {
-  docs, folders, meetings, meetingParticipants, meetingTranscripts, projects, tasks,
-  type MeetingSummary,
+  docs, folders, meetings, meetingParticipants, meetingTranscripts, notifications, projects, tasks,
+  workspaceMembers, type MeetingSummary,
 } from '../../db/schema.js';
 import { contentHash, emptyYjsState } from '../../lib/yjs.js';
 import { syncMeetingNode } from '../../lib/graph/meeting-graph.js';
@@ -79,6 +79,39 @@ async function consolidateMeetingRecord(meeting: MeetingRow, summary: MeetingSum
     .from(meetingParticipants)
     .where(eq(meetingParticipants.meetingId, meeting.id));
   await createMeetingRecord(db, meeting.workspaceId, recordInputFromSummary(meeting, summary, parts));
+
+  // Phase 3a: the meeting's decisions just landed as 'proposed' (human-verify gate). Notify the
+  // approver so they're reviewed, not silently sitting unconfirmed. Surface = the existing
+  // notifications inbox → /app/requests (the confirm/reject wiring is Phase 3b).
+  const proposedCount = (summary?.decisions ?? []).filter((d) => String(d).trim()).length;
+  if (proposedCount > 0) {
+    const approverId = await resolveDecisionApprover(meeting);
+    if (approverId) {
+      await db.insert(notifications).values({
+        workspaceId: meeting.workspaceId,
+        recipientId: approverId,
+        actorId: approverId,        // system-originated; self-attributed (actor_id is NOT NULL)
+        kind: 'decision_review',
+        title: `${proposedCount} decision${proposedCount > 1 ? 's' : ''} to review`,
+        body: `Mnema captured ${proposedCount} proposed decision${proposedCount > 1 ? 's' : ''} from "${meeting.title ?? 'a meeting'}". Confirm or discard.`,
+        link: '/app/requests',
+      });
+    } else {
+      console.warn(`[meeting-end] ${proposedCount} proposed decisions for meeting ${meeting.id} but no approver resolved (no organizer, no workspace admin)`); // eslint-disable-line no-console
+    }
+  }
+}
+
+/** Approver for a meeting's proposed decisions: the organizer, else any workspace owner/admin so
+ *  the decisions are never un-approvable. Returns null only if the workspace has neither. */
+async function resolveDecisionApprover(meeting: MeetingRow): Promise<string | null> {
+  if (meeting.organizerUserId) return meeting.organizerUserId;
+  const [admin] = await db
+    .select({ userId: workspaceMembers.userId })
+    .from(workspaceMembers)
+    .where(and(eq(workspaceMembers.workspaceId, meeting.workspaceId), inArray(workspaceMembers.role, ['owner', 'admin'])))
+    .limit(1);
+  return admin?.userId ?? null;
 }
 
 // ── Tasks from action items ─────────────────────────────────────────────────────

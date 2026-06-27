@@ -14,6 +14,7 @@
 import { and, eq, inArray, like } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../db/schema.js';
+import { recordDecision } from './decisions.js';
 
 const { meetingRecords, graphNodes, graphEdges } = schema;
 
@@ -94,7 +95,6 @@ async function upsertEdge(tx: Tx, workspaceId: string, fromNodeId: string, toNod
     .onConflictDoNothing();
 }
 
-const decisionEntityId = (meetingId: string, i: number) => `${meetingId}:decision:${i}`;
 
 /**
  * Create (or idempotently update) the episodic record for a meeting, set acl_scope, and wire
@@ -133,29 +133,25 @@ export async function createMeetingRecord(tx: Tx, workspaceId: string, input: Me
     const projNode = await upsertNode(tx, workspaceId, 'project', input.projectId, 'Project', input.projectId);
     await upsertEdge(tx, workspaceId, meetingNode, projNode, 'belongs_to');
   }
-  // MD1 STEP 4: emit decision nodes with the SAME richer temporal shape as record_decision —
-  // decided_at (the meeting's ended_at, else started_at), status current, decided_in = meeting,
-  // decision_text, acl_scope. (Only the node shape changes; decisions still come from the
-  // transcript-extracted summary exactly as before.)
+  // Phase 3a: meeting decisions converge onto recordDecision as PROPOSED (human-verify gate).
+  // gpt-4o-mini infers these off the transcript, so they must NOT auto-become current or supersede
+  // a real decision. recordDecision gives each a doc + umbrella bridge + embedding and lands it
+  // 'proposed' (recorded, retrievable-as-proposed, never spoken as settled) — replacing the old
+  // inline 'current' insert. We still attribute it to the meeting (meeting ──decided──▶ decision).
+  // recordDecision uses the module `db`; createMeetingRecord is called with `db` (no open tx), so
+  // these interleave on the same pool safely.
   const decidedAt = input.endedAt ?? input.startedAt ?? new Date();
-  for (let i = 0; i < decisions.length; i++) {
-    const [dn] = await tx.insert(graphNodes).values({
-      workspaceId, entityType: 'decision', entityId: decisionEntityId(input.meetingId, i),
-      label: decisions[i]!.slice(0, 200), summary: decisions[i]!.slice(0, 500),
-      projectId: input.projectId ?? null, extractionPass: 'structural',
-      decidedAt, status: 'current', decisionText: decisions[i]!, decidedIn: input.meetingId, aclScope,
-    }).onConflictDoUpdate({
-      target: [graphNodes.workspaceId, graphNodes.entityType, graphNodes.entityId],
-      set: {
-        label: decisions[i]!.slice(0, 200), summary: decisions[i]!.slice(0, 500),
-        decisionText: decisions[i]!, decidedAt, status: 'current', decidedIn: input.meetingId,
-        aclScope, projectId: input.projectId ?? null, updatedAt: new Date(),
-      },
-    }).returning({ id: graphNodes.id });
-    await upsertEdge(tx, workspaceId, meetingNode, dn!.id, 'decided', 1.5);
+  for (const text of decisions) {
+    const res = await recordDecision(workspaceId, {
+      decisionText: text, projectId: input.projectId ?? null, status: 'proposed',
+      decidedIn: input.meetingId, decidedAt,
+    });
+    await upsertEdge(tx, workspaceId, meetingNode, res.nodeId, 'decided', 1.5);
   }
-  // Prune decision nodes beyond the current count (idempotent re-consolidation).
-  await deleteDecisionNodes(tx, workspaceId, input.meetingId, decisions.length);
+  // Drop any legacy meeting-indexed decision nodes (the pre-converge `${meetingId}:decision:${i}`
+  // scheme) so re-consolidation is clean — converged decisions are keyed by recordDecision's
+  // content hash, not by meeting index.
+  await deleteDecisionNodes(tx, workspaceId, input.meetingId, 0);
 
   return rec!.id;
 }

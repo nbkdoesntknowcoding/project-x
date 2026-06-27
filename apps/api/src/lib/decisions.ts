@@ -27,15 +27,18 @@ export interface RecordDecisionInput {
   supersedes?: string | null;   // graph_nodes.id of the decision this one replaces
   decidedIn?: string | null;    // meetings.id, when the decision came from a meeting
   decidedAt?: Date;             // defaults to now (server-set); the meeting path passes ended_at
-  status?: 'current' | 'historical';
+  // 'proposed' = recorded but human-verify-gated (meeting-extracted): never current, never
+  // applies its supersede, never spoken as settled until confirmed (Phase 3b). Tool path = 'current'.
+  status?: 'current' | 'historical' | 'proposed';
 }
 
 export interface RecordDecisionResult {
   nodeId: string;
   docId: string;
   entityId: string;
-  status: 'current' | 'historical';
+  status: 'current' | 'historical' | 'proposed';
   supersededOldId?: string;
+  supersedeDeferred?: string;   // proposed mode: the intended supersede target, stashed not applied
 }
 
 function normalizeText(s: string): string {
@@ -113,7 +116,7 @@ export async function recordDecision(workspaceId: string, input: RecordDecisionI
   if (!decisionText) throw new Error('decision_text is required');
   const projectId = input.projectId ?? null;
   const decidedAt = input.decidedAt ?? new Date();
-  const status: 'current' | 'historical' = input.status ?? 'current';
+  const status: 'current' | 'historical' | 'proposed' = input.status ?? 'current';
   const aclScope = deriveAclScope(projectId, workspaceId);
   const key = decisionKey(projectId, decisionText);
   const entityId = `decision:${key}`;
@@ -181,17 +184,27 @@ export async function recordDecision(workspaceId: string, input: RecordDecisionI
     provenance: 'EXTRACTED', confidenceScore: 1.0, weight: 1.0,
   }).onConflictDoNothing();
 
-  // ── Supersede-by-invalidation (keep-both-and-link) ──
+  // ── Supersede ──
+  // current/historical: apply now (keep-both-and-link — flip old → historical, write the edge).
+  // proposed: DEFER — stash the intended target on the proposed node ONLY; the old decision is
+  // untouched (stays current, no superseded_by, no edge) until a human confirms (Phase 3b). Either
+  // way validateSupersede already ran above, so a proposed decision can't stash an invalid target.
   let supersededOldId: string | undefined;
+  let supersedeDeferred: string | undefined;
   if (input.supersedes) {
     const oldId = input.supersedes;
-    await db.update(graphNodes).set({ supersedes: oldId, status: 'current', updatedAt: new Date() }).where(eq(graphNodes.id, nodeId));
-    await db.update(graphNodes).set({ supersededBy: nodeId, status: 'historical', updatedAt: new Date() }).where(eq(graphNodes.id, oldId));
-    await db.insert(graphEdges).values({
-      workspaceId, fromNodeId: nodeId, toNodeId: oldId, edgeType: 'supersedes',
-      provenance: 'EXTRACTED', confidenceScore: 1.0, weight: 1.5,
-    }).onConflictDoNothing();
-    supersededOldId = oldId;
+    if (status === 'proposed') {
+      await db.update(graphNodes).set({ supersedes: oldId, updatedAt: new Date() }).where(eq(graphNodes.id, nodeId));
+      supersedeDeferred = oldId;
+    } else {
+      await db.update(graphNodes).set({ supersedes: oldId, status: 'current', updatedAt: new Date() }).where(eq(graphNodes.id, nodeId));
+      await db.update(graphNodes).set({ supersededBy: nodeId, status: 'historical', updatedAt: new Date() }).where(eq(graphNodes.id, oldId));
+      await db.insert(graphEdges).values({
+        workspaceId, fromNodeId: nodeId, toNodeId: oldId, edgeType: 'supersedes',
+        provenance: 'EXTRACTED', confidenceScore: 1.0, weight: 1.5,
+      }).onConflictDoNothing();
+      supersededOldId = oldId;
+    }
   }
 
   // Make the decision retrievable: embed it for semantic search (the path a natural question
@@ -200,5 +213,5 @@ export async function recordDecision(workspaceId: string, input: RecordDecisionI
   try { await enqueueEmbeddingJob({ doc_id: docId, tenant_id: workspaceId, content_hash: contentHash(md) }); } catch { /* queue optional */ }
   try { enqueueExtractDoc(workspaceId, docId); } catch { /* queue optional */ }
 
-  return { nodeId, docId, entityId, status, supersededOldId };
+  return { nodeId, docId, entityId, status, supersededOldId, supersedeDeferred };
 }
