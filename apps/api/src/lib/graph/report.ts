@@ -121,9 +121,16 @@ export async function generateGraphReport(workspaceId: string, db: Tx): Promise<
   const godNodeCount = godNodeCountRow?.count ?? 0;
   const communityCount = communityRows.length;
 
+  // Truthful banner when the graph has no edges: clustering is skipped (not failed), so there are
+  // no communities / god-nodes — say so plainly instead of rendering empty sections that read as
+  // a broken report.
+  const emptyNote = totalEdges === 0
+    ? `\n> ⚠️ This workspace has ${totalNodes} nodes but **no edges yet**, so clustering was skipped — no communities or god-nodes could be computed. This usually means relationship extraction or similarity-edge building hasn't produced connections for this content yet.\n`
+    : '';
+
   const markdown = `# Knowledge Graph Report
 *Auto-generated — ${now}*
-
+${emptyNote}
 ## Overview
 - ${totalNodes} nodes, ${totalEdges} edges (${extracted} extracted, ${inferred} inferred), ${godNodeCount} god-nodes, ${communityCount} communities
 

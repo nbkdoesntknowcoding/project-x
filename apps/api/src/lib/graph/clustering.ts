@@ -8,7 +8,10 @@ import louvain from 'graphology-communities-louvain';
 import betweennessCentrality from 'graphology-metrics/centrality/betweenness.js';
 import { and, eq } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import pino from 'pino';
 import * as schema from '../../db/schema.js';
+
+const log = pino({ name: 'clustering' });
 
 const { graphNodes, graphEdges, graphCommunities } = schema;
 
@@ -94,6 +97,20 @@ export async function runClustering(
         // ignore duplicate edge errors (multi=false)
       }
     }
+  }
+
+  // Empty-graph guard: louvain (via inferType) classifies a 0-edge graph as a "true mixed graph"
+  // and throws. A workspace with nodes but no edges has nothing to cluster — return cleanly so the
+  // cron continues and the report still generates, and LOG the anomaly rather than swallow it
+  // (nodes-but-no-edges means relationship extraction or similarity-edge building produced nothing
+  // for this workspace — investigated separately). edges.length vs graph.size distinguishes "no
+  // edge rows at all" from "all rows filtered out" (AMBIGUOUS / endpoint missing / duplicate).
+  if (graph.size === 0) {
+    log.warn(
+      { workspaceId, nodeCount: nodes.length, edgeRows: edges.length },
+      'Clustering skipped: workspace has nodes but zero usable edges',
+    );
+    return { communityCount: 0, godNodeIds: [], communities: {}, betweenness: {} };
   }
 
   // Louvain clustering
