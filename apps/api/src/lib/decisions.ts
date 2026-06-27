@@ -161,6 +161,26 @@ export async function recordDecision(workspaceId: string, input: RecordDecisionI
   }).returning({ id: graphNodes.id });
   const nodeId = node!.id;
 
+  // ── Umbrella bridge: link the decision node to its decision DOC node ──
+  // The DOC node (entityType 'doc', entityId = docId — the SAME identity extractSemantic upserts)
+  // is what the nightly similarity + extraction passes connect to related docs/concepts. The
+  // decision node itself can't be similarity-joined (embeddings are keyed to doc uuids, not to
+  // `decision:<sha1>`), and making it embeddable would double-connect + distort clustering. So we
+  // add ONE structural edge — decision ──documented_by──▶ doc — and traversal from the decision
+  // reaches the whole umbrella one hop out. Idempotent: shared node identity (upsert, no dup) +
+  // edge unique on (from,to,type) (onConflictDoNothing, no dup edge).
+  const [docNode] = await db.insert(graphNodes).values({
+    workspaceId, entityType: 'doc', entityId: docId, label: title,
+    projectId, extractionPass: 'structural',
+  }).onConflictDoUpdate({
+    target: [graphNodes.workspaceId, graphNodes.entityType, graphNodes.entityId],
+    set: { updatedAt: new Date() },  // shared node — don't clobber a richer label from extraction
+  }).returning({ id: graphNodes.id });
+  await db.insert(graphEdges).values({
+    workspaceId, fromNodeId: nodeId, toNodeId: docNode!.id, edgeType: 'documented_by',
+    provenance: 'EXTRACTED', confidenceScore: 1.0, weight: 1.0,
+  }).onConflictDoNothing();
+
   // ── Supersede-by-invalidation (keep-both-and-link) ──
   let supersededOldId: string | undefined;
   if (input.supersedes) {
