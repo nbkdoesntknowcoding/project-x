@@ -83,8 +83,37 @@ async function processGraphCron(job: Job): Promise<void> {
 
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24h ago
 
+  // Cost gate: a knowledge graph needs material to build from — similarity edges are pairwise
+  // (need ≥2 docs) and there's nothing to relate in a lone welcome doc. Below the threshold,
+  // extraction + similarity + clustering + report are all paid LLM/DB no-ops. Default ≥2 docs;
+  // any meeting activity also qualifies. Tunable via GRAPH_MIN_DOCS.
+  const minDocs = Math.max(1, Number(process.env.GRAPH_MIN_DOCS ?? 2));
+
   for (const { id: workspaceId } of workspaceRows) {
     try {
+      const counts = await withSystemPrivilege(async (tx) => {
+        const [d] = await tx
+          .select({ n: sql<number>`count(*)::int` })
+          .from(schema.docs)
+          .where(and(
+            eq(schema.docs.workspaceId, workspaceId),
+            isNull(schema.docs.deletedAt),
+            sql`${schema.docs.path} NOT LIKE '__graph_report__%'`,
+          ));
+        const [m] = await tx
+          .select({ n: sql<number>`count(*)::int` })
+          .from(schema.meetings)
+          .where(eq(schema.meetings.workspaceId, workspaceId));
+        return { docCount: d?.n ?? 0, meetingCount: m?.n ?? 0 };
+      });
+      if (counts.docCount < minDocs && counts.meetingCount === 0) {
+        log.info(
+          { workspaceId, docCount: counts.docCount, meetingCount: counts.meetingCount, minDocs },
+          'Graph cron: skipped (insufficient content to build a graph)',
+        );
+        continue;
+      }
+
       if (isDeep) {
         // Weekly deep: re-extract top-20 god-node docs with Sonnet
         const godNodeDocs = await withSystemPrivilege(async (tx) => {
