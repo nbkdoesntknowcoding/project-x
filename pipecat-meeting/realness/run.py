@@ -83,6 +83,10 @@ def judge_ground_truth(gt: dict, q: dict, result: dict, current_docs: list) -> d
         ],
         "live_meeting_transcript": gt.get("meeting_transcript", []),
         "live_roster": gt.get("roster"),
+        # The [Background] notes the agent was actually handed THIS turn — including any injected
+        # CURRENT/HISTORICAL decision. An answer that traces to this is GROUNDED, not fabricated:
+        # surfacing an injected decision IS the memory layer working, not invention.
+        "injected_background_this_turn": result.get("injected_background") or "",
         "current_recent_docs": [
             {"title": d.get("title"), "date": d.get("updated_at") or d.get("created_at")}
             for d in (current_docs or [])[:6]

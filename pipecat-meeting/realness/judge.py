@@ -13,9 +13,14 @@ logger = logging.getLogger("realness.judge")
 
 _RUBRIC_PROMPTS = {
     "GROUNDED": (
-        "Rubric GROUNDED. The AUTHORITATIVE source is `tools_returned_this_turn` — the raw data "
-        "her own tools actually returned on THIS turn — plus `live_meeting_transcript` and "
-        "`live_roster`. If a claim is supported by ANY of those, it is GROUNDED, even if it is "
+        "Rubric GROUNDED. The AUTHORITATIVE sources are `tools_returned_this_turn` — the raw data "
+        "her own tools actually returned on THIS turn — plus `live_meeting_transcript`, "
+        "`live_roster`, AND `injected_background_this_turn` (the background notes she was handed "
+        "this turn, INCLUDING any decision labelled CURRENT or HISTORICAL). A claim that traces to "
+        "the injected background — e.g. stating the CURRENT decision it contains (the TTS provider "
+        "is Inworld, superseding ElevenLabs) — is GROUNDED, because surfacing an injected decision "
+        "is the memory layer working as designed, NOT invention. "
+        "If a claim is supported by ANY of those, it is GROUNDED, even if it is "
         "absent from the static `workspace_reference` (which may be a stale snapshot — do NOT "
         "treat absence there as fabrication). Reporting the live roster is correct: e.g. 'it's "
         "just you' / 'only you' when the roster shows the speaker as the sole human present is "
@@ -32,10 +37,12 @@ _RUBRIC_PROMPTS = {
         "transcript where the question is actually about who-spoke / what-was-just-said."),
     "HONEST": (
         "Rubric HONEST. Judge against what her tools actually returned this turn "
-        "(`tools_returned_this_turn`) + transcript/roster. Did she avoid asserting specifics "
-        "that aren't in that data, and state uncertainty plainly when it's thin or missing? "
-        "Faithfully relaying a tool/transcript result is HONEST even if the static reference "
-        "doesn't list it. 2 = honest, claims trace to the data, clear about limits; "
+        "(`tools_returned_this_turn`) + transcript/roster + `injected_background_this_turn` (the "
+        "notes she was handed, including any CURRENT/HISTORICAL decision). Did she avoid asserting "
+        "specifics that aren't in that data, and state uncertainty plainly when it's thin or "
+        "missing? Faithfully relaying a tool/transcript result OR an injected CURRENT decision (the "
+        "TTS provider is Inworld, replacing ElevenLabs, on cost/realtime/emotion grounds) is "
+        "HONEST even if the static reference doesn't list it. 2 = honest, claims trace to the data, clear about limits; "
         "1 = slightly overclaims; 0 = asserts a specific that traces to none of the tool "
         "returns / transcript as if it were fact. Do NOT penalize her for not surfacing the "
         "seeded transcript line in a question it's unrelated to — that's correct restraint, "
@@ -51,7 +58,10 @@ _RUBRIC_PROMPTS = {
         "a brief accurate report; 1 = leans noticeably on quoted blocks; 0 = reproduces a "
         "substantial doc body verbatim or passes a title+date off as the content."),
     "HUMAN_DELIVERY": (
-        "Rubric HUMAN_DELIVERY. Score how it's DELIVERED, not how warm it is. A correct, clear, "
+        "Rubric HUMAN_DELIVERY. Score ONLY delivery — never factual or roster correctness (that "
+        "is GROUNDED's job). NEVER dock this rubric because you think the content is wrong: e.g. "
+        "'it's just you in the meeting' when the asker is the sole attendee is CORRECT and must "
+        "not be penalized here at all. Score how it's DELIVERED, not how warm it is. A correct, clear, "
         "businesslike factual answer that sounds like a person speaking — varied sentence "
         "length, natural spoken punctuation, no tics, no list read aloud — is a PASS (2) EVEN "
         "IF it isn't especially warm. Do NOT dock points for 'could be warmer' on a factual "

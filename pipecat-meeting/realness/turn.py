@@ -353,7 +353,8 @@ class TurnRunner:
         if not addressed and _STRICT:
             # SilentGate drops the turn deterministically — she stays silent, no LLM call.
             return {"text": SILENT_TOKEN, "tool_calls": [], "addressed": False,
-                    "context_len": len(self.messages), "raw_text": SILENT_TOKEN}
+                    "context_len": len(self.messages), "raw_text": SILENT_TOKEN,
+                    "injected_background": ""}
 
         # 2) prune + reset per-turn tool budget (mirror _prune_turn_context)
         self.state.tool_calls_this_turn = 0
@@ -369,6 +370,14 @@ class TurnRunner:
         await self._background(text)
         self._addressed_directive()        # STEP 1: answer, don't go silent
         self._speaker_block()
+
+        # Measurement capture (does NOT alter the render): the exact background the agent was
+        # handed THIS turn — every injected system block except the persona. The judge scores
+        # GROUNDED/HONEST against this too, since an answer from an injected CURRENT decision is
+        # grounded, not invented.
+        injected_background = "\n\n".join(
+            m["content"] for m in self.messages
+            if m["role"] == "system" and m["content"] != self.persona)
 
         # 4) append the user turn + run the real LLM tool loop
         self.messages.append({"role": "user", "content": text})
@@ -398,4 +407,5 @@ class TurnRunner:
         # record the assistant turn into the running context (like aggregators.assistant())
         self.messages.append({"role": "assistant", "content": clean})
         return {"text": clean, "tool_calls": tool_calls, "addressed": True,
-                "context_len": len(self.messages), "raw_text": raw}
+                "context_len": len(self.messages), "raw_text": raw,
+                "injected_background": injected_background}
