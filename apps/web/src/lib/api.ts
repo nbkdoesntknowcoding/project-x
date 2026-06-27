@@ -321,6 +321,19 @@ export interface AccessRequest {
   owner_email: string | null;
 }
 
+// Phase 3b — a meeting-proposed decision awaiting human confirm/reject (distinct from AccessRequest).
+export interface DecisionApproval {
+  id: string;
+  decision_node_id: string;
+  doc_id: string | null;
+  status: 'pending' | 'confirmed' | 'rejected';
+  created_at: string;
+  resolved_at: string | null;
+  decision_text: string | null;
+  decision_label: string | null;
+  meeting_title: string | null;
+}
+
 export const api = {
   // Redeem a license key on the current workspace (owner only).
   redeemLicense: (key: string): Promise<{ ok: boolean; plan: string; seats: number }> =>
@@ -333,6 +346,12 @@ export const api = {
     apiFetch(`/api/docs/access-requests?box=${box}`),
   resolveAccessRequest: (id: string, body: { action: 'approve' | 'deny'; expiresAt?: string | null }): Promise<{ status: string }> =>
     apiFetch(`/api/docs/access-requests/${id}`, { method: 'PATCH', body }),
+
+  // ── Decision approvals (Phase 3b) — confirm/reject meeting-proposed decisions ──
+  listDecisionApprovals: (box: 'incoming' | 'outgoing'): Promise<{ box: string; approvals: DecisionApproval[] }> =>
+    apiFetch(`/api/decision-approvals?box=${box}`),
+  resolveDecisionApproval: (id: string, body: { action: 'confirm' | 'reject' }): Promise<{ status: string }> =>
+    apiFetch(`/api/decision-approvals/${id}`, { method: 'PATCH', body }),
   listDocs: (): Promise<{ docs: DocSummary[] }> => apiFetch('/api/docs'),
   createDoc: (body: DocCreatePayload): Promise<{ doc: DocFull }> =>
     apiFetch('/api/docs', { method: 'POST', body }),
