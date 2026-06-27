@@ -695,6 +695,7 @@ class RAGContext(FrameProcessor):
         if not hits:
             return
         blocks = []
+        has_current_decision = False
         for h in hits[:3]:   # seed: top doc hits, project-labelled
             proj = h.get("project_name") or "Unfiled"
             head = h.get("title") or ""
@@ -709,6 +710,7 @@ class RAGContext(FrameProcessor):
                 day = (h.get("decided_at") or "")[:10]
                 if status == "current":
                     head = f"[DECISION — CURRENT{f' as of {day}' if day else ''}; this is the standing decision] {head}"
+                    has_current_decision = True
                 else:
                     head = f"[DECISION — HISTORICAL{f', decided {day}' if day else ''}; SUPERSEDED, do not state as current] {head}"
             blocks.append(f"[project: {proj} | {head}]\n{(h.get('snippet') or '').strip()}")
@@ -732,10 +734,17 @@ class RAGContext(FrameProcessor):
         # The "[Background …]" label/framing is kept exactly as is; retrieval/selection/order
         # are unchanged — this is a FORMAT-only pass at the single pre-injection point.
         body = to_spoken_plaintext("\n\n---\n\n".join(blocks))
+        # MD2 carve-out: a CURRENT decision IS the standing truth, so the "may be out of date"
+        # caveat must not undercut it. Appended ONLY when one is present — non-decision background
+        # stays byte-identical to before.
+        decision_note = (
+            " A DECISION labelled CURRENT is the standing decision — trust it over older docs and state it as settled."
+            if has_current_decision else ""
+        )
         content = (
             "[Background — stored docs + their graph relations, each labelled with its project. "
             "Docs may be OUT OF DATE; for current tasks/status/assignments call the live tools "
-            "(list_project_tasks / list_recent_docs). Use naturally; don't say you looked it up]"
+            "(list_project_tasks / list_recent_docs)." + decision_note + " Use naturally; don't say you looked it up]"
             "\n\n" + body
         )[:2500]   # hard token-ish cap on the injection
         await self.push_frame(
