@@ -42,6 +42,14 @@ export async function renderPdf(html: string): Promise<Buffer> {
       waitUntil: 'networkidle',
       timeout:   config.PDF_RENDER_TIMEOUT_MS,
     });
+    // Diagram Phase 1: wait for client-side diagram rendering (mermaid is async). The template sets
+    // window.__diagramsReady immediately for no-diagram docs, and via a 12s fallback if a CDN fetch
+    // stalls — so this never blocks a normal export. Best-effort: on timeout we still print.
+    try {
+      await page.waitForFunction('window.__diagramsReady === true', undefined, {
+        timeout: config.PDF_RENDER_TIMEOUT_MS,
+      });
+    } catch { /* diagrams best-effort — print whatever rendered */ }
     const pdf = await page.pdf({
       format:     'A4',
       margin:     { top: '25mm', right: '20mm', bottom: '25mm', left: '20mm' },

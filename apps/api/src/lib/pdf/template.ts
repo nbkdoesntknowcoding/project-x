@@ -1,5 +1,41 @@
 import { marked } from 'marked';
 
+// Diagram Phase 1 (Sprint 2): render mermaid + sanitized SVG fences in the export. Runs inside the
+// Chromium export page. CDN libs are loaded ONLY when a diagram block is actually present, so
+// normal (no-diagram) exports gain ZERO latency / network. Sets window.__diagramsReady so renderPdf
+// can wait for async mermaid before printing; a 12s fallback guarantees the export never hangs even
+// if a CDN fetch stalls (worst case the diagram prints as its source code — graceful degradation).
+const DIAGRAM_RENDER_SCRIPT = `<script>
+window.__diagramsReady = false;
+setTimeout(function () { window.__diagramsReady = true; }, 12000);
+(async function () {
+  function loadScript(src) { return new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); }); }
+  function replaceWithDiagram(code, html) { var w = document.createElement('div'); w.className = 'diagram'; w.innerHTML = html; var pre = code.closest('pre'); if (pre) pre.replaceWith(w); }
+  try {
+    var svgBlocks = Array.prototype.slice.call(document.querySelectorAll('pre > code.language-svg'));
+    var mmBlocks = Array.prototype.slice.call(document.querySelectorAll('pre > code.language-mermaid'));
+    if (svgBlocks.length) {
+      await loadScript('https://cdn.jsdelivr.net/npm/dompurify@3.4.3/dist/purify.min.js');
+      svgBlocks.forEach(function (code) {
+        var clean = window.DOMPurify.sanitize(code.textContent || '', { USE_PROFILES: { svg: true, svgFilters: true }, FORBID_TAGS: ['script', 'style', 'foreignObject', 'iframe', 'object', 'embed'] });
+        replaceWithDiagram(code, clean);
+      });
+    }
+    if (mmBlocks.length) {
+      var mod = await import('https://cdn.jsdelivr.net/npm/mermaid@11.15.0/dist/mermaid.esm.min.mjs');
+      var mermaid = mod.default;
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+      for (var i = 0; i < mmBlocks.length; i++) {
+        try {
+          var out = await mermaid.render('exp-mmd-' + i, mmBlocks[i].textContent || '');
+          replaceWithDiagram(mmBlocks[i], out.svg);
+        } catch (e) { /* leave the code block as-is on a mermaid parse error */ }
+      }
+    }
+  } finally { window.__diagramsReady = true; }
+})();
+</script>`;
+
 // Light-mode professional document template.
 // Intentionally separate from Mnema's dark UI — exported PDFs are clean documents.
 export function renderDocumentHtml(markdown: string, title: string): string {
@@ -90,10 +126,14 @@ export function renderDocumentHtml(markdown: string, title: string): string {
 
   h1, h2, h3 { page-break-after: avoid; }
   pre, table, img { page-break-inside: avoid; }
+
+  .diagram { margin: 14pt 0; text-align: center; page-break-inside: avoid; }
+  .diagram svg { max-width: 100%; height: auto; }
 </style>
 </head>
 <body>
 ${body}
+${DIAGRAM_RENDER_SCRIPT}
 </body>
 </html>`;
 }
