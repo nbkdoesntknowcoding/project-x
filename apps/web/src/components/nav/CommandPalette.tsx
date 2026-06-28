@@ -5,6 +5,7 @@ type SearchState = 'initial' | 'loading' | 'results' | 'empty';
 
 interface SearchResult {
   type: 'doc' | 'flow' | 'comment';
+  id: string;
   title: string;
   snippet?: string;
   path: string;
@@ -25,15 +26,6 @@ interface CommandItem {
 }
 
 const RECENT_SEARCHES = ['how mnema syncs', 'onboarding playbook', 'claude connector setup'];
-
-const MOCK_RESULTS: SearchResult[] = [
-  { type: 'doc', title: 'Rate limits', snippet: 'Pro tier: 5,000 MCP calls per month with bursts up to 60 RPS. Free tier capped at 500/month…', path: '/ Engineering', highlight: 'Rate limit' },
-  { type: 'doc', title: 'MCP tool reference', snippet: '…rate limits apply per workspace MCP key. Rate headers returned on every call…', path: '/ Engineering' },
-  { type: 'doc', title: 'Pricing strategy v2', snippet: '…how rate limits map to tiers, when to upsell, and when to grandfather existing customers…', path: '/ Planning' },
-  { type: 'flow', title: 'Bug triage assistant', snippet: 'Step 04 references rate-limiting policy in the eng docs…', path: '/ Flows' },
-  { type: 'comment', title: 'Anton on Pricing strategy v2', snippet: '"Are we sure 5,000 is the right rate limit for Pro? Looking at usage, 78% of teams are well under…"', path: '/ Planning' },
-  { type: 'comment', title: 'Maya on MCP tool reference', snippet: '"Should we surface rate-limit headers in the response examples too?"', path: '/ Engineering' },
-];
 
 const COMMANDS: CommandItem[] = [
   { group: 'CREATE', name: 'new doc', label: 'New doc', kbd: ['⌘', 'N'], icon: 'doc', href: '/app/content' },
@@ -97,6 +89,7 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>('search');
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [searchState, setSearchState] = useState<SearchState>('initial');
   const [filter, setFilter] = useState('all');
   const [searchMode, setSearchMode] = useState<'hybrid' | 'keyword' | 'semantic'>('hybrid');
@@ -104,20 +97,22 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
 
-  // Open on ⌘K
+  // Open on ⌘K, or when the top-bar search box dispatches `mnema:open-palette`.
   useEffect(() => {
+    const openSearch = () => {
+      setOpen(true);
+      setMode('search');
+      setQuery('');
+      setResults([]);
+      setSearchState('initial');
+      setSelectedIdx(0);
+    };
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setOpen(true);
-        setMode('search');
-        setQuery('');
-        setSearchState('initial');
-        setSelectedIdx(0);
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearch(); }
     };
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    window.addEventListener('mnema:open-palette', openSearch);
+    return () => { window.removeEventListener('keydown', handler); window.removeEventListener('mnema:open-palette', openSearch); };
   }, []);
 
   // Focus input when opened
@@ -138,22 +133,56 @@ export function CommandPalette() {
   }, [open]);
 
   const handleInput = useCallback((val: string) => {
-    setQuery(val);
     setSelectedIdx(0);
-    if (mode === 'search') {
-      if (!val) { setSearchState('initial'); return; }
-      if (val.startsWith('>')) { setMode('command'); setQuery(val.slice(1).trimStart()); return; }
-      if (val.length < 2) { setSearchState('loading'); return; }
-      if (val === 'asdfqwer') { setSearchState('empty'); return; }
-      setSearchState('results');
+    // ">" toggles into command mode; otherwise the fetch effect below drives search state.
+    if (mode === 'search' && val.startsWith('>')) {
+      setMode('command');
+      setQuery(val.slice(1).trimStart());
+      return;
     }
+    setQuery(val);
   }, [mode]);
+
+  // Live doc search: debounced fetch to /api/search (cookie-auth, same searchDocs as the MCP/API).
+  useEffect(() => {
+    if (mode !== 'search') return;
+    const term = query.trim();
+    if (term.length < 2) { setSearchState('initial'); setResults([]); return; }
+    setSearchState('loading');
+    const ctl = new AbortController();
+    const t = setTimeout(() => {
+      void (async () => {
+        try {
+          const r = await fetch(
+            `/api/search?q=${encodeURIComponent(term)}&mode=${searchMode}&limit=12`,
+            { credentials: 'include', signal: ctl.signal },
+          );
+          if (!r.ok) { setResults([]); setSearchState('empty'); return; }
+          const data = await r.json();
+          const mapped: SearchResult[] = (data.results ?? []).map((d: {
+            id: string; title: string | null; snippet?: string; project_name?: string | null; decision_status?: string | null;
+          }) => ({
+            type: 'doc',
+            id: d.id,
+            title: d.title || 'Untitled',
+            snippet: (d.snippet || '').replace(/<\/?mark>/g, ''),
+            path: d.decision_status ? `Decision · ${d.decision_status}` : (d.project_name ? d.project_name : ''),
+          }));
+          setResults(mapped);
+          setSearchState(mapped.length ? 'results' : 'empty');
+        } catch (e) {
+          if ((e as { name?: string })?.name !== 'AbortError') { setResults([]); setSearchState('empty'); }
+        }
+      })();
+    }, 200);
+    return () => { clearTimeout(t); ctl.abort(); };
+  }, [query, searchMode, mode]);
 
   if (!open) return null;
 
-  const filteredResults = filter === 'all'
-    ? MOCK_RESULTS
-    : MOCK_RESULTS.filter(r => r.type === filter || (filter === 'docs' && r.type === 'doc') || (filter === 'flows' && r.type === 'flow') || (filter === 'comments' && r.type === 'comment'));
+  // App search currently covers docs (the searchDocs engine). 'all'/'docs' show results; the
+  // flows/comments/engineering pills have no hits yet (kept for forward-compat).
+  const filteredResults = (filter === 'all' || filter === 'docs') ? results : [];
 
   const filteredCmds = mode === 'command' && query
     ? COMMANDS.filter(c => c.name.includes(query.toLowerCase()) || c.label.toLowerCase().includes(query.toLowerCase()))
@@ -350,7 +379,11 @@ export function CommandPalette() {
                   <div key={section}>
                     <div className="cmdk-section-label">{section}</div>
                     {results.map((r, i) => (
-                      <div key={i} className={`cmdk-row${i === 0 && section === Object.keys(resultsByType)[0] ? ' sel' : ''}`}>
+                      <div
+                        key={r.id || i}
+                        className={`cmdk-row${i === 0 && section === Object.keys(resultsByType)[0] ? ' sel' : ''}`}
+                        onClick={() => { if (r.id) window.location.href = `/app/content/${r.id}`; }}
+                      >
                         <span style={{ width: 24, height: 24, borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--line)', color: 'var(--ink-soft)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           {r.type === 'doc' ? <DocIcon /> : r.type === 'flow' ? <FlowIcon /> : <CommentIcon />}
                         </span>

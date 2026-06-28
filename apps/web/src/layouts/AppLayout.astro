@@ -4,6 +4,7 @@ import { Sidebar } from '../components/app/Sidebar';
 import { NotificationBell } from '../components/app/NotificationBell';
 import { WorkspaceSwitcher } from '../components/nav/WorkspaceSwitcher';
 import { DevSearch } from '../components/dev/DevSearch';
+import { CommandPalette } from '../components/nav/CommandPalette';
 import { WorkspaceModeToggle } from '../components/app/WorkspaceModeToggle';
 import { DocPreviewHost } from '../components/preview/DocPreviewHost';
 import { isAdminEmail } from '../lib/admin';
@@ -240,7 +241,7 @@ if (auth) {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
           <circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>
         </svg>
-        <input placeholder="Search docs, flows, connections…" />
+        <input id="ap-global-search" placeholder="Search docs, flows, connections…" readonly />
         <span class="ap-kbd"><kbd>⌘</kbd><kbd>K</kbd></span>
       </div>
 
@@ -291,6 +292,18 @@ if (auth) {
     {workspaceMode === 'dev_project' && (
       <DevSearch workspaceMode={workspaceMode} client:load />
     )}
+
+    <!-- COMMAND PALETTE / GLOBAL SEARCH (⌘K, or the top-bar search box) -->
+    <CommandPalette client:load />
+    <script is:inline>
+      (function () {
+        var box = document.getElementById('ap-global-search');
+        if (!box) return;
+        var open = function (e) { e.preventDefault(); box.blur(); window.dispatchEvent(new Event('mnema:open-palette')); };
+        box.addEventListener('focus', open);
+        box.addEventListener('mousedown', open);
+      })();
+    </script>
 
     <!-- GLOBAL FLOATING DOC PREVIEW (portal-mounted; available app-wide) -->
     <DocPreviewHost client:load />
