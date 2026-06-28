@@ -19,6 +19,7 @@ import {
   PROPOSE_DOC_WRITE_TOOL_SPEC,
   proposeDocWrite,
 } from './tools/propose-doc-write.js';
+import { ADD_DIAGRAM_TOOL_NAME, ADD_DIAGRAM_TOOL_SPEC, addDiagram } from './tools/add-diagram.js';
 import {
   COMMIT_DOC_WRITE_TOOL_NAME,
   COMMIT_DOC_WRITE_TOOL_SPEC,
@@ -424,6 +425,9 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
   // ── Phase 10 Chunk 2: propose/commit flow_publish ──────────────────────────
   registerProposeTool(PROPOSE_FLOW_PUBLISH_TOOL_NAME, PROPOSE_FLOW_PUBLISH_TOOL_SPEC, proposeFlowPublish);
   registerCommitTool(COMMIT_FLOW_PUBLISH_TOOL_NAME, COMMIT_FLOW_PUBLISH_TOOL_SPEC, commitFlowPublish);
+
+  // ── Diagram Phase 1: add_diagram (propose-style; commits via confirm_doc_write) ───────────
+  registerProposeTool(ADD_DIAGRAM_TOOL_NAME, ADD_DIAGRAM_TOOL_SPEC, addDiagram);
 
   // ── Phase 10: __ui_probe (dev/test only — temporary) ───────────────────────
   if (process.env.NODE_ENV !== 'production') {

@@ -89,7 +89,17 @@ export function configureMermaidPreview(ctx: Ctx): void {
   ctx.update(codeBlockConfig.key, (prev) => ({
     ...prev,
     renderPreview: (language, content, applyPreview) => {
-      if (language.toLowerCase() !== 'mermaid') {
+      const lang = language.toLowerCase();
+      // Diagram Phase 1: an ```svg fence renders the SVG inline — ALWAYS through the Sprint-0
+      // sanitizer (never raw). SVG is static, so return the host synchronously.
+      if (lang === 'svg') {
+        if (!content.trim()) return prev.renderPreview(language, content, applyPreview);
+        const host = document.createElement('div');
+        host.className = 'svg-preview';
+        host.innerHTML = sanitizeMarkup(content.trim());
+        return host;
+      }
+      if (lang !== 'mermaid') {
         return prev.renderPreview(language, content, applyPreview);
       }
       if (!content.trim()) {
