@@ -17,7 +17,7 @@ setTimeout(function () { window.__diagramsReady = true; }, 12000);
     if (svgBlocks.length) {
       await loadScript('https://cdn.jsdelivr.net/npm/dompurify@3.4.3/dist/purify.min.js');
       svgBlocks.forEach(function (code) {
-        var clean = window.DOMPurify.sanitize(code.textContent || '', { USE_PROFILES: { svg: true, svgFilters: true }, FORBID_TAGS: ['script', 'style', 'foreignObject', 'iframe', 'object', 'embed'] });
+        var clean = window.DOMPurify.sanitize(code.textContent || '', { USE_PROFILES: { svg: true, svgFilters: true }, FORBID_TAGS: ['script', 'foreignObject', 'iframe', 'object', 'embed'] });
         replaceWithDiagram(code, clean);
       });
     }

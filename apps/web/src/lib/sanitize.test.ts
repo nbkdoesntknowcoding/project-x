@@ -38,6 +38,14 @@ describe('sanitizeMarkup — Sprint 0 XSS gate', () => {
     expect(out).toContain('link');
   });
 
+  it('KEEPS <style> inside SVG (mermaid embeds it) while still stripping <script>', () => {
+    const out = sanitizeMarkup('<svg><style>.node{fill:#fff}</style><script>alert(1)</script><circle r="5"></circle></svg>');
+    expect(out.toLowerCase()).toContain('<style');     // mermaid theming survives
+    expect(out).toContain('.node');
+    expect(out).not.toMatch(/<script/i);               // script still removed
+    expect(out).toContain('circle');
+  });
+
   it('leaves benign markdown/SVG unchanged in substance', () => {
     const out = sanitizeMarkup('<h1>Title</h1><p>body</p><svg><rect width="10" height="10"></rect></svg>');
     expect(out).toContain('Title');

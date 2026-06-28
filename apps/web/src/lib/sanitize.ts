@@ -35,7 +35,10 @@ function ensureHook(): void {
 
 const CONFIG = {
   USE_PROFILES: { html: true, svg: true, svgFilters: true },
-  FORBID_TAGS: ['script', 'style', 'foreignObject', 'iframe', 'object', 'embed', 'annotation-xml'],
+  // NOTE: <style> is intentionally NOT forbidden — mermaid embeds a <style> element in its SVG for
+  // theming; stripping it breaks every rendered diagram. DOMPurify keeps it and sanitizes its CSS
+  // (no @import/expression/javascript: url), so it's safe. <script>/<foreignObject>/etc. ARE forbidden.
+  FORBID_TAGS: ['script', 'foreignObject', 'iframe', 'object', 'embed', 'annotation-xml'],
   // DOMPurify already strips on*/javascript:; explicit belt-and-suspenders for the common handlers.
   FORBID_ATTR: ['onload', 'onerror', 'onclick', 'onmouseover', 'onfocus', 'onbegin', 'onend'],
 };
