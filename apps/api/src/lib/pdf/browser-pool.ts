@@ -38,8 +38,11 @@ export async function renderPdf(html: string): Promise<Buffer> {
   let page: Page | null = null;
   try {
     page = await browser.newPage();
+    // 'load' (not 'networkidle') so setContent does NOT block on the diagram script's async CDN
+    // fetch — 'load' still waits for the doc's own images. The diagram render is awaited separately
+    // below; networkidle here would stall on the in-flight mermaid/DOMPurify request and time out.
     await page.setContent(html, {
-      waitUntil: 'networkidle',
+      waitUntil: 'load',
       timeout:   config.PDF_RENDER_TIMEOUT_MS,
     });
     // Diagram Phase 1: wait for client-side diagram rendering (mermaid is async). The template sets
