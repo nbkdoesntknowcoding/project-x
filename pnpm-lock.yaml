@@ -291,6 +291,9 @@ importers:
       d3-force-3d:
         specifier: 3.0.6
         version: 3.0.6
+      dompurify:
+        specifier: ^3.4.3
+        version: 3.4.3
       ioredis:
         specifier: ^5.10.1
         version: 5.10.1

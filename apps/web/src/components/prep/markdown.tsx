@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { marked } from 'marked';
+import { sanitizeMarkup } from '../../lib/sanitize';
 
 marked.setOptions({ gfm: true, breaks: false });
 
@@ -10,7 +11,7 @@ marked.setOptions({ gfm: true, breaks: false });
  * (see PrepApp's <style>).
  */
 export function Markdown({ md, className }: { md: string; className?: string }) {
-  const html = useMemo(() => (md ? (marked.parse(md) as string) : ''), [md]);
+  const html = useMemo(() => (md ? sanitizeMarkup(marked.parse(md) as string) : ''), [md]);
   return (
     <div
       className={`prep-md${className ? ' ' + className : ''}`}

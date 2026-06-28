@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { marked } from 'marked';
+import { sanitizeMarkup } from '../../lib/sanitize';
 
 interface Props {
   markdown: string;
@@ -18,7 +19,7 @@ interface Props {
  */
 export function MarkdownPreview({ markdown, query, activeMatch, onMatchCount }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const html = useMemo(() => marked.parse(markdown, { async: false }) as string, [markdown]);
+  const html = useMemo(() => sanitizeMarkup(marked.parse(markdown, { async: false }) as string), [markdown]);
 
   // Render base HTML, then (re)apply highlights when the query changes.
   useEffect(() => {

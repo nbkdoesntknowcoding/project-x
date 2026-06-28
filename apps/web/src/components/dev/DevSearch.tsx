@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { sanitizeMarkup } from '../../lib/sanitize';
 
 interface SearchResult {
   type: 'task' | 'session';
@@ -193,10 +194,12 @@ function ResultRow({
   onHover: () => void;
 }) {
   const m = result.metadata;
-  // Highlight «term» → <mark>
-  const previewHtml = result.preview
-    .replace(/«/g, '<mark style="background:rgba(251,191,36,0.25);color:#fbbf24;border-radius:2px;padding:0 2px">')
-    .replace(/»/g, '</mark>');
+  // Highlight «term» → <mark>, then sanitize (the snippet is doc content — never inject raw)
+  const previewHtml = sanitizeMarkup(
+    result.preview
+      .replace(/«/g, '<mark style="background:rgba(251,191,36,0.25);color:#fbbf24;border-radius:2px;padding:0 2px">')
+      .replace(/»/g, '</mark>'),
+  );
 
   return (
     <div

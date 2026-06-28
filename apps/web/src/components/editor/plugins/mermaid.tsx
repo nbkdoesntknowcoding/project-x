@@ -1,6 +1,7 @@
 import { codeBlockConfig } from '@milkdown/kit/component/code-block';
 import type { Ctx } from '@milkdown/kit/ctx';
 import mermaid from 'mermaid';
+import { sanitizeMarkup } from '../../../lib/sanitize';
 
 /**
  * Mermaid theme variables for each Mnema theme. The brand accent stays
@@ -44,6 +45,7 @@ function currentTheme(): 'dark' | 'light' {
 function initMermaid(): void {
   mermaid.initialize({
     startOnLoad: false,
+    securityLevel: 'strict',   // Sprint 0: no script via directives/labels; sanitize HTML labels
     theme: 'base',
     themeVariables: MERMAID_VARS[currentTheme()],
   });
@@ -106,7 +108,7 @@ export function configureMermaidPreview(ctx: Ctx): void {
         .then(({ svg }) => {
           const host = document.createElement('div');
           host.className = 'mermaid-preview';
-          host.innerHTML = svg;
+          host.innerHTML = sanitizeMarkup(svg);   // Sprint 0: never inject raw SVG (XSS guard)
           applyPreview(host);
         })
         .catch((err: unknown) => {
