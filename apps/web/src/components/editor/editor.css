@@ -258,6 +258,56 @@
   font-size: 0.875rem;
 }
 
+/* === Diagram blocks (mermaid + svg) — Build 1 (chrome-free figure) + Build 2 (house-style) ===
+ * A diagram code-block is identified by the rendered preview host class
+ * (.mermaid-preview / .svg-preview), set in plugins/mermaid.tsx. When a diagram
+ * figure is present we suppress the code-block chrome that was overlapping it:
+ *   - .language-picker  — the "mermaid ⌄" button + its language dropdown
+ *                         (the list that z-indexed OVER the figure). Diagrams are
+ *                         fixed-format, so a language switcher is meaningless here.
+ *   - .preview-label / .preview-divider — the "PREVIEW" caption that collided
+ *                         with node text inside the rendered figure.
+ * Pure CSS via :has() — no change to the editor's JS render path, so it cannot
+ * affect any other code block or doc parsing. */
+.milkdown-code-block:has(.mermaid-preview) .language-picker,
+.milkdown-code-block:has(.svg-preview) .language-picker,
+.milkdown-code-block:has(.mermaid-preview) .preview-label,
+.milkdown-code-block:has(.svg-preview) .preview-label,
+.milkdown-code-block:has(.mermaid-preview) .preview-divider,
+.milkdown-code-block:has(.svg-preview) .preview-divider {
+  display: none;
+}
+
+/* SVG figure — Build 2: previously had NO CSS at all, so a rendered ```svg
+ * fence had zero sizing/centering. Mirror the mermaid figure: centered, padded,
+ * never wider than the column. */
+.svg-preview {
+  padding: 24px;
+  margin: 0;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.svg-preview:hover {
+  background: var(--interactive-ghost-hover);
+}
+.svg-preview svg,
+.svg-preview img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Shared house-style frame for both diagram figures — a clean, token-anchored
+ * card so a diagram reads as a deliberate figure rather than raw output. */
+.milkdown-code-block:has(.mermaid-preview) .preview-panel,
+.milkdown-code-block:has(.svg-preview) .preview-panel {
+  background: var(--surface-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
 /* === Connection status — now embedded in the bottom-right toolbar (DocPage).
  *    These classes are kept for the legacy ConnectionStatus component which
  *    is no longer used as a standalone floating element. === */

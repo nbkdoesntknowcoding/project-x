@@ -1,38 +1,39 @@
 /**
- * Diagram Phase 1, Sprint 2 — PDF export template wiring. The actual rasterization happens in the
- * Chromium export page (deploy-time smoke test); this asserts the template emits the right code
- * blocks + the render/sanitize script, and that a no-diagram doc's body is unchanged (no CDN fetch
- * unless a diagram block is present).
+ * Diagram Phase 1, Sprint 2 → Build 4 — PDF export template wiring. The template now ONLY emits the
+ * doc HTML (diagrams stay as ```mermaid / ```svg code blocks) + the .diagram figure CSS. The actual
+ * render happens in renderPdf (browser-pool.ts), which injects mermaid + DOMPurify from the API's
+ * OWN node_modules — NO CDN. So this asserts the template emits the right code blocks for the worker
+ * to find, carries the figure CSS, and embeds NO external-CDN reference. The rasterization itself is
+ * a deploy-time smoke test (needs Chromium).
  */
 import { describe, it, expect } from 'vitest';
 import { renderDocumentHtml } from '../lib/pdf/template.js';
 
 describe('renderDocumentHtml — diagram export', () => {
-  it('mermaid fence → language-mermaid block + the render script (mermaid pinned + strict)', () => {
+  it('mermaid fence → language-mermaid block the worker will render', () => {
     const html = renderDocumentHtml('# Title\n\n```mermaid\ngraph TD; A-->B;\n```', 'Doc');
-    expect(html).toContain('class="language-mermaid"');     // marked output Chromium will render
-    expect(html).toContain('window.__diagramsReady');        // render-wait flag
-    expect(html).toContain('mermaid@11.15.0');               // pinned CDN version
-    expect(html).toContain("securityLevel: 'strict'");       // strict in export too
+    expect(html).toContain('class="language-mermaid"');   // marked output the worker swaps for an SVG
+    expect(html).toContain('.diagram');                   // figure CSS the render swaps the block into
   });
 
-  it('svg fence → language-svg block + DOMPurify sanitize in the export script', () => {
+  it('svg fence → language-svg block the worker will sanitize + render', () => {
     const html = renderDocumentHtml('```svg\n<svg><circle r="5"/></svg>\n```', 'Doc');
     expect(html).toContain('class="language-svg"');
-    expect(html).toContain('DOMPurify.sanitize');
-    expect(html).toContain('FORBID_TAGS');                   // script/foreignObject/etc. forbidden
-    expect(html).toContain('dompurify@3.4.3');               // pinned CDN
   });
 
-  it('no-regression: a no-diagram doc renders its body unchanged; no diagram blocks ⇒ no CDN fetch', () => {
+  it('NO external CDN: the template never references jsdelivr / unpkg (libs are injected locally)', () => {
+    const html = renderDocumentHtml('# T\n\n```mermaid\ngraph TD; A-->B;\n```\n\n```svg\n<svg/>\n```', 'Doc');
+    expect(html).not.toContain('jsdelivr');
+    expect(html).not.toContain('unpkg');
+    expect(html).not.toContain('cdn.');
+  });
+
+  it('no-regression: a no-diagram doc renders its body unchanged with no diagram blocks', () => {
     const html = renderDocumentHtml('# Hello\n\nJust **text**, no diagrams.\n\n- a\n- b', 'Doc');
     expect(html).toContain('<h1>Hello</h1>');
     expect(html).toContain('<strong>text</strong>');
     expect(html).toContain('<li>a</li>');
-    // no rendered diagram code blocks (the script's selector strings don't count)
     expect(html).not.toContain('class="language-mermaid"');
     expect(html).not.toContain('class="language-svg"');
-    // the script is present but its conditional guards mean no CDN import runs for this doc
-    expect(html).toContain('window.__diagramsReady');
   });
 });

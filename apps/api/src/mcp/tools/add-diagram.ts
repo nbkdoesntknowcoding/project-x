@@ -19,12 +19,15 @@ export const ADD_DIAGRAM_TOOL_NAME = 'add_diagram';
 export const ADD_DIAGRAM_TOOL_SPEC = {
   name: ADD_DIAGRAM_TOOL_NAME,
   description: [
-    'Add a diagram to a doc — a mermaid diagram (flowchart, sequence, ER, state, mind map, …) or a',
-    'sanitized inline SVG. The diagram renders in-app and exports to PDF.',
+    'Add a diagram to a doc. The diagram renders in-app and exports to PDF.',
     '',
-    'It appends a fenced ```mermaid or ```svg block to the doc through the SAME preview/approve flow',
-    'as propose_doc_write — the commit only fires when the user approves. Use mermaid for structured',
-    'diagrams; use svg only for custom vector art (it is sanitized: no script/handlers/foreignObject).',
+    'SVG IS THE DEFAULT AND PREFERRED FORMAT — author a clean, sanitized inline SVG figure (it is',
+    'sanitized: no script/handlers/foreignObject/iframe). Use mermaid ONLY when the user explicitly',
+    'asks for a mermaid diagram, or when the content is inherently a mermaid type (e.g. a sequence',
+    'diagram). When format is omitted it defaults to svg.',
+    '',
+    'It appends a fenced ```svg (or ```mermaid) block through the SAME preview/approve flow as',
+    'propose_doc_write — the commit only fires when the user approves.',
     '',
     'IN CLAUDE CODE / CLI (no panel): show the proposed block, ask the user to approve, then call',
     'confirm_doc_write with the proposal_token. Do NOT confirm without explicit approval.',
@@ -35,11 +38,11 @@ export const ADD_DIAGRAM_TOOL_SPEC = {
     type: 'object' as const,
     properties: {
       doc_id: { type: 'string', description: 'UUID of the target doc.' },
-      format: { type: 'string', enum: ['mermaid', 'svg'], description: 'Diagram format.' },
-      source: { type: 'string', description: 'The diagram source — mermaid text, or raw SVG markup.' },
+      format: { type: 'string', enum: ['svg', 'mermaid'], description: 'Diagram format. Defaults to svg (preferred); use mermaid only when explicitly requested.' },
+      source: { type: 'string', description: 'The diagram source — raw SVG markup (preferred), or mermaid text.' },
       after_anchor: { type: 'string', description: 'Optional anchor id to insert after (Phase 1 appends at the end).' },
     },
-    required: ['doc_id', 'format', 'source'],
+    required: ['doc_id', 'source'],
     additionalProperties: false,
   },
   annotations: { destructiveHint: false, title: 'Add a diagram (with preview)' },
@@ -47,7 +50,7 @@ export const ADD_DIAGRAM_TOOL_SPEC = {
 
 const argsSchema = z.object({
   doc_id: z.string().uuid(),
-  format: z.enum(['mermaid', 'svg']),
+  format: z.enum(['svg', 'mermaid']).default('svg'),   // Build 3: SVG-first — mermaid only on request
   source: z.string().min(1).max(100_000),   // 100KB cap; stored unmangled in the fenced block
   after_anchor: z.string().min(1).max(64).optional(),
 }).strict();

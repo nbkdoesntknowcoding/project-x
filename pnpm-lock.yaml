@@ -110,6 +110,9 @@ importers:
       diff:
         specifier: ^9.0.0
         version: 9.0.0
+      dompurify:
+        specifier: 3.4.3
+        version: 3.4.3
       dotenv:
         specifier: ^16.4.0
         version: 16.6.1
@@ -158,6 +161,9 @@ importers:
       marked:
         specifier: ^18.0.5
         version: 18.0.5
+      mermaid:
+        specifier: 11.15.0
+        version: 11.15.0
       mime-types:
         specifier: ^3.0.2
         version: 3.0.2
