@@ -9,6 +9,8 @@ export interface PdfGenerationJobData {
   docId:        string;
   workspaceId:  string;
   title:        string;
+  /** Export format. Defaults to 'pdf' for back-compat with already-queued jobs. */
+  format?:      'pdf' | 'docx';
 }
 
 const connection = new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null });

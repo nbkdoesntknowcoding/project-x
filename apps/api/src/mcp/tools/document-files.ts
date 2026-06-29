@@ -2,7 +2,7 @@
  * DOCX/PDF MCP tools — available in both workspace modes.
  *
  *   upload_doc_file     — upload a base64-encoded DOCX/PDF, ingest as a Mnema doc
- *   export_doc          — export a doc as DOCX (sync) or PDF (async, polls up to 30s)
+ *   export_doc          — export a doc as DOCX or PDF (both async via the worker; polls up to 30s)
  *   get_doc_source_file — get download URL for the original source file of an uploaded doc
  */
 
@@ -13,7 +13,6 @@ import { withSystemPrivilege } from '../../db/with-system-privilege.js';
 import { attachments, docs, folders } from '../../db/schema.js';
 import { ingestDocx } from '../../lib/documents/ingest-docx.js';
 import { ingestPdf } from '../../lib/documents/ingest-pdf.js';
-import { generateDocx } from '../../lib/documents/generate-docx.js';
 import { uploadAttachment, getSignedAttachmentUrl, isR2Configured } from '../../lib/storage/r2-attachments.js';
 import { pdfGenerationQueue } from '../../queue/pdf-generation.js';
 import { contentHash, emptyYjsState } from '../../lib/yjs.js';
@@ -185,30 +184,15 @@ export async function exportDoc(
   const [attachment] = await withTenant(workspaceId, (tx) =>
     tx.insert(attachments).values({
       workspaceId, docId: doc_id, type: 'export', format,
-      r2Key: '', status: format === 'docx' ? 'processing' : 'pending',
+      r2Key: '', status: 'pending',
     }).returning(),
   );
   if (!attachment) throw new Error('Failed to create attachment record');
 
-  if (format === 'docx') {
-    const buffer = await generateDocx(doc.markdown, { title: doc.title });
-    const filename = `${doc.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.docx`;
-    const { r2Key } = await uploadAttachment(workspaceId, buffer, 'docx', filename);
-    await withTenant(workspaceId, (tx) =>
-      tx.update(attachments).set({ r2Key, status: 'ready', sizeBytes: buffer.length, updatedAt: new Date() })
-        .where(eq(attachments.id, attachment.id)),
-    );
-    const downloadUrl = await getSignedAttachmentUrl(r2Key);
-    const expiresAt = new Date(Date.now() + 3600_000).toISOString();
-    return {
-      content: `Exported '${doc.title}' as DOCX. Download: ${downloadUrl} (valid 1 hour)`,
-      structuredContent: { format: 'docx', downloadUrl, attachmentId: attachment.id, expiresAt },
-    };
-  }
-
-  // PDF: enqueue and poll
-  await pdfGenerationQueue.add('generate-pdf', {
-    attachmentId: attachment.id, docId: doc_id, workspaceId, title: doc.title,
+  // Both formats render in the worker now: PDF (Chromium) and DOCX (diagrams need Chromium too, so
+  // DOCX moved from a sync API call to the same enqueue+poll path).
+  await pdfGenerationQueue.add('generate-export', {
+    attachmentId: attachment.id, docId: doc_id, workspaceId, title: doc.title, format,
   });
 
   const TIMEOUT_MS = 30_000;
@@ -225,8 +209,8 @@ export async function exportDoc(
       const downloadUrl = await getSignedAttachmentUrl(row.r2Key);
       const expiresAt = new Date(Date.now() + 3600_000).toISOString();
       return {
-        content: `Exported '${doc.title}' as PDF. Download: ${downloadUrl} (valid 1 hour)`,
-        structuredContent: { format: 'pdf', downloadUrl, attachmentId: attachment.id, expiresAt },
+        content: `Exported '${doc.title}' as ${format.toUpperCase()}. Download: ${downloadUrl} (valid 1 hour)`,
+        structuredContent: { format, downloadUrl, attachmentId: attachment.id, expiresAt },
       };
     }
     if (row?.status === 'failed') {

@@ -167,6 +167,105 @@ function logStep(label: string, since: number): void {
   console.log(`[browser-pool] ${label}: ${Date.now() - since}ms`);
 }
 
+// Light mermaid palette for raster exports (PDF + DOCX are light documents). Mirrors the in-app
+// MERMAID_VARS.light so an exported diagram looks like the one in the editor.
+const LIGHT_MERMAID_VARS = {
+  primaryColor: '#f4f5f7',
+  primaryTextColor: '#1c1f24',
+  primaryBorderColor: 'rgba(214, 122, 51, 0.7)',
+  lineColor: '#6E737C',
+  secondaryColor: '#eceef1',
+  tertiaryColor: '#ffffff',
+  fontFamily: 'Geist, system-ui, sans-serif',
+  fontSize: '15px',
+} as const;
+
+export interface DiagramImage {
+  png: Buffer;
+  width: number;
+  height: number;
+}
+
+/**
+ * Render diagram fences to PNG images for DOCX embedding (DOCX can't run a browser, but the worker
+ * has Chromium). Returns a map keyed by the block's exact source — the docx diagram plugin looks up
+ * each ```mermaid / ```svg code node's value here. Renders all blocks in one page (libs injected
+ * once). A per-block failure is skipped (that block falls back to its source text in the doc).
+ */
+export async function renderDiagramImages(
+  blocks: { format: 'mermaid' | 'svg'; source: string }[],
+): Promise<Map<string, DiagramImage>> {
+  const result = new Map<string, DiagramImage>();
+  if (!blocks.length) return result;
+  const browser = getBrowser();
+  let page: Page | null = null;
+  try {
+    page = await browser.newPage({ deviceScaleFactor: 2 });
+    await page.setContent(
+      '<!doctype html><html><body><div id="diagram-host" style="display:inline-block;background:#fff;padding:10px"></div></body></html>',
+      { waitUntil: 'load' },
+    );
+    const needsSvg = blocks.some((b) => b.format === 'svg');
+    const needsMermaid = blocks.some((b) => b.format === 'mermaid');
+    if (needsSvg) await page.addScriptTag({ content: getDompurifySrc() });
+    if (needsMermaid) {
+      await page.addScriptTag({ content: getMermaidSrc() });
+      await page.evaluate((vars) => {
+        (window as unknown as { mermaid: { initialize: (o: unknown) => void } }).mermaid.initialize({
+          startOnLoad: false, securityLevel: 'strict',
+          htmlLabels: false, flowchart: { htmlLabels: false, useMaxWidth: true },
+          theme: 'base', themeVariables: vars,
+        });
+      }, LIGHT_MERMAID_VARS);
+    }
+    for (const block of blocks) {
+      if (result.has(block.source)) continue;   // identical diagram → reuse one render
+      try {
+        const dims = await Promise.race([
+          page.evaluate(async ({ format, source }) => {
+            const w = window as unknown as {
+              mermaid: { render: (id: string, src: string) => Promise<{ svg: string }> };
+              DOMPurify: { sanitize: (s: string, o: unknown) => string };
+            };
+            const host = document.getElementById('diagram-host');
+            if (!host) return null;
+            let svg: string;
+            if (format === 'mermaid') {
+              const id = `docx-mmd-${Math.floor(performance.now())}-${source.length}`;
+              svg = (await w.mermaid.render(id, source)).svg;
+            } else {
+              svg = w.DOMPurify.sanitize(source, {
+                USE_PROFILES: { svg: true, svgFilters: true },
+                FORBID_TAGS: ['script', 'foreignObject', 'iframe', 'object', 'embed'],
+              });
+            }
+            host.innerHTML = svg;
+            const el = host.querySelector('svg');
+            if (!el) return null;
+            const vb = el.viewBox?.baseVal;
+            const ww = vb && vb.width ? vb.width : el.getBoundingClientRect().width;
+            const hh = vb && vb.height ? vb.height : el.getBoundingClientRect().height;
+            el.setAttribute('width', String(ww));
+            el.setAttribute('height', String(hh));
+            (el as unknown as { style: { maxWidth: string } }).style.maxWidth = 'none';
+            return { width: Math.ceil(ww), height: Math.ceil(hh) };
+          }, block),
+          new Promise<null>((res) => setTimeout(() => res(null), DIAGRAM_BUDGET_MS)),
+        ]);
+        if (!dims) continue;
+        const png = await page.locator('#diagram-host').screenshot({ type: 'png' });
+        result.set(block.source, { png: Buffer.from(png), width: dims.width, height: dims.height });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[browser-pool] docx diagram image failed (${block.format}): ${String(err)}`);
+      }
+    }
+  } finally {
+    await page?.close();
+  }
+  return result;
+}
+
 export async function closeBrowserPool(): Promise<void> {
   await Promise.all(pool.map((b) => b.close()));
   pool.length = 0;

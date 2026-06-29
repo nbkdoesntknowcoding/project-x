@@ -161,6 +161,9 @@ importers:
       marked:
         specifier: ^18.0.5
         version: 18.0.5
+      mdast2docx:
+        specifier: 1.6.1
+        version: 1.6.1(@xmldom/xmldom@0.8.13)(remark-math@6.0.0)(sharp@0.34.5)
       mermaid:
         specifier: 11.15.0
         version: 11.15.0
@@ -191,6 +194,9 @@ importers:
       razorpay:
         specifier: ^2.9.6
         version: 2.9.6
+      remark-parse:
+        specifier: ^11.0.0
+        version: 11.0.0
       resend:
         specifier: ^6.12.4
         version: 6.12.4
@@ -200,6 +206,9 @@ importers:
       turndown-plugin-gfm:
         specifier: ^1.0.2
         version: 1.0.2
+      unified:
+        specifier: ^11.0.5
+        version: 11.0.5
       voyageai:
         specifier: ^0.2.1
         version: 0.2.1
