@@ -47,6 +47,9 @@ async function renderDiagramsInPage(): Promise<void> {
     w.mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
+      // SVG <text> labels (not <foreignObject>) — matches the in-app render so the PDF looks the same.
+      htmlLabels: false,
+      flowchart: { htmlLabels: false, useMaxWidth: true },
       theme: 'base',
       themeVariables: {
         primaryColor: '#f4f5f7',

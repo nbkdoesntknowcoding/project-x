@@ -52,6 +52,11 @@ function initMermaid(): void {
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'strict',   // Sprint 0: no script via directives/labels; sanitize HTML labels
+    // Render node/edge labels as native SVG <text>, NOT <foreignObject> (mermaid's default HTML
+    // labels). Our SVG sanitizer FORBIDs <foreignObject> for XSS safety, which would otherwise strip
+    // every label — so html labels render as empty shapes in-app. SVG text survives sanitization.
+    htmlLabels: false,
+    flowchart: { htmlLabels: false, useMaxWidth: true },
     theme: 'base',
     themeVariables: MERMAID_VARS[currentTheme()],
   });
