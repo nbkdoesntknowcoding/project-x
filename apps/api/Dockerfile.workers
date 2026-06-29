@@ -18,7 +18,11 @@ COPY tsconfig.base.json ./
 
 RUN pnpm --filter @boppl/schema build && pnpm --filter @boppl/api build
 
-FROM node:22-alpine AS runner
+# Runner must be glibc-based (Debian), NOT alpine: the pdf-generation worker launches Playwright
+# Chromium, and Playwright's Chromium build requires glibc + apt-installable system libs. On alpine
+# the browser can't launch, so initBrowserPool() throws and the pdf worker disables itself — every
+# PDF export then times out. bookworm-slim + `playwright install --with-deps chromium` fixes that.
+FROM node:22-bookworm-slim AS runner
 
 RUN corepack enable && corepack prepare pnpm@10.23.0 --activate
 
@@ -31,6 +35,11 @@ COPY packages/schema/tsconfig.json ./packages/schema/
 COPY apps/api/package.json ./apps/api/
 
 RUN pnpm install --frozen-lockfile --prod
+
+# Install the actual Chromium browser binary + its OS dependencies (libnss3, fonts, …). Without this
+# the `playwright` npm package resolves but has no browser to launch. Pinned to the apps/api
+# playwright version via `pnpm exec`. Browsers land in /root/.cache/ms-playwright (default).
+RUN cd apps/api && pnpm exec playwright install --with-deps chromium
 
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/packages/shared ./packages/shared
