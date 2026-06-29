@@ -12,7 +12,6 @@ import { withTenant } from '../db/with-tenant.js';
 import { config } from '../config/env.js';
 import { ingestDocx } from '../lib/documents/ingest-docx.js';
 import { ingestPdf } from '../lib/documents/ingest-pdf.js';
-import { generateDocx } from '../lib/documents/generate-docx.js';
 import { pdfGenerationQueue } from '../queue/pdf-generation.js';
 import {
   uploadAttachment,
@@ -256,41 +255,19 @@ export const documentFilesRoutes: FastifyPluginAsync = async (app) => {
         type:   'export',
         format: format as 'docx' | 'pdf',
         r2Key:  '', // filled in after upload
-        status: format === 'docx' ? 'processing' : 'pending',
+        status: 'pending',
       }).returning(),
     );
     if (!attachment) return reply.status(500).send({ error: 'db_error' });
 
-    if (format === 'docx') {
-      try {
-        const buffer   = await generateDocx(doc.markdown, { title: doc.title });
-        const filename = `${doc.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.docx`;
-        const { r2Key } = await uploadAttachment(workspaceId, buffer, 'docx', filename);
-
-        await withTenant(workspaceId, (tx) =>
-          tx.update(attachments)
-            .set({ r2Key, status: 'ready', sizeBytes: buffer.length, updatedAt: new Date() })
-            .where(eq(attachments.id, attachment.id)),
-        );
-
-        const downloadUrl = await getSignedAttachmentUrl(r2Key);
-        return reply.send({ attachmentId: attachment.id, downloadUrl, status: 'ready' });
-      } catch (err) {
-        await withTenant(workspaceId, (tx) =>
-          tx.update(attachments)
-            .set({ status: 'failed', errorMessage: String(err), updatedAt: new Date() })
-            .where(eq(attachments.id, attachment.id)),
-        );
-        throw err;
-      }
-    }
-
-    // PDF: enqueue async job
-    await pdfGenerationQueue.add('generate-pdf', {
+    // Both formats render in the worker now — DOCX diagrams need Chromium (mermaid/svg → PNG), which
+    // the API process doesn't have. The client polls /export/:id/status for both formats.
+    await pdfGenerationQueue.add('generate-export', {
       attachmentId: attachment.id,
       docId,
       workspaceId,
       title: doc.title,
+      format: format as 'pdf' | 'docx',
     });
     return reply.send({ attachmentId: attachment.id, status: 'pending' });
   });

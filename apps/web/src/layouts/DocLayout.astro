@@ -449,29 +449,24 @@ try {
 
       const data = await res.json();
 
-      if (format === 'docx') {
-        downloadUrl(data.downloadUrl, `document.${format}`);
-        return;
-      }
-
-      // PDF: poll status
+      // Both formats render async in the worker (DOCX diagrams need Chromium too) — poll for status.
       const attachmentId = data.attachmentId;
       pendingDownloads.add(attachmentId);
 
-      const deadline = Date.now() + 35_000;
+      const deadline = Date.now() + 45_000;
       while (Date.now() < deadline) {
         await new Promise(r => setTimeout(r, 1500));
         const poll = await fetch(`/api/document-files/export/${attachmentId}/status`, { credentials: 'include' });
         const status = await poll.json();
         if (status.status === 'ready') {
           pendingDownloads.delete(attachmentId);
-          downloadUrl(status.downloadUrl, 'document.pdf');
+          downloadUrl(status.downloadUrl, `document.${format}`);
           return;
         }
         if (status.status === 'failed') throw new Error(status.errorMessage ?? 'Generation failed');
       }
       pendingDownloads.delete(attachmentId);
-      alert('PDF generation timed out. Try again.');
+      alert(`${format.toUpperCase()} generation timed out. Try again.`);
     } catch (err) {
       alert(`Export failed: ${err.message ?? err}`);
     } finally {
