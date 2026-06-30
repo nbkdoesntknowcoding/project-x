@@ -21,7 +21,7 @@ const diagramImagePlugin = (pngs: Map<string, DiagramImage>) => ({
   block: (docx: any, node: any): unknown[] => {
     if (node.type !== 'code') return [];
     const lang = (node.lang ?? '').toLowerCase();
-    if (lang !== 'mermaid' && lang !== 'svg') return [];
+    if (lang !== 'mermaid' && lang !== 'svg' && lang !== 'chart') return [];
     const img = pngs.get(node.value ?? '');
     if (!img) return [];
     node.type = '';   // consume — default code-block handler skips it

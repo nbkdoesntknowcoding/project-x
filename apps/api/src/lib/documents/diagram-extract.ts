@@ -10,7 +10,7 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
 export interface DiagramBlock {
-  format: 'mermaid' | 'svg';
+  format: 'mermaid' | 'svg' | 'chart';
   source: string;
 }
 
@@ -27,7 +27,7 @@ export function extractDiagramBlocks(markdown: string): DiagramBlock[] {
   const walk = (node: MdNode): void => {
     if (node.type === 'code') {
       const lang = (node.lang ?? '').toLowerCase();
-      if (lang === 'mermaid' || lang === 'svg') {
+      if (lang === 'mermaid' || lang === 'svg' || lang === 'chart') {
         out.push({ format: lang, source: node.value ?? '' });
       }
     }

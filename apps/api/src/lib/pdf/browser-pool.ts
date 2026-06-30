@@ -281,7 +281,7 @@ export interface DiagramImage {
  * once). A per-block failure is skipped (that block falls back to its source text in the doc).
  */
 export async function renderDiagramImages(
-  blocks: { format: 'mermaid' | 'svg'; source: string }[],
+  blocks: { format: 'mermaid' | 'svg' | 'chart'; source: string }[],
 ): Promise<Map<string, DiagramImage>> {
   const result = new Map<string, DiagramImage>();
   if (!blocks.length) return result;
@@ -295,6 +295,8 @@ export async function renderDiagramImages(
     );
     const needsSvg = blocks.some((b) => b.format === 'svg');
     const needsMermaid = blocks.some((b) => b.format === 'mermaid');
+    const needsChart = blocks.some((b) => b.format === 'chart');
+    if (needsChart) await page.addScriptTag({ content: getChartSrc() });
     if (needsSvg) await page.addScriptTag({ content: getDompurifySrc() });
     if (needsMermaid) {
       await page.addScriptTag({ content: getMermaidSrc() });
@@ -308,6 +310,55 @@ export async function renderDiagramImages(
     }
     for (const block of blocks) {
       if (result.has(block.source)) continue;   // identical diagram → reuse one render
+      // Charts render to a detached canvas → PNG data URL (a canvas can't be screenshotted via the
+      // svg-host path). Light-themed, fixed 1280x640 — mirrors the in-app + PDF chart config.
+      if (block.format === 'chart') {
+        try {
+          const dataUrl = await Promise.race([
+            page.evaluate((source) => {
+              const w = window as unknown as { Chart: new (c: HTMLCanvasElement, cfg: unknown) => { destroy: () => void } };
+              const spec = JSON.parse(source) as { type: string; data?: { labels?: unknown[]; datasets?: Record<string, unknown>[]; rows?: Record<string, unknown>[] }; x?: string; y?: string | string[]; title?: string; options?: Record<string, unknown> };
+              const PAL = ['#FFB370', '#6EA8FF', '#7BD88F', '#E879A6', '#C9A2FF', '#F2C14E', '#5BC8C0'];
+              const T = '#1c1f24', G = 'rgba(10,11,13,0.08)', F = 'Geist, system-ui, sans-serif';
+              const isArea = spec.type === 'area';
+              const type = isArea ? 'line' : spec.type;
+              let labels = spec.data?.labels;
+              let ds: Record<string, unknown>[] = spec.data?.datasets ?? [];
+              const rows = spec.data?.rows;
+              if (Array.isArray(rows) && spec.x && spec.y) {
+                const ys = Array.isArray(spec.y) ? spec.y : [spec.y];
+                labels = rows.map((r) => r[spec.x as string]);
+                ds = ys.map((yk) => ({ label: yk, data: rows.map((r) => r[yk]) }));
+              }
+              const styled = ds.map((d, i) => {
+                const c = PAL[i % PAL.length]; const b: Record<string, unknown> = { ...d };
+                if (type === 'line') { b.borderColor = d.borderColor ?? c; b.backgroundColor = d.backgroundColor ?? (isArea ? `${c}33` : c); b.fill = isArea ? true : (d.fill ?? false); b.tension = 0.3; b.pointRadius = 2; }
+                else if (type === 'pie' || type === 'doughnut') { b.backgroundColor = d.backgroundColor ?? PAL; }
+                else if (type === 'scatter') { b.backgroundColor = d.backgroundColor ?? c; }
+                else { b.backgroundColor = d.backgroundColor ?? c; b.borderRadius = 4; }
+                return b;
+              });
+              const circ = type === 'pie' || type === 'doughnut';
+              const cfg = { type, data: { labels, datasets: styled }, options: { animation: false, responsive: false, maintainAspectRatio: false, color: T,
+                plugins: { legend: { display: styled.length > 1 || circ, labels: { color: T, font: { family: F } } }, title: spec.title ? { display: true, text: spec.title, color: T, font: { family: F, size: 15, weight: '600' } } : { display: false } },
+                scales: circ ? {} : { x: { ticks: { color: T, font: { family: F } }, grid: { color: G } }, y: { beginAtZero: true, ticks: { color: T, font: { family: F } }, grid: { color: G } } }, ...(spec.options ?? {}) } };
+              const canvas = document.createElement('canvas'); canvas.width = 1280; canvas.height = 640;
+              const chart = new w.Chart(canvas, cfg);
+              const url = canvas.toDataURL('image/png');
+              chart.destroy();
+              return url;
+            }, block.source),
+            new Promise<null>((res) => setTimeout(() => res(null), DIAGRAM_BUDGET_MS)),
+          ]);
+          if (!dataUrl) continue;
+          const png = Buffer.from(dataUrl.split(',')[1] ?? '', 'base64');
+          result.set(block.source, { png, width: 1280, height: 640 });
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn(`[browser-pool] docx chart image failed: ${String(err)}`);
+        }
+        continue;
+      }
       try {
         const dims = await Promise.race([
           page.evaluate(async ({ format, source }) => {
