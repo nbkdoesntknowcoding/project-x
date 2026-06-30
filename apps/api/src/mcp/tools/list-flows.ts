@@ -29,7 +29,7 @@ export const LIST_FLOWS_TOOL = {
     '',
     'Each item has two identifiers:',
     '  id   — human-readable slug (e.g. "onboarding-eng"). Pass to get_flow_step.',
-    '  uuid — database UUID. Pass to get_flow, propose_flow_publish, publish_flow.',
+    '  uuid — database UUID. Pass to get_flow or propose_flow_publish.',
     '',
     'After listing, walk a flow by calling get_flow_step(flow_id, step_index)',
     'starting at step_index=1. Execute each step before fetching the next one.',

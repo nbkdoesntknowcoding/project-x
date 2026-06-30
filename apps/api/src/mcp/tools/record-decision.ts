@@ -34,7 +34,7 @@ export const RECORD_DECISION_TOOL = {
     required: ['decision_text'],
     additionalProperties: false,
   },
-  annotations: { title: 'Record decision' },
+  annotations: { destructiveHint: false, title: 'Record decision' },
 };
 
 const argsSchema = z.object({

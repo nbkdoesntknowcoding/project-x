@@ -49,7 +49,7 @@ export const ADD_CHART_TOOL_SPEC = {
     type: 'object' as const,
     properties: {
       doc_id: { type: 'string', description: 'UUID of the target doc.' },
-      chart_type: { type: 'string', enum: [...CHART_TYPES], description: 'Chart type: bar, line, area, scatter, pie, doughnut.' },
+      chart_type: { type: 'string', enum: [...CHART_TYPES, 'donut'], description: 'Chart type: bar, line, area, scatter, pie, doughnut.' },
       data: {
         type: 'object',
         description: 'Embedded data: { rows: [{...}] } (with x/y column keys) OR { labels: [...], datasets: [{ label, data: [...] }] }.',

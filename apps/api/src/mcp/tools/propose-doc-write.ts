@@ -34,8 +34,8 @@ export const PROPOSE_DOC_WRITE_TOOL_SPEC = {
   description: [
     'Propose a write to a doc and open an interactive preview panel.',
     '',
-    'Use this instead of direct write tools when the user asks to write/edit',
-    'a doc. The proposed content is shown in a preview with Approve/Reject',
+    'This is the general doc-write tool — use it whenever the user asks to write or',
+    'edit a doc. The proposed content is shown in a preview with Approve/Reject',
     'buttons — the commit only fires when the user clicks Approve.',
     '',
     'Supported operations:',
@@ -84,7 +84,7 @@ export const PROPOSE_DOC_WRITE_TOOL_SPEC = {
       },
       title: {
         type: 'string',
-        description: 'For create operation: the new doc title.',
+        description: 'For create operation: the new doc title. Use THIS field for the title.',
       },
       folder_id: {
         type: 'string',
@@ -92,7 +92,7 @@ export const PROPOSE_DOC_WRITE_TOOL_SPEC = {
       },
       doc_name: {
         type: 'string',
-        description: 'For create operation: the new doc title (alias of title).',
+        description: 'Deprecated alias of `title` for create (kept for back-compat). Prefer `title`; do not set both.',
       },
     },
     required: ['operation'],

@@ -11,7 +11,7 @@
  *     → withAudit → return { removed_node, removed_edge_count }
  *
  * destructiveHint: true — deletes graph structure from the draft.
- * Draft-only: the published version is untouched until publish_flow.
+ * Draft-only: the published version is untouched until propose_flow_publish.
  */
 
 import { and, eq, isNull, or } from 'drizzle-orm';
@@ -50,8 +50,8 @@ export const REMOVE_FLOW_NODE_TOOL = {
   name: 'remove_flow_node',
   description: [
     'Remove a node from a flow draft. Also removes ALL edges connected to it',
-    '(both incoming and outgoing). The published version is untouched until',
-    'publish_flow is called.',
+    '(both incoming and outgoing). The published version stays untouched until the',
+    'draft is published via propose_flow_publish.',
     '',
     'SAFETY — this permanently removes graph structure from the draft.',
     'Required before calling:',

@@ -107,30 +107,44 @@ const API_ORIGIN = process.env.MCP_BASE_URL ?? 'https://api.theboringpeople.in';
 // By making everything optional here, validateToolInput always succeeds and
 // the handler runs — handlers catch validation errors themselves and always
 // return structuredContent so the panel can open even on error.
-type JsonSchemaProp = { type?: string; description?: string };
+type JsonSchemaProp = { type?: string; description?: string; enum?: string[]; minimum?: number; maximum?: number };
 type JsonSchemaObj = { type?: string; properties?: Record<string, JsonSchemaProp>; required?: string[] };
 
 // Returns undefined for no-property schemas so the SDK treats the tool as
 // accepting any input (SDK rejects an empty {} object at runtime).
-function jsonSchemaToZodShape(schema: object): Record<string, z.ZodTypeAny> | undefined {
+export function jsonSchemaToZodShape(schema: object): Record<string, z.ZodTypeAny> | undefined {
   const s = schema as JsonSchemaObj;
   const entries = Object.entries(s.properties ?? {});
   if (entries.length === 0) return undefined;
   const shape: Record<string, z.ZodTypeAny> = {};
   for (const [key, prop] of entries) {
     let field: z.ZodTypeAny;
-    switch (prop.type) {
-      case 'number':
-      // Coerce for integer too: clients that serialise integers as strings still pass
-      case 'integer': field = z.coerce.number(); break;
-      case 'boolean': field = z.boolean(); break;
-      // Object fields (e.g. `data`, `position`): use a permissive record so the
-      // SDK publishes type:object in tools/list and Claude sends a real object.
-      // The handler's own argsSchema does the precise structural validation.
-      case 'object':  field = z.record(z.unknown()); break;
-      // Array fields: use a permissive array for the same reason.
-      case 'array':   field = z.array(z.unknown()); break;
-      default:        field = z.string(); break;
+    // String enums → z.enum so the valid values are PUBLISHED in tools/list (the model
+    // sees them and can't guess wrong) AND enforced. Without this the enum was silently
+    // dropped here and the param was published as a bare string. (Tier 4 schema tightening.)
+    if (Array.isArray(prop.enum) && prop.enum.length > 0 && (prop.type === undefined || prop.type === 'string')) {
+      field = z.enum(prop.enum as [string, ...string[]]);
+    } else {
+      switch (prop.type) {
+        case 'number':
+        case 'integer': {
+          // Coerce for integer too: clients that serialise integers as strings still pass.
+          let num = prop.type === 'integer' ? z.coerce.number().int() : z.coerce.number();
+          // Honor JSON-schema bounds so they're published + enforced (Tier 4).
+          if (typeof prop.minimum === 'number') num = num.min(prop.minimum);
+          if (typeof prop.maximum === 'number') num = num.max(prop.maximum);
+          field = num;
+          break;
+        }
+        case 'boolean': field = z.boolean(); break;
+        // Object fields (e.g. `data`, `position`): use a permissive record so the
+        // SDK publishes type:object in tools/list and Claude sends a real object.
+        // The handler's own argsSchema does the precise structural validation.
+        case 'object':  field = z.record(z.unknown()); break;
+        // Array fields: use a permissive array for the same reason.
+        case 'array':   field = z.array(z.unknown()); break;
+        default:        field = z.string(); break;
+      }
     }
     if (prop.description) field = field.describe(prop.description);
     // Always optional — see comment above. Handler validates required fields.

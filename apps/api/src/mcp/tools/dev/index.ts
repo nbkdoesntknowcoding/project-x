@@ -42,12 +42,16 @@ export const GET_NEXT_TASK_TOOL = {
     'Defaults to backlog status. Pass status="audit_fix" to get blocked tasks needing review.',
     'Use the returned task.id with claim_task to start working on it.',
     'Returns null if no tasks are available in the requested column.',
+    '',
+    'Use this when you are starting work or picking up the next item from the board.',
+    'Step 1 of the dev loop: get_next_task → claim_task → complete_task / log_blocker.',
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,
     properties: {
       status: {
         type: 'string',
+        enum: ['backlog', 'audit_fix'],
         description: 'Column to pull from: "backlog" (default) or "audit_fix".',
       },
       project: {
@@ -67,6 +71,9 @@ export const CLAIM_TASK_TOOL = {
     'Call get_next_task first to find the task id.',
     'Returns the updated task and the new session id.',
     'Error if task is not in backlog or audit_fix status.',
+    '',
+    'Use this after get_next_task to start a specific task (moves it to In Progress).',
+    'Step 2 of the dev loop: get_next_task → claim_task → complete_task / log_blocker.',
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,
@@ -77,7 +84,7 @@ export const CLAIM_TASK_TOOL = {
     required: ['taskId'],
     additionalProperties: false,
   },
-  annotations: { title: 'Claim task' },
+  annotations: { destructiveHint: false, title: 'Claim task' },
 };
 
 export const COMPLETE_TASK_TOOL = {
@@ -86,6 +93,9 @@ export const COMPLETE_TASK_TOOL = {
     'Mark a task as done. Moves it from in_progress or review to done.',
     'Optionally link the GitHub PR and provide a completion summary.',
     'Notifies workspace members if summary is provided.',
+    '',
+    "Use this when a task's work is finished and verified. Step 3 of the dev loop:",
+    'get_next_task → claim_task → complete_task / log_blocker.',
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,
@@ -98,7 +108,7 @@ export const COMPLETE_TASK_TOOL = {
     required: ['taskId'],
     additionalProperties: false,
   },
-  annotations: { title: 'Complete task' },
+  annotations: { destructiveHint: false, title: 'Complete task' },
 };
 
 export const LOG_BLOCKER_TOOL = {
@@ -108,6 +118,9 @@ export const LOG_BLOCKER_TOOL = {
     'Use when you cannot complete a task and need human review.',
     'description is REQUIRED and must clearly describe what failed.',
     'Increments the retry count and notifies workspace members.',
+    '',
+    'Use this when you cannot finish a task and need human review — the alternative to',
+    'complete_task. Dev loop: get_next_task → claim_task → complete_task / log_blocker.',
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,
@@ -119,7 +132,7 @@ export const LOG_BLOCKER_TOOL = {
     required: ['taskId', 'description'],
     additionalProperties: false,
   },
-  annotations: { title: 'Log blocker' },
+  annotations: { destructiveHint: false, title: 'Log blocker' },
 };
 
 export const LIST_PROJECT_TASKS_TOOL = {
@@ -132,8 +145,8 @@ export const LIST_PROJECT_TASKS_TOOL = {
   inputSchema: {
     type: 'object' as const,
     properties: {
-      status:   { type: 'string', description: 'Filter by status: backlog, in_progress, review, audit_fix, done.' },
-      priority: { type: 'string', description: 'Filter by priority: low, medium, high, critical.' },
+      status:   { type: 'string', enum: ['backlog', 'in_progress', 'review', 'audit_fix', 'done'], description: 'Filter by status: backlog, in_progress, review, audit_fix, done.' },
+      priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'], description: 'Filter by priority: low, medium, high, critical.' },
       limit:    { type: 'number', description: 'Max tasks to return (default: 20, max: 100).' },
       project:  { type: 'string', description: 'Optional project slug or UUID to filter tasks by project.' },
     },
@@ -683,7 +696,7 @@ export const LOG_MILESTONE_TOOL = {
     required: ['sessionId', 'message'],
     additionalProperties: false,
   },
-  annotations: { title: 'Log milestone' },
+  annotations: { destructiveHint: false, title: 'Log milestone' },
 };
 
 // ── Phase 2 Argument schemas ──────────────────────────────────────────────────

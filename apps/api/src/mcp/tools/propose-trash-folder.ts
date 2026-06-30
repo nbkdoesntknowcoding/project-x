@@ -31,7 +31,7 @@ export const PROPOSE_TRASH_FOLDER_TOOL_SPEC = {
     'Propose trashing a folder (and ALL its subfolders and docs) and open an',
     'interactive preview panel showing the cascade impact.',
     '',
-    'Use this instead of trash_folder when the user asks to delete a folder.',
+    'This is the way to trash a folder when the user asks to delete one.',
     'The preview shows how many docs and subfolders will be trashed — the',
     'commit only fires when the user clicks Approve.',
     '',

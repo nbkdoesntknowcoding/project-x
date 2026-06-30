@@ -14,13 +14,18 @@ export const LIST_PROJECTS_TOOL = {
     'List projects in this workspace with task counts per status.',
     'Default: active projects only. Pass status="all" to include paused/archived.',
     'Available in both knowledge and dev_project workspace modes.',
+    '',
+    'Use this when the user asks what projects exist or wants an overview, or you',
+    'need project ids or task counts before drilling in. Do NOT use for one',
+    "project's detail — call get_project.",
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,
     properties: {
       status: {
         type: 'string',
-        description: "Filter by project status: 'active' (default), 'paused', 'completed', 'all'.",
+        enum: ['active', 'paused', 'completed', 'archived', 'all'],
+        description: "Filter by project status: 'active' (default), 'paused', 'completed', 'archived', or 'all'.",
       },
     },
     additionalProperties: false,

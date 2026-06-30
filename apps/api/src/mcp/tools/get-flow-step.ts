@@ -31,6 +31,9 @@ export const GET_FLOW_STEP_TOOL = {
   description: [
     'Retrieves one step from a published flow by its index.',
     '',
+    'NOT to be confused with get_flow: get_flow_step WALKS a PUBLISHED flow (by slug);',
+    'get_flow EDITS a DRAFT graph (by UUID).',
+    '',
     'EXECUTION MODEL — a flow is a program, not a document. Walk it one step at a',
     'time and ACT on each step before fetching the next one. Never pre-fetch all',
     'steps and summarize them — that defeats the flow\'s purpose.',
@@ -64,7 +67,7 @@ export const GET_FLOW_STEP_TOOL = {
     properties: {
       flow_id: {
         type: 'string',
-        description: 'The flow slug, e.g. "example-onboarding". Discoverable via list_flows.',
+        description: 'The flow slug (the `id` field from list_flows, e.g. "example-onboarding") — NOT the uuid.',
       },
       step_index: {
         type: 'integer',

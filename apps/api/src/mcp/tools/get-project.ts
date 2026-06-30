@@ -14,6 +14,10 @@ export const GET_PROJECT_TOOL = {
     'Get full details for a project: metadata, folders, and recent tasks.',
     'Accepts a slug, UUID, or partial name match.',
     'Available in both knowledge and dev_project workspace modes.',
+    '',
+    'Use this when the user names or asks about a specific project and you need its',
+    'folders, recent tasks, and metadata. Do NOT use for a workspace-wide list —',
+    'call list_projects.',
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,

@@ -47,8 +47,8 @@ function recordIKey(key: string): void {
 export const REMOVE_FLOW_EDGE_TOOL = {
   name: 'remove_flow_edge',
   description: [
-    'Remove an edge from a flow draft. The published version is untouched until',
-    'publish_flow is called.',
+    'Remove an edge from a flow draft. The published version stays untouched until',
+    'the draft is published via propose_flow_publish.',
     '',
     'For decision-source edges, supply the branch_label to identify which branch',
     'edge to remove. Omit for non-decision source edges.',

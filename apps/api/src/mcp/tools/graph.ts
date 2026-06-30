@@ -63,7 +63,7 @@ export const TRAVERSE_GRAPH_TOOL_SPEC = {
     properties: {
       from:  { type: 'string', description: 'Start node label or UUID' },
       to:    { type: 'string', description: 'End node label or UUID (optional — omit for neighborhood)' },
-      depth: { type: 'number', description: 'Max traversal depth (default 5)' },
+      depth: { type: 'number', minimum: 1, maximum: 10, description: 'Max traversal depth (default 5)' },
     },
     required: ['from'],
   },
@@ -189,11 +189,15 @@ export const GET_GOD_NODES_TOOL_SPEC = {
     'God-nodes are the concepts, docs, or flows that everything else depends on.',
     'Includes degree, betweenness %, and blast radius (number of nodes that depend on each).',
     'Opens the graph-explorer panel.',
+    '',
+    'Use this when the user asks what is most central, critical, or load-bearing in the',
+    'workspace, or what everything depends on. Consult get_graph_report first for the',
+    'overview; use this for the ranked critical-nodes slice.',
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,
     properties: {
-      limit: { type: 'number', description: 'Max results (default 10)' },
+      limit: { type: 'number', minimum: 1, maximum: 20, description: 'Max results (default 10)' },
       project_id: { type: 'string', description: 'Optional project UUID — restrict to that project.' },
     },
   },
@@ -315,11 +319,14 @@ export const BUILD_KNOWLEDGE_GRAPH_TOOL_SPEC = {
     'Use "normal" mode (default) for Claude Haiku extraction.',
     'Use "deep" mode for Claude Sonnet — slower but higher quality.',
     'The graph is rebuilt in the background; check get_graph_report for results.',
+    '',
+    'Use this when get_graph_report looks stale or after a large ingest of new docs,',
+    'to rebuild before answering architecture questions about this workspace.',
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,
     properties: {
-      mode: { type: 'string', description: '"normal" (Haiku) or "deep" (Sonnet)' },
+      mode: { type: 'string', enum: ['normal', 'deep'], description: '"normal" (Haiku, default) or "deep" (Sonnet)' },
     },
   },
   annotations: { readOnlyHint: false, title: 'Rebuild the knowledge graph' },
@@ -346,11 +353,15 @@ export const GET_SURPRISING_CONNECTIONS_TOOL_SPEC = {
     'These are unexpected relationships between different entity types',
     '(e.g. a doc connected to a flow step, or a task linked to a concept).',
     'Sorted by edge weight descending — higher weight = more confident / more surprising.',
+    '',
+    'Use this when the user asks for non-obvious links, unexpected relationships, or what',
+    'connects across areas they would not expect. Use get_graph_report for the general',
+    'overview; this for the surprising cross-type slice.',
   ].join('\n'),
   inputSchema: {
     type: 'object' as const,
     properties: {
-      limit: { type: 'number', description: 'Max results (default 10)' },
+      limit: { type: 'number', minimum: 1, maximum: 50, description: 'Max results (default 10)' },
     },
   },
   annotations: { readOnlyHint: true, title: 'Get surprising cross-type connections' },

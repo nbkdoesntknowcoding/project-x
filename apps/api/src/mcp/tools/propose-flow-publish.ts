@@ -31,7 +31,7 @@ export const PROPOSE_FLOW_PUBLISH_TOOL_SPEC = {
   description: [
     'Propose publishing a flow\'s draft and open an interactive preview panel.',
     '',
-    'Use this instead of publish_flow when the user asks to publish a flow.',
+    'This is the way to publish a flow when the user asks to publish one.',
     'The preview shows the validation result and a node-level diff vs. the',
     'currently published version — the publish only fires when the user',
     'clicks Approve.',
