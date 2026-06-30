@@ -339,25 +339,13 @@
   padding: 16px;
 }
 
-/* Figure-first: a mermaid/svg/chart block shows the RENDERED figure by default and hides its source
- * editor + tools — the reader sees the figure, not raw code. Hover reveals the source for editing.
- * Keyed off the rendered preview host, so a block only collapses once its figure exists (a not-yet-
- * rendered or broken block keeps its source visible, never an empty box). */
-.milkdown-code-block:has(.mermaid-preview) .cm-editor,
-.milkdown-code-block:has(.svg-preview) .cm-editor,
-.milkdown-code-block:has(.chart-preview) .cm-editor,
-.milkdown-code-block:has(.mermaid-preview) .tools,
-.milkdown-code-block:has(.svg-preview) .tools,
-.milkdown-code-block:has(.chart-preview) .tools {
-  display: none;
-}
-.milkdown-code-block:has(.mermaid-preview):hover .cm-editor,
-.milkdown-code-block:has(.svg-preview):hover .cm-editor,
-.milkdown-code-block:has(.chart-preview):hover .cm-editor,
-.milkdown-code-block:has(.mermaid-preview):hover .tools,
-.milkdown-code-block:has(.svg-preview):hover .tools,
-.milkdown-code-block:has(.chart-preview):hover .tools {
-  display: revert;
+/* Chart figure is a PNG <img> (Chart.js rendered offscreen → toDataURL) — Crepe serializes the
+ * preview to innerHTML, which a live <canvas> can't survive. Size it to the column. */
+.chart-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
 }
 
 /* === Connection status — now embedded in the bottom-right toolbar (DocPage).

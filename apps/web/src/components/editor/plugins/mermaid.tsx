@@ -2,7 +2,7 @@ import { codeBlockConfig } from '@milkdown/kit/component/code-block';
 import type { Ctx } from '@milkdown/kit/ctx';
 import mermaid from 'mermaid';
 import { sanitizeMarkup } from '../../../lib/sanitize';
-import { renderChartPreview } from './chart';
+import { renderChartHost } from './chart';
 
 /**
  * Mermaid theme variables for each Mnema theme. The brand accent stays
@@ -100,11 +100,15 @@ export function configureMermaidPreview(ctx: Ctx): void {
   ensureThemeObserver();
   ctx.update(codeBlockConfig.key, (prev) => ({
     ...prev,
+    // Figure-first: blocks that have a rendered preview (mermaid/svg/chart) show the figure by
+    // default with the source hidden; the "Edit" toggle reveals the code. Crepe only applies this to
+    // blocks that actually produce a preview — a normal code block (no preview) still shows its code.
+    previewOnlyByDefault: true,
     renderPreview: (language, content, applyPreview) => {
       const lang = language.toLowerCase();
       // Charting Sprint 1: a ```chart fence renders via Chart.js. Handled here in the SAME
       // renderPreview chain (not a separate config) so it actually composes with svg/mermaid.
-      if (lang === 'chart') return renderChartPreview(content, applyPreview);
+      if (lang === 'chart') return renderChartHost(content);
       // Diagram Phase 1: an ```svg fence renders the SVG inline — ALWAYS through the Sprint-0
       // sanitizer (never raw). SVG is static, so return the host synchronously.
       if (lang === 'svg') {

@@ -90,7 +90,9 @@ export function toChartConfig(spec: ChartSpec): Record<string, unknown> {
     data: { labels, datasets: styled },
     options: {
       animation: false,
-      responsive: true,
+      // Rendered offscreen to a fixed-size canvas → toDataURL → <img> (Crepe serializes the preview
+      // to innerHTML, which would wipe a live <canvas>). So fixed size, NOT responsive.
+      responsive: false,
       maintainAspectRatio: false,
       color: text,
       plugins: {
@@ -111,18 +113,16 @@ export function toChartConfig(spec: ChartSpec): Record<string, unknown> {
 }
 
 /**
- * Render a ```chart block's preview. Called from the diagram renderPreview hook (mermaid.tsx) — a
- * SINGLE renderPreview chain handles svg/mermaid/chart, because two separate crepe.editor.config()
- * overrides of codeBlockConfig.renderPreview do NOT compose (one wins, the other is silently lost).
+ * Render a ```chart block's preview, called from the diagram renderPreview hook (mermaid.tsx) — ONE
+ * renderPreview chain handles svg/mermaid/chart (two separate crepe.editor.config() overrides don't
+ * compose).
  *
- * Success path uses applyPreview (like mermaid): we insert the host first, then draw on the next
- * frame so the canvas is in the DOM + sized before Chart.js (responsive) measures it. Empty / invalid
- * JSON return a sync element. Returns undefined when it has taken over via applyPreview.
+ * CRITICAL: Crepe renders the preview by serializing the returned element to innerHTML (DOMPurify),
+ * so a live <canvas> loses its drawing. We therefore render Chart.js to a DETACHED fixed-size canvas,
+ * snapshot it to a PNG data URL, and return an <img> — which survives the innerHTML round-trip (img +
+ * data: is allowed by Crepe's sanitizer). Fully synchronous: the host is ready before it's serialized.
  */
-export function renderChartPreview(
-  content: string,
-  applyPreview: (el: HTMLElement) => void,
-): HTMLElement | undefined {
+export function renderChartHost(content: string): HTMLElement {
   if (!content.trim()) {
     const empty = document.createElement('div');
     empty.className = 'chart-empty';
@@ -140,21 +140,21 @@ export function renderChartPreview(
   }
   const host = document.createElement('div');
   host.className = 'chart-preview';
-  const wrap = document.createElement('div');
-  wrap.className = 'chart-canvas-wrap';
-  const canvas = document.createElement('canvas');
-  wrap.appendChild(canvas);
-  host.appendChild(wrap);
-  requestAnimationFrame(() => {
-    applyPreview(host); // insert into the preview panel (sized via .chart-canvas-wrap CSS)
-    requestAnimationFrame(() => {
-      try {
-        new Chart(canvas, toChartConfig(spec) as never);
-      } catch (e) {
-        host.replaceChildren();
-        host.textContent = `Chart render failed: ${String((e as Error).message).slice(0, 160)}`;
-      }
-    });
-  });
-  return undefined;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 640;
+    const chart = new Chart(canvas, toChartConfig(spec) as never);
+    const url = canvas.toDataURL('image/png');
+    chart.destroy();
+    const img = document.createElement('img');
+    img.className = 'chart-img';
+    img.src = url;
+    img.alt = spec.title ?? 'chart';
+    host.appendChild(img);
+  } catch (e) {
+    host.className = 'chart-error';
+    host.textContent = `Chart render failed: ${String((e as Error).message).slice(0, 160)}`;
+  }
+  return host;
 }
