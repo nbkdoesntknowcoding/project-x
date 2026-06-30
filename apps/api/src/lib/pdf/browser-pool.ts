@@ -17,12 +17,14 @@ function getMermaidSrc(): string {
   return (mermaidSrc ??= readFileSync(requireFromHere.resolve('mermaid/dist/mermaid.min.js'), 'utf8'));
 }
 // Charting Sprint 3: the Chart.js UMD bundle, read from the API's node_modules (no CDN). chart.js's
-// `exports` blocks the deep dist subpath, so resolve the package root and join the file.
+// `exports` only exposes ".", "./auto", "./helpers" — resolving ./package.json or ./dist/* throws
+// ERR_PACKAGE_PATH_NOT_EXPORTED under a strict (Docker-flattened) node_modules. So resolve the main
+// entry (dist/chart.cjs) and read the UMD sibling from that same dist dir.
 let chartSrc: string | null = null;
 function getChartSrc(): string {
   if (chartSrc === null) {
-    const dir = dirname(requireFromHere.resolve('chart.js/package.json'));
-    chartSrc = readFileSync(join(dir, 'dist', 'chart.umd.js'), 'utf8');
+    const dir = dirname(requireFromHere.resolve('chart.js'));
+    chartSrc = readFileSync(join(dir, 'chart.umd.js'), 'utf8');
   }
   return chartSrc;
 }
@@ -295,8 +297,17 @@ export async function renderDiagramImages(
     );
     const needsSvg = blocks.some((b) => b.format === 'svg');
     const needsMermaid = blocks.some((b) => b.format === 'mermaid');
-    const needsChart = blocks.some((b) => b.format === 'chart');
-    if (needsChart) await page.addScriptTag({ content: getChartSrc() });
+    let chartReady = blocks.some((b) => b.format === 'chart');
+    if (chartReady) {
+      try {
+        await page.addScriptTag({ content: getChartSrc() });
+      } catch (err) {
+        // Never let a chart-lib load failure crash the whole export — just skip charts.
+        chartReady = false;
+        // eslint-disable-next-line no-console
+        console.warn(`[browser-pool] chart lib load failed, skipping charts: ${String(err)}`);
+      }
+    }
     if (needsSvg) await page.addScriptTag({ content: getDompurifySrc() });
     if (needsMermaid) {
       await page.addScriptTag({ content: getMermaidSrc() });
@@ -313,6 +324,7 @@ export async function renderDiagramImages(
       // Charts render to a detached canvas → PNG data URL (a canvas can't be screenshotted via the
       // svg-host path). Light-themed, fixed 1280x640 — mirrors the in-app + PDF chart config.
       if (block.format === 'chart') {
+        if (!chartReady) continue;   // chart lib didn't load → leave the block as source
         try {
           const dataUrl = await Promise.race([
             page.evaluate((source) => {
