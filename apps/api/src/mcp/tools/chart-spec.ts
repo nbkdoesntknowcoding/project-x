@@ -34,6 +34,9 @@ export interface BuildChartInput {
   series?: string;
   title?: string;
   options?: Record<string, unknown>;
+  /** Provenance for a referenced chart (Sprint 5): { dataset_id, aggregation }. The renderer ignores
+   *  it — the embedded `data` is the aggregated snapshot — but it records what the chart came from. */
+  source?: Record<string, unknown>;
 }
 
 export type BuildChartResult =
@@ -126,6 +129,7 @@ export function buildChartBlock(input: BuildChartInput): BuildChartResult {
   if (input.series !== undefined) spec.series = input.series;
   if (input.title !== undefined) spec.title = input.title;
   if (input.options !== undefined) spec.options = input.options;
+  if (input.source !== undefined) spec.source = input.source;
 
   const json = JSON.stringify(spec, null, 2);
   if (Buffer.byteLength(json, 'utf8') > MAX_PAYLOAD_BYTES) {

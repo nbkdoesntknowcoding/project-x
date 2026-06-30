@@ -13,6 +13,8 @@ import { z } from 'zod';
 import type { McpAuthContext } from '../auth.js';
 import { proposeDocWrite } from './propose-doc-write.js';
 import { buildChartBlock, CHART_TYPES } from './chart-spec.js';
+import { describeDataset } from '../../lib/datasets/dataset-store.js';
+import { aggregateDataset, type AggregationSpec } from '../../lib/datasets/aggregate.js';
 
 export const ADD_CHART_TOOL_NAME = 'add_chart';
 
@@ -31,7 +33,13 @@ export const ADD_CHART_TOOL_SPEC = {
     'mismatch (e.g. scatter needs numeric x+y) with a clear error so you can correct it.',
     '',
     'EMBEDDED-DATA LIMIT: a few thousand rows. Larger data returns a "too_large" error pointing to the',
-    'stored-dataset path (Phase 2) — do NOT paste huge datasets into a chart block.',
+    'stored-dataset path — do NOT paste huge datasets into a chart block.',
+    '',
+    'REFERENCED MODE (no ceiling, Phase 2): instead of `data`, pass `dataset_id` (from ingest_dataset)',
+    '+ `aggregation` { x, y:{fn,column}, series?, bucket?, top_n?, order? }. The server aggregates the',
+    'stored dataset (GROUP BY) and embeds only the small AGGREGATED result — the raw rows never enter',
+    'the doc. Use describe_dataset first to pick columns. Example aggregation: { "x":"category",',
+    '"y":{"fn":"sum","column":"revenue"}, "top_n":10, "order":"value_desc" }.',
     '',
     'Appends a fenced ```chart block through the SAME preview/approve flow as add_diagram — the commit',
     'only fires when the user approves. IN CLAUDE CODE / CLI: show the proposed block, get explicit',
@@ -52,8 +60,10 @@ export const ADD_CHART_TOOL_SPEC = {
       title: { type: 'string', description: 'Optional chart title.' },
       options: { type: 'object', description: 'Optional Chart.js options overrides (merged over the themed defaults).' },
       after_anchor: { type: 'string', description: 'Optional anchor id to insert after (Phase 1 appends at the end).' },
+      dataset_id: { type: 'string', description: 'Referenced mode: id of a stored dataset (from ingest_dataset). Provide WITH aggregation, instead of data.' },
+      aggregation: { type: 'object', description: 'Referenced mode: { x, y: { fn: sum|avg|count|min|max, column? }, series?, bucket?: day|week|month, top_n?, order? }.' },
     },
-    required: ['doc_id', 'chart_type', 'data'],
+    required: ['doc_id', 'chart_type'],
     additionalProperties: false,
   },
   annotations: { destructiveHint: false, title: 'Add a data chart (with preview)' },
@@ -63,32 +73,51 @@ const argsSchema = z
   .object({
     doc_id: z.string().uuid(),
     chart_type: z.string(),
-    data: z.record(z.unknown()),
+    data: z.record(z.unknown()).optional(),
     x: z.string().optional(),
     y: z.union([z.string(), z.array(z.string())]).optional(),
     series: z.string().optional(),
     title: z.string().max(200).optional(),
     options: z.record(z.unknown()).optional(),
     after_anchor: z.string().min(1).max(64).optional(),
+    dataset_id: z.string().uuid().optional(),
+    aggregation: z.record(z.unknown()).optional(),
   })
   .strict();
 
-export async function addChart(
-  ctx: McpAuthContext,
-  rawArgs: Record<string, unknown>,
-): Promise<{ content: string; structuredContent: Record<string, unknown>; error?: string; message?: string }> {
+type ChartToolResult = { content: string; structuredContent: Record<string, unknown>; error?: string; message?: string };
+const fail = (error: string, message: string): ChartToolResult => ({ content: message, structuredContent: { error, message }, error });
+
+export async function addChart(ctx: McpAuthContext, rawArgs: Record<string, unknown>): Promise<ChartToolResult> {
   const args = argsSchema.parse(rawArgs);
+
+  // Referenced mode (Phase 2): aggregate a stored dataset server-side, embed only the small result.
+  let data = args.data;
+  let source: Record<string, unknown> | undefined;
+  if (args.dataset_id) {
+    if (!args.aggregation) return fail('missing_aggregation', 'Referenced mode needs `aggregation` alongside `dataset_id`.');
+    const desc = await describeDataset(ctx.tenant_id, args.dataset_id, 0);
+    if (!desc) return fail('dataset_not_found', `Dataset ${args.dataset_id} not found.`);
+    try {
+      const agg = await aggregateDataset(ctx.tenant_id, args.dataset_id, args.aggregation as unknown as AggregationSpec, desc.columns);
+      data = { labels: agg.labels, datasets: agg.datasets };
+      source = { dataset_id: args.dataset_id, aggregation: args.aggregation };
+    } catch (err) {
+      return fail('aggregation_failed', err instanceof Error ? err.message : String(err));
+    }
+  }
+  if (!data) return fail('missing_data', 'Provide either `data` (embedded) or `dataset_id` + `aggregation` (referenced).');
+
   const built = buildChartBlock({
     chart_type: args.chart_type,
-    data: args.data as never,
+    data: data as never,
     x: args.x,
     y: args.y,
     series: args.series,
     title: args.title,
     options: args.options,
+    source,
   });
-  if (!built.ok) {
-    return { content: built.message, structuredContent: { error: built.error }, error: built.error };
-  }
+  if (!built.ok) return { content: built.message, structuredContent: { error: built.error }, error: built.error };
   return proposeDocWrite(ctx, { operation: 'append', doc_id: args.doc_id, markdown: built.markdown });
 }
