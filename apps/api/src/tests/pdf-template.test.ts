@@ -21,6 +21,12 @@ describe('renderDocumentHtml — diagram export', () => {
     expect(html).toContain('class="language-svg"');
   });
 
+  it('chart fence → language-chart block the worker renders via Chart.js (Sprint 3)', () => {
+    const html = renderDocumentHtml('```chart\n{"type":"bar","data":{"labels":["a"],"datasets":[{"data":[1]}]}}\n```', 'Doc');
+    expect(html).toContain('class="language-chart"');
+    expect(html).toContain('.chart-figure'); // the figure CSS the worker swaps the block into
+  });
+
   it('NO external CDN: the template never references jsdelivr / unpkg (libs are injected locally)', () => {
     const html = renderDocumentHtml('# T\n\n```mermaid\ngraph TD; A-->B;\n```\n\n```svg\n<svg/>\n```', 'Doc');
     expect(html).not.toContain('jsdelivr');

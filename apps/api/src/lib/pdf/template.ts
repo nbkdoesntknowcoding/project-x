@@ -100,6 +100,9 @@ export function renderDocumentHtml(markdown: string, title: string): string {
 
   .diagram { margin: 14pt 0; text-align: center; page-break-inside: avoid; }
   .diagram svg { max-width: 100%; height: auto; }
+
+  .chart-figure { margin: 14pt 0; text-align: center; page-break-inside: avoid; }
+  .chart-figure canvas { max-width: 100%; height: auto; }
 </style>
 </head>
 <body>

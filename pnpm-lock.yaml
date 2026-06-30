@@ -107,6 +107,9 @@ importers:
       bullmq:
         specifier: ^5.76.8
         version: 5.76.8
+      chart.js:
+        specifier: ^4.4.7
+        version: 4.5.1
       diff:
         specifier: ^9.0.0
         version: 9.0.0

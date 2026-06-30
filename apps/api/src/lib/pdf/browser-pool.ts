@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { chromium, type Browser, type Page } from 'playwright';
 import { config } from '../../config/env.js';
 
@@ -14,6 +15,84 @@ function getDompurifySrc(): string {
 }
 function getMermaidSrc(): string {
   return (mermaidSrc ??= readFileSync(requireFromHere.resolve('mermaid/dist/mermaid.min.js'), 'utf8'));
+}
+// Charting Sprint 3: the Chart.js UMD bundle, read from the API's node_modules (no CDN). chart.js's
+// `exports` blocks the deep dist subpath, so resolve the package root and join the file.
+let chartSrc: string | null = null;
+function getChartSrc(): string {
+  if (chartSrc === null) {
+    const dir = dirname(requireFromHere.resolve('chart.js/package.json'));
+    chartSrc = readFileSync(join(dir, 'dist', 'chart.umd.js'), 'utf8');
+  }
+  return chartSrc;
+}
+
+// Runs INSIDE the export page. Swaps ```chart code blocks for a Chart.js canvas rendered from the
+// embedded JSON spec — light-themed + animation:false (deterministic for print), mirroring the
+// in-app plugins/chart.tsx adapter. responsive:false so the canvas backing buffer is fixed and crisp
+// in the PDF. A per-block try/catch leaves the source visible on a bad spec.
+async function renderChartsInPage(): Promise<void> {
+  const w = window as unknown as { Chart?: new (c: HTMLCanvasElement, cfg: unknown) => unknown };
+  if (!w.Chart) return;
+  const PAL = ['#FFB370', '#6EA8FF', '#7BD88F', '#E879A6', '#C9A2FF', '#F2C14E', '#5BC8C0'];
+  const TEXT = '#1c1f24';
+  const GRID = 'rgba(10,11,13,0.08)';
+  const FONT = 'Geist, system-ui, sans-serif';
+  const buildCfg = (spec: Record<string, unknown>): Record<string, unknown> => {
+    const s = spec as { type: string; data?: { labels?: unknown[]; datasets?: Record<string, unknown>[]; rows?: Record<string, unknown>[] }; x?: string; y?: string | string[]; title?: string; options?: Record<string, unknown> };
+    const isArea = s.type === 'area';
+    const type = isArea ? 'line' : s.type;
+    let labels = s.data?.labels;
+    let datasets: Record<string, unknown>[] = s.data?.datasets ?? [];
+    const rows = s.data?.rows;
+    if (Array.isArray(rows) && s.x && s.y) {
+      const ys = Array.isArray(s.y) ? s.y : [s.y];
+      labels = rows.map((r) => r[s.x as string]);
+      datasets = ys.map((yk) => ({ label: yk, data: rows.map((r) => r[yk]) }));
+    }
+    const styled = datasets.map((ds, i) => {
+      const c = PAL[i % PAL.length]!;
+      const b: Record<string, unknown> = { ...ds };
+      if (type === 'line') { b.borderColor = ds.borderColor ?? c; b.backgroundColor = ds.backgroundColor ?? (isArea ? `${c}33` : c); b.fill = isArea ? true : (ds.fill ?? false); b.tension = 0.3; b.pointRadius = 2; }
+      else if (type === 'pie' || type === 'doughnut') { b.backgroundColor = ds.backgroundColor ?? PAL; }
+      else if (type === 'scatter') { b.backgroundColor = ds.backgroundColor ?? c; }
+      else { b.backgroundColor = ds.backgroundColor ?? c; b.borderRadius = 4; }
+      return b;
+    });
+    const circ = type === 'pie' || type === 'doughnut';
+    const legend = styled.length > 1 || circ;
+    return {
+      type,
+      data: { labels, datasets: styled },
+      options: {
+        animation: false, responsive: false, maintainAspectRatio: false, color: TEXT,
+        plugins: {
+          legend: { display: legend, labels: { color: TEXT, font: { family: FONT } } },
+          title: s.title ? { display: true, text: s.title, color: TEXT, font: { family: FONT, size: 15, weight: '600' } } : { display: false },
+        },
+        scales: circ ? {} : {
+          x: { ticks: { color: TEXT, font: { family: FONT } }, grid: { color: GRID } },
+          y: { beginAtZero: true, ticks: { color: TEXT, font: { family: FONT } }, grid: { color: GRID } },
+        },
+        ...(s.options ?? {}),
+      },
+    };
+  };
+  for (const code of Array.from(document.querySelectorAll('pre > code.language-chart'))) {
+    try {
+      const spec = JSON.parse(code.textContent || '{}') as Record<string, unknown>;
+      const fig = document.createElement('div');
+      fig.className = 'chart-figure';
+      const canvas = document.createElement('canvas');
+      canvas.width = 1280;
+      canvas.height = 720;
+      fig.appendChild(canvas);
+      code.closest('pre')?.replaceWith(fig);
+      new w.Chart(canvas, buildCfg(spec));
+    } catch { /* leave the source block on a bad spec */ }
+  }
+  // let Chart.js paint before page.pdf() captures the canvas
+  await new Promise<void>((res) => requestAnimationFrame(() => requestAnimationFrame(() => res())));
 }
 
 // Runs INSIDE the export page (serialized by Playwright). Swaps ```svg / ```mermaid code blocks for
@@ -122,27 +201,36 @@ export async function renderPdf(html: string): Promise<Buffer> {
     // needs DOMPurify; mermaid needs the (large) mermaid bundle.
     const hasSvg = html.includes('language-svg');
     const hasMermaid = html.includes('language-mermaid');
-    if (hasSvg || hasMermaid) {
-      // HARD time-bound the whole diagram step (lib inject + render). A render that hangs in headless
+    const hasChart = html.includes('language-chart');
+    if (hasSvg || hasMermaid || hasChart) {
+      // HARD time-bound the whole figure step (lib inject + render). A render that hangs in headless
       // Chromium must NEVER hang the job — on budget-exceeded we abandon it and print whatever the
-      // page has (the diagram degrades to its source code). This restores the guarantee the old
-      // CDN-era 12s fallback gave; without it a hung mermaid.render stalls the job to a 30s timeout.
+      // page has (the figure degrades to its source code). This restores the guarantee the old
+      // CDN-era 12s fallback gave; without it a hung render stalls the job to a 30s timeout.
       t = Date.now();
       const work = (async () => {
         if (hasSvg) { await page!.addScriptTag({ content: getDompurifySrc() }); logStep('inject:dompurify', t); }
         if (hasMermaid) { const m = Date.now(); await page!.addScriptTag({ content: getMermaidSrc() }); logStep('inject:mermaid', m); }
-        const r = Date.now();
-        await page!.evaluate(renderDiagramsInPage);
-        logStep('render:diagrams', r);
+        if (hasSvg || hasMermaid) {
+          const r = Date.now();
+          await page!.evaluate(renderDiagramsInPage);
+          logStep('render:diagrams', r);
+        }
+        if (hasChart) {
+          const c = Date.now();
+          await page!.addScriptTag({ content: getChartSrc() });
+          await page!.evaluate(renderChartsInPage);
+          logStep('render:charts', c);
+        }
       })();
       try {
         await Promise.race([
           work,
-          new Promise((_, rej) => setTimeout(() => rej(new Error('diagram-render-budget-exceeded')), DIAGRAM_BUDGET_MS)),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('figure-render-budget-exceeded')), DIAGRAM_BUDGET_MS)),
         ]);
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.warn(`[browser-pool] diagram step abandoned after ${Date.now() - t}ms: ${String(err)} — printing source`);
+        console.warn(`[browser-pool] figure step abandoned after ${Date.now() - t}ms: ${String(err)} — printing source`);
       }
     }
     t = Date.now();

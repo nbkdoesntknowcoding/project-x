@@ -85,7 +85,8 @@
     "zod": "^3.23.0",
     "mdast2docx": "1.6.1",
     "unified": "^11.0.5",
-    "remark-parse": "^11.0.0"
+    "remark-parse": "^11.0.0",
+    "chart.js": "^4.4.7"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
