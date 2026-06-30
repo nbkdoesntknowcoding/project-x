@@ -13,6 +13,7 @@ import { ConnectionStatus } from './ConnectionStatus';
 import { createAutocompletePlugin } from './plugins/autocomplete/plugin';
 import { mathPlugin } from './plugins/math';
 import { configureMermaidPreview } from './plugins/mermaid';
+import { configureChartPreview } from './plugins/chart';
 import { createCommentAnchorPlugin } from '../comments/CommentAnchorPlugin';
 
 export interface EditorSelection {
@@ -133,6 +134,7 @@ export function Editor({
 
     crepe.editor.use(mathPlugin);
     crepe.editor.config(configureMermaidPreview);
+    crepe.editor.config(configureChartPreview);
     crepe.editor.use(collab);
 
     // Phase 3.3 autocomplete: stub backend; debounce + AbortController
