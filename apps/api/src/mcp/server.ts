@@ -20,6 +20,7 @@ import {
   proposeDocWrite,
 } from './tools/propose-doc-write.js';
 import { ADD_DIAGRAM_TOOL_NAME, ADD_DIAGRAM_TOOL_SPEC, addDiagram } from './tools/add-diagram.js';
+import { ADD_CHART_TOOL_NAME, ADD_CHART_TOOL_SPEC, addChart } from './tools/add-chart.js';
 import {
   COMMIT_DOC_WRITE_TOOL_NAME,
   COMMIT_DOC_WRITE_TOOL_SPEC,
@@ -428,6 +429,9 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
 
   // ── Diagram Phase 1: add_diagram (propose-style; commits via confirm_doc_write) ───────────
   registerProposeTool(ADD_DIAGRAM_TOOL_NAME, ADD_DIAGRAM_TOOL_SPEC, addDiagram);
+
+  // ── Charting Phase 1: add_chart (propose-style; library-rendered data chart) ──────────────
+  registerProposeTool(ADD_CHART_TOOL_NAME, ADD_CHART_TOOL_SPEC, addChart);
 
   // ── Phase 10: __ui_probe (dev/test only — temporary) ───────────────────────
   if (process.env.NODE_ENV !== 'production') {
