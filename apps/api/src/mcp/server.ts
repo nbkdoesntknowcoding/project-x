@@ -22,6 +22,10 @@ import {
 import { ADD_DIAGRAM_TOOL_NAME, ADD_DIAGRAM_TOOL_SPEC, addDiagram } from './tools/add-diagram.js';
 import { ADD_CHART_TOOL_NAME, ADD_CHART_TOOL_SPEC, addChart } from './tools/add-chart.js';
 import {
+  INGEST_DATASET_TOOL_NAME, INGEST_DATASET_TOOL_SPEC, ingestDatasetTool,
+  DESCRIBE_DATASET_TOOL_NAME, DESCRIBE_DATASET_TOOL_SPEC, describeDatasetTool,
+} from './tools/datasets.js';
+import {
   COMMIT_DOC_WRITE_TOOL_NAME,
   COMMIT_DOC_WRITE_TOOL_SPEC,
   commitProposedWrite,
@@ -432,6 +436,35 @@ export function createMcpServer(ctx: McpAuthContext): McpServer {
 
   // ── Charting Phase 1: add_chart (propose-style; library-rendered data chart) ──────────────
   registerProposeTool(ADD_CHART_TOOL_NAME, ADD_CHART_TOOL_SPEC, addChart);
+
+  // ── Charting Phase 2: dataset store (ingest_dataset / describe_dataset) ───────────────────
+  const registerDatasetTool = (
+    name: string,
+    spec: { description: string; inputSchema: object; annotations?: Record<string, unknown> },
+    handler: (c: McpAuthContext, a: Record<string, unknown>) => Promise<{ content: string; structuredContent: Record<string, unknown>; error?: string }>,
+  ): void => {
+    registerAppTool(
+      mcpServer,
+      name,
+      {
+        description: spec.description,
+        inputSchema: jsonSchemaToZodShape(spec.inputSchema),
+        annotations: spec.annotations,
+        _meta: { ui: { visibility: ['model'] } },
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (args: any) => {
+        const r = await handler(ctx, args as Record<string, unknown>);
+        return {
+          ...(r.error ? { isError: true as const } : {}),
+          content: [{ type: 'text' as const, text: r.content }],
+          structuredContent: r.structuredContent,
+        };
+      },
+    );
+  };
+  registerDatasetTool(INGEST_DATASET_TOOL_NAME, INGEST_DATASET_TOOL_SPEC, ingestDatasetTool);
+  registerDatasetTool(DESCRIBE_DATASET_TOOL_NAME, DESCRIBE_DATASET_TOOL_SPEC, describeDatasetTool);
 
   // ── Phase 10: __ui_probe (dev/test only — temporary) ───────────────────────
   if (process.env.NODE_ENV !== 'production') {
