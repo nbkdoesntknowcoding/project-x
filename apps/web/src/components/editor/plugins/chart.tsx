@@ -1,5 +1,3 @@
-import { codeBlockConfig } from '@milkdown/kit/component/code-block';
-import type { Ctx } from '@milkdown/kit/ctx';
 import { Chart } from 'chart.js/auto';
 
 /**
@@ -112,43 +110,51 @@ export function toChartConfig(spec: ChartSpec): Record<string, unknown> {
   };
 }
 
-export function configureChartPreview(ctx: Ctx): void {
-  ctx.update(codeBlockConfig.key, (prev) => ({
-    ...prev,
-    renderPreview: (language, content, applyPreview) => {
-      const lang = language.toLowerCase();
-      if (lang !== 'chart') return prev.renderPreview(language, content, applyPreview);
-      if (!content.trim()) {
-        const empty = document.createElement('div');
-        empty.className = 'chart-empty';
-        empty.textContent = 'Empty chart';
-        return empty;
-      }
-      let spec: ChartSpec;
+/**
+ * Render a ```chart block's preview. Called from the diagram renderPreview hook (mermaid.tsx) — a
+ * SINGLE renderPreview chain handles svg/mermaid/chart, because two separate crepe.editor.config()
+ * overrides of codeBlockConfig.renderPreview do NOT compose (one wins, the other is silently lost).
+ *
+ * Success path uses applyPreview (like mermaid): we insert the host first, then draw on the next
+ * frame so the canvas is in the DOM + sized before Chart.js (responsive) measures it. Empty / invalid
+ * JSON return a sync element. Returns undefined when it has taken over via applyPreview.
+ */
+export function renderChartPreview(
+  content: string,
+  applyPreview: (el: HTMLElement) => void,
+): HTMLElement | undefined {
+  if (!content.trim()) {
+    const empty = document.createElement('div');
+    empty.className = 'chart-empty';
+    empty.textContent = 'Empty chart';
+    return empty;
+  }
+  let spec: ChartSpec;
+  try {
+    spec = JSON.parse(content) as ChartSpec;
+  } catch (e) {
+    const err = document.createElement('div');
+    err.className = 'chart-error';
+    err.textContent = `Chart: invalid JSON — ${String((e as Error).message).slice(0, 160)}`;
+    return err;
+  }
+  const host = document.createElement('div');
+  host.className = 'chart-preview';
+  const wrap = document.createElement('div');
+  wrap.className = 'chart-canvas-wrap';
+  const canvas = document.createElement('canvas');
+  wrap.appendChild(canvas);
+  host.appendChild(wrap);
+  requestAnimationFrame(() => {
+    applyPreview(host); // insert into the preview panel (sized via .chart-canvas-wrap CSS)
+    requestAnimationFrame(() => {
       try {
-        spec = JSON.parse(content) as ChartSpec;
+        new Chart(canvas, toChartConfig(spec) as never);
       } catch (e) {
-        const err = document.createElement('div');
-        err.className = 'chart-error';
-        err.textContent = `Chart: invalid JSON — ${String((e as Error).message).slice(0, 160)}`;
-        return err;
+        host.replaceChildren();
+        host.textContent = `Chart render failed: ${String((e as Error).message).slice(0, 160)}`;
       }
-      const host = document.createElement('div');
-      host.className = 'chart-preview';
-      const wrap = document.createElement('div');
-      wrap.className = 'chart-canvas-wrap';
-      const canvas = document.createElement('canvas');
-      wrap.appendChild(canvas);
-      host.appendChild(wrap);
-      // Defer to next frame so the host is attached + sized before Chart.js measures it.
-      requestAnimationFrame(() => {
-        try {
-          new Chart(canvas, toChartConfig(spec) as never);
-        } catch (e) {
-          host.textContent = `Chart render failed: ${String((e as Error).message).slice(0, 160)}`;
-        }
-      });
-      return host;
-    },
-  }));
+    });
+  });
+  return undefined;
 }

@@ -2,6 +2,7 @@ import { codeBlockConfig } from '@milkdown/kit/component/code-block';
 import type { Ctx } from '@milkdown/kit/ctx';
 import mermaid from 'mermaid';
 import { sanitizeMarkup } from '../../../lib/sanitize';
+import { renderChartPreview } from './chart';
 
 /**
  * Mermaid theme variables for each Mnema theme. The brand accent stays
@@ -101,6 +102,9 @@ export function configureMermaidPreview(ctx: Ctx): void {
     ...prev,
     renderPreview: (language, content, applyPreview) => {
       const lang = language.toLowerCase();
+      // Charting Sprint 1: a ```chart fence renders via Chart.js. Handled here in the SAME
+      // renderPreview chain (not a separate config) so it actually composes with svg/mermaid.
+      if (lang === 'chart') return renderChartPreview(content, applyPreview);
       // Diagram Phase 1: an ```svg fence renders the SVG inline — ALWAYS through the Sprint-0
       // sanitizer (never raw). SVG is static, so return the host synchronously.
       if (lang === 'svg') {
