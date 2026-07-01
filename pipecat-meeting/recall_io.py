@@ -88,6 +88,11 @@ class BotState:
         # SPOKEN answer cycle instead of being dropped as "un-addressed". Set ONLY when actually
         # addressed (wake word / direct question); reset each new utterance → dormant by default.
         self.turn_addressed: bool = False
+        # Who last addressed Mnema (speaker name) — used with last_response_monotonic for the
+        # same-speaker follow-up window: a bare continuation ("yes, the first one") from the SAME
+        # person within a few seconds of her speaking is still meant for her, without ever
+        # picking up OTHER people's side-talk.
+        self.last_addressed_by: "str | None" = None
         self.last_response_monotonic: float = 0.0
         # STEP 3: per-turn tool-call counter, reset at the start of each addressed user turn
         # (RAGContext) and incremented per Mnema tool call (mnema_client._make_handler). Once

@@ -320,6 +320,17 @@ async def list_recent_docs(mcp: MnemaMCP, args: dict) -> dict:
     return await mcp.call("list_docs", payload)
 
 
+async def list_recent_activity(mcp: MnemaMCP, args: dict) -> dict:
+    """The cross-entity 'what changed recently' feed — docs, tasks, meetings, time-sorted.
+    For 'what's the latest / what did we finish / when was the last meeting' questions."""
+    payload: dict = {"limit": int(args.get("limit", 15))}
+    if args.get("project"):
+        payload["project"] = args["project"]
+    if args.get("type"):
+        payload["type"] = args["type"]
+    return await mcp.call("list_recent_activity", payload)
+
+
 async def list_project_tasks(mcp: MnemaMCP, args: dict) -> dict:
     """The live task board — for 'what's in progress / moved / latest build' questions.
     Pass project (id or slug) to scope to one project."""
@@ -383,6 +394,7 @@ _TOOLS = {
     "list_projects": list_projects,
     "whoami": whoami,
     "list_recent_docs": list_recent_docs,
+    "list_recent_activity": list_recent_activity,
     "list_project_tasks": list_project_tasks,
     "get_doc": get_doc,
     "get_doc_section": get_doc_section,

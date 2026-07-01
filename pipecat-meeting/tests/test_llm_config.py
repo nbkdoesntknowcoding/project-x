@@ -39,8 +39,9 @@ def test_tool_schema_unchanged():
     from mnema_tool_defs import MNEMA_TOOL_DEFINITIONS
     from local_tools import LOCAL_TOOL_DEFINITIONS
     names = [t["function"]["name"] for t in MNEMA_TOOL_DEFINITIONS + LOCAL_TOOL_DEFINITIONS]
-    assert len(names) == 17  # 15 mnema (post meeting-tool removal) + 2 local
+    assert len(names) == 18  # 16 mnema (+ list_recent_activity) + 2 local
     assert "who_is_in_meeting" in names and "search_knowledge" in names
+    assert "list_recent_activity" in names  # cross-entity recent-activity feed
     # the removed-from-advertised meeting tools stay gone regardless of model
     assert "get_meeting_context" not in names and "get_meeting_brief" not in names
     # every advertised tool is a well-formed function schema (sent as-is to GPT-4.1)

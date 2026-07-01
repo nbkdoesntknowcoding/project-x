@@ -24,6 +24,7 @@ import { LIST_PROJECTS_TOOL, listProjects } from './list-projects.js';
 import { WHOAMI_TOOL, whoami } from './whoami.js';
 import { REQUEST_DOC_ACCESS_TOOL, requestDocAccess } from './request-doc-access.js';
 import { RECORD_DECISION_TOOL, recordDecisionTool } from './record-decision.js';
+import { LIST_RECENT_ACTIVITY_TOOL, listRecentActivity } from './recent-activity.js';
 // DOCX/PDF tools (both workspace modes)
 import {
   UPLOAD_DOC_FILE_TOOL, uploadDocFile,
@@ -112,6 +113,8 @@ export const PRODUCTION_TOOLS: readonly ToolDescriptor[] = [
   { spec: WHOAMI_TOOL, handler: whoami },
   { spec: REQUEST_DOC_ACCESS_TOOL, handler: requestDocAccess },
   { spec: RECORD_DECISION_TOOL, handler: recordDecisionTool },  // Decision Memory MD1
+  // Cross-entity "what changed recently" feed (docs + tasks + meetings, time-sorted).
+  { spec: LIST_RECENT_ACTIVITY_TOOL, handler: listRecentActivity },
   // DOCX/PDF file tools — available in both workspace modes.
   { spec: UPLOAD_DOC_FILE_TOOL, handler: uploadDocFile },
   { spec: EXPORT_DOC_TOOL, handler: exportDoc },

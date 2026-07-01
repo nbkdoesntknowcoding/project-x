@@ -116,6 +116,26 @@ _STRICT = os.environ.get("MEETING_REQUIRE_ADDRESS", "1") != "0"
 # question/assistant-request (is_question_or_request), both pure. The old gpt-4o-mini
 # semantic classifier was removed — it flickered across runs (no seed). See the gate below.
 
+# Same-speaker follow-up window (seconds). A bare continuation from the SAME person shortly
+# after Mnema spoke is treated as still addressed (STT fragments one sentence into several
+# turns). Scoped to the speaker + window so it never engages OTHER people's side-talk. Set 0
+# to disable (back to strict wake-word/question only).
+_FOLLOWUP_SEC = float(os.environ.get("MEETING_FOLLOWUP_SEC", "10"))
+
+
+def _followup_window(state, spk) -> bool:
+    """True when Mnema engaged within _FOLLOWUP_SEC AND the current speaker is the same person
+    she was just addressed by (or the speaker can't be told apart, e.g. a single-speaker call)."""
+    if _FOLLOWUP_SEC <= 0:
+        return False
+    last = getattr(state, "last_response_monotonic", 0.0) or 0.0
+    if last <= 0 or (time.monotonic() - last) > _FOLLOWUP_SEC:
+        return False
+    who = getattr(state, "last_addressed_by", None)
+    if not who or not spk:
+        return True  # can't distinguish speakers → allow (typical 1:1 usage)
+    return str(who).strip().lower() == str(spk).strip().lower()
+
 # Layer C drift re-anchor: re-state the persona character every N of Mnema's OWN spoken
 # turns to counter long-context drift. Transient per-turn injection (not cached).
 REANCHOR_EVERY_TURNS = int(os.environ.get("MEETING_REANCHOR_EVERY", "13"))
@@ -405,13 +425,26 @@ class RAGContext(FrameProcessor):
                 if _addressed(text):
                     self._state.force_next_response = True
                     self._state.turn_addressed = True
+                    self._state.last_addressed_by = spk
                     addressed = True
                     logger.info("[gate] wake word: %s", text[:60])
                 elif _STRICT and is_question_or_request(text):
                     self._state.force_next_response = True
                     self._state.turn_addressed = True
+                    self._state.last_addressed_by = spk
                     addressed = True
                     logger.info("[gate] direct question/request: %s", text[:60])
+                elif _STRICT and _followup_window(self._state, spk):
+                    # She just spoke to THIS person moments ago → a bare continuation
+                    # ("yes, the first one", "the latest graph dev") is still meant for her. STT
+                    # fragments one sentence into several turns; without this each non-question
+                    # fragment was dropped as un-addressed and the user had to repeat. Scoped to
+                    # the SAME speaker + a short window (MEETING_FOLLOWUP_SEC, default 10s) so it
+                    # never engages OTHER people's side-talk — dormant by default otherwise.
+                    self._state.force_next_response = True
+                    self._state.turn_addressed = True
+                    addressed = True
+                    logger.info("[gate] follow-up (same speaker, recent): %s", text[:60])
                 # STEP 1 per-turn context order, after the cached Layer A prefix and the
                 # one-shot briefs. First PRUNE last turn's transient blocks + bound history,
                 # then inject this turn's fresh blocks so the persona stays close to the live
