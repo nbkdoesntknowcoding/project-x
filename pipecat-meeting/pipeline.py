@@ -166,7 +166,9 @@ def _build_user_turn_strategies():
             return UserTurnStrategies(stop=[TurnAnalyzerUserTurnStopStrategy(turn_analyzer=analyzer)])
         except Exception as e:  # noqa: BLE001
             logger.warning("[turn] Fal Smart Turn unavailable (%s) — falling back to VAD silence.", e)
-    silence = float(os.environ.get("MEETING_EOU_SILENCE_SEC", "0.6"))
+    # 1.0s default (was 0.6s): give a real end-of-sentence pause so a mid-sentence breath doesn't
+    # end the user's turn and fragment/cut them off. Env-overridable to tighten if it feels slow.
+    silence = float(os.environ.get("MEETING_EOU_SILENCE_SEC", "1.0"))
     logger.info("[turn] VAD-silence endpointing (user_speech_timeout=%.2fs)", silence)
     return UserTurnStrategies(stop=[SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=silence)])
 
@@ -224,6 +226,7 @@ class SilentGate(FrameProcessor):
         self._forced = False               # this turn must be spoken (addressed / non-strict)
         self._decided: bool | None = None  # None=undecided, True=silent, False=speak
         self._emitted = 0                  # spoken frames pushed this response (STEP 1 guarantee)
+        self._tool_called = False          # this response emitted a tool call (not silence)
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         await super().process_frame(frame, direction)
@@ -231,12 +234,18 @@ class SilentGate(FrameProcessor):
         if isinstance(frame, LLMFullResponseStartFrame):
             self._buf = ""
             self._emitted = 0
+            self._tool_called = False
             # _forced: non-strict mode OR an addressed turn (A1.6 per-turn force flag) means
             # THIS turn must be spoken. We still start undecided and inspect the leading
             # tokens so we can STRIP a stray "<silent>" the model may emit even on a forced
             # turn (audit fix) — otherwise the sentinel got spoken aloud. Consume the flag
             # here so it forces exactly THIS turn.
-            self._forced = (not _STRICT) or self._state.force_next_response
+            # turn_addressed persists across a turn's LLM cycles (unlike the one-shot
+            # force_next_response), so the SPOKEN answer cycle that follows a tool-call cycle is
+            # still treated as addressed and isn't dropped as side-talk. Un-addressed turns leave
+            # both False → still silent (dormant unless spoken to).
+            self._forced = (not _STRICT) or self._state.force_next_response \
+                or getattr(self._state, "turn_addressed", False)
             self._state.force_next_response = False
             if self._forced:
                 self._state.last_response_monotonic = time.monotonic()
@@ -248,6 +257,15 @@ class SilentGate(FrameProcessor):
                 # human-to-human side-talk (audit 2026-06-24). Now un-addressed = dropped.
                 self._decided = True
                 logger.info("[silentgate] un-addressed turn — staying silent")
+            await self.push_frame(frame, direction)
+            return
+
+        # A function/tool call means the model is ACTING on an addressed request, not staying
+        # silent. Mark it (by class name, version-safe) so the end-of-response guard below never
+        # mistakes the speechless tool-call cycle for silence and blurts the honest fallback —
+        # the real spoken answer arrives in the follow-up cycle after the tool result.
+        if "FunctionCall" in type(frame).__name__:
+            self._tool_called = True
             await self.push_frame(frame, direction)
             return
 
@@ -287,7 +305,10 @@ class SilentGate(FrameProcessor):
         # produced nothing speakable (pure <silent> / empty), speak the honest fallback before
         # the response closes — a direct question never returns silence.
         if isinstance(frame, LLMFullResponseEndFrame):
-            if self._forced and self._emitted == 0:
+            # Only fall back when the model TRULY produced nothing — not when it made a tool call
+            # (that cycle is speechless by design; the answer comes next). Otherwise the fallback
+            # both pre-empts the real answer AND poisons context with a false "I don't have that".
+            if self._forced and self._emitted == 0 and not self._tool_called:
                 logger.info("[silentgate] forced turn produced no speech — honest fallback")
                 await self.push_frame(LLMTextFrame(forced_silence_fallback()), direction)
                 self._emitted += 1
@@ -377,12 +398,18 @@ class RAGContext(FrameProcessor):
                 # before me?" across runs — that LLM call is removed from the decision. A bare
                 # declarative / back-channel stays non-addressed (silent), conservatively.
                 addressed = False
+                # Re-evaluated per utterance → dormant (un-addressed) unless a wake word or a
+                # direct question fires below. turn_addressed then persists across THIS turn's
+                # LLM cycles (tool call → spoken answer) without ever making side-talk spoken.
+                self._state.turn_addressed = False
                 if _addressed(text):
                     self._state.force_next_response = True
+                    self._state.turn_addressed = True
                     addressed = True
                     logger.info("[gate] wake word: %s", text[:60])
                 elif _STRICT and is_question_or_request(text):
                     self._state.force_next_response = True
+                    self._state.turn_addressed = True
                     addressed = True
                     logger.info("[gate] direct question/request: %s", text[:60])
                 # STEP 1 per-turn context order, after the cached Layer A prefix and the
@@ -965,10 +992,14 @@ async def build_and_run_meeting_pipeline(websocket: WebSocket, system_prompt: st
                 # forcing speech stop"). Tunable via env. Stricter than pipecat defaults
                 # (conf 0.7 / start 0.2 / stop 0.2 / min_vol 0.6).
                 params=VADParams(
-                    confidence=float(os.environ.get("MEETING_VAD_CONFIDENCE", "0.8")),
-                    start_secs=float(os.environ.get("MEETING_VAD_START_SECS", "0.3")),
+                    # Defaults hardened (audit: "no audio received while speaking" = phantom
+                    # barge-in from a brief blip / the bot's own echo cutting the reply off).
+                    # Require MORE sustained, confident, louder speech before it counts as a
+                    # user turn-start; all still env-overridable to dial responsiveness back.
+                    confidence=float(os.environ.get("MEETING_VAD_CONFIDENCE", "0.85")),
+                    start_secs=float(os.environ.get("MEETING_VAD_START_SECS", "0.5")),
                     stop_secs=float(os.environ.get("MEETING_VAD_STOP_SECS", "0.4")),
-                    min_volume=float(os.environ.get("MEETING_VAD_MIN_VOLUME", "0.7")),
+                    min_volume=float(os.environ.get("MEETING_VAD_MIN_VOLUME", "0.75")),
                 ),
             ),
             user_turn_strategies=_build_user_turn_strategies(),

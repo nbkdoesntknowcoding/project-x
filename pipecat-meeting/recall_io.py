@@ -83,6 +83,11 @@ class BotState:
         # segments without a timer. `last_response_monotonic` is a soft hint for the
         # addressing classifier ("recently engaged" → a bare follow-up is probably still ours).
         self.force_next_response: bool = False
+        # Like force_next_response, but NOT consumed on the first LLM cycle: it persists across a
+        # user turn's LLM cycles so a tool-call cycle (which emits no speech) is followed by a
+        # SPOKEN answer cycle instead of being dropped as "un-addressed". Set ONLY when actually
+        # addressed (wake word / direct question); reset each new utterance → dormant by default.
+        self.turn_addressed: bool = False
         self.last_response_monotonic: float = 0.0
         # STEP 3: per-turn tool-call counter, reset at the start of each addressed user turn
         # (RAGContext) and incremented per Mnema tool call (mnema_client._make_handler). Once
