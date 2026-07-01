@@ -279,6 +279,12 @@ export async function extractSemantic(
     );
     conceptNodeMap.set(normalizeLabel(concept.label), nodeId);
     conceptCount++;
+
+    // Provenance edge: the source doc "mentions" this concept. Deterministic (not LLM-supplied),
+    // cross-type weight 1.5 (matches extract-structural's cross-type edges), idempotent via
+    // onConflictDoNothing so rebuilds never duplicate. Anchors every concept to its source doc.
+    await upsertEdge(db, workspaceId, docNodeId, nodeId, 'mentions', 'EXTRACTED', 1.0, 1.5);
+    edgeCount++;
   }
 
   // Upsert why_nodes (rationale nodes)
@@ -288,6 +294,10 @@ export async function extractSemantic(
     const nodeId = await upsertNode(db, workspaceId, 'rationale', entityId, why.label, why.rationale);
     conceptNodeMap.set(normalizeLabel(why.label), nodeId);
     conceptCount++;
+
+    // Provenance edge for rationale nodes too (same doc-derived pattern): doc "mentions" rationale.
+    await upsertEdge(db, workspaceId, docNodeId, nodeId, 'mentions', 'EXTRACTED', 1.0, 1.5);
+    edgeCount++;
 
     // rationale_for edge: why_node → refers_to concept
     const refId = why.refers_to
