@@ -123,13 +123,28 @@ _STRICT = os.environ.get("MEETING_REQUIRE_ADDRESS", "1") != "0"
 _FOLLOWUP_SEC = float(os.environ.get("MEETING_FOLLOWUP_SEC", "10"))
 
 
-def _followup_window(state, spk) -> bool:
-    """True when Mnema engaged within _FOLLOWUP_SEC AND the current speaker is the same person
-    she was just addressed by (or the speaker can't be told apart, e.g. a single-speaker call)."""
+def _looks_like_followup(text: str) -> bool:
+    """A genuine follow-up to Mnema is a SHORT continuation ('yes', 'the graph one', 'how many?').
+    A long or multi-sentence utterance is the speaker talking to the room — not a follow-up. This
+    keeps the window from blurting on side-talk / monologue while STT is still fragmenting a reply."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    return len(t.split()) <= 8 and t.count(".") < 2
+
+
+def _followup_window(state, spk, text: str = "") -> bool:
+    """True when Mnema gave a REAL spoken answer within _FOLLOWUP_SEC, the current speaker is the
+    same person she answered (or speakers can't be told apart, e.g. a 1:1 call), AND this utterance
+    looks like a short continuation. last_response_monotonic is set ONLY when she actually speaks a
+    real answer (not on the honest fallback / silence) — so an LLM error or dead air never arms this
+    window, which previously let a fallback loop keep re-triggering her on the speaker's every word."""
     if _FOLLOWUP_SEC <= 0:
         return False
     last = getattr(state, "last_response_monotonic", 0.0) or 0.0
     if last <= 0 or (time.monotonic() - last) > _FOLLOWUP_SEC:
+        return False
+    if not _looks_like_followup(text):
         return False
     who = getattr(state, "last_addressed_by", None)
     if not who or not spk:
@@ -268,7 +283,10 @@ class SilentGate(FrameProcessor):
                 or getattr(self._state, "turn_addressed", False)
             self._state.force_next_response = False
             if self._forced:
-                self._state.last_response_monotonic = time.monotonic()
+                # NOTE: the follow-up window is armed only when she actually SPEAKS a real answer
+                # (below), NOT here at the start of a forced turn — otherwise a fallback/silent turn
+                # armed it too, and a single address (or a 429 fallback loop) kept re-triggering her
+                # on the speaker's every subsequent word ("speaking when not called").
                 self._decided = None   # inspect leading tokens (strip any stray sentinel)
             else:
                 # _STRICT and NOT addressed (no wake word, classifier said NO) → stay silent
@@ -307,6 +325,9 @@ class SilentGate(FrameProcessor):
                 return
             # speak / speak_stripped
             self._decided = False
+            # Arm the same-speaker follow-up window HERE — only when she commits to a REAL spoken
+            # answer. A fallback / <silent> / errored turn never reaches this, so those can't arm it.
+            self._state.last_response_monotonic = time.monotonic()
             # Count THIS as one of Mnema's OWN spoken turns (drives the Layer C re-anchor).
             # Reached only when she commits to speaking — never on <silent>/dropped/un-addressed
             # turns. Dynamic attr on the shared BotState keeps this a single-file change.
@@ -434,7 +455,7 @@ class RAGContext(FrameProcessor):
                     self._state.last_addressed_by = spk
                     addressed = True
                     logger.info("[gate] direct question/request: %s", text[:60])
-                elif _STRICT and _followup_window(self._state, spk):
+                elif _STRICT and _followup_window(self._state, spk, text):
                     # She just spoke to THIS person moments ago → a bare continuation
                     # ("yes, the first one", "the latest graph dev") is still meant for her. STT
                     # fragments one sentence into several turns; without this each non-question
