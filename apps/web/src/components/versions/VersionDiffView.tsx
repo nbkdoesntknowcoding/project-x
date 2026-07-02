@@ -1,5 +1,6 @@
 import { type JSX, useEffect, useState } from 'react';
 import type { DiffChunk } from './types';
+import { MarkdownPreview } from '../preview/MarkdownPreview';
 
 interface Props {
   docId: string;
@@ -32,6 +33,8 @@ export function VersionDiffView({
   onRestored,
 }: Props): JSX.Element {
   const [diff, setDiff] = useState<DiffChunk[] | null>(null);
+  const [versionMarkdown, setVersionMarkdown] = useState<string>('');
+  const [view, setView] = useState<'preview' | 'diff'>('preview');
   const [loading, setLoading] = useState(true);
   const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,11 +50,17 @@ export function VersionDiffView({
           { credentials: 'include' },
         );
         if (!res.ok) {
-          setError('Could not load diff.');
+          setError('Could not load version.');
           return;
         }
-        const body = (await res.json()) as { diff: DiffChunk[] };
-        if (!cancelled) setDiff(body.diff ?? []);
+        // The endpoint returns the diff AND the raw markdown of both sides; we render
+        // version_markdown for the Preview tab so users see the document as it looked,
+        // not raw markdown source.
+        const body = (await res.json()) as { diff: DiffChunk[]; version_markdown?: string };
+        if (!cancelled) {
+          setDiff(body.diff ?? []);
+          setVersionMarkdown(body.version_markdown ?? '');
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -104,13 +113,32 @@ export function VersionDiffView({
         >
           <div>
             <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-              Diff vs. Version {version}
+              Version {version}
             </h2>
             <p className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
-              Showing changes between the saved version and the current doc.
+              {view === 'preview'
+                ? 'The document as it looked at this version.'
+                : 'Changes between this version and the current doc.'}
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex rounded-md overflow-hidden" style={{ border: '1px solid var(--border-default)' }}>
+              {(['preview', 'diff'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  className="px-2.5 py-1 text-xs"
+                  style={{
+                    background: view === v ? 'var(--surface-overlay)' : 'transparent',
+                    color: view === v ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                  }}
+                  aria-pressed={view === v}
+                >
+                  {v === 'preview' ? 'Preview' : 'Diff'}
+                </button>
+              ))}
+            </div>
             {canRestore && (
               <button
                 type="button"
@@ -139,10 +167,15 @@ export function VersionDiffView({
         <div className="flex-1 overflow-auto p-0">
           {loading && (
             <div className="px-5 py-8 text-sm" style={{ color: 'var(--text-tertiary)' }}>
-              Loading diff…
+              Loading version…
             </div>
           )}
-          {!loading && diff && diff.length === 0 && (
+          {!loading && view === 'preview' && (
+            versionMarkdown.trim()
+              ? <MarkdownPreview markdown={versionMarkdown} query="" activeMatch={0} onMatchCount={() => {}} />
+              : <div className="px-5 py-8 text-sm text-center" style={{ color: 'var(--text-tertiary)' }}>This version has no content.</div>
+          )}
+          {!loading && view === 'diff' && diff && diff.length === 0 && (
             <div
               className="px-5 py-8 text-sm text-center"
               style={{ color: 'var(--text-tertiary)' }}
@@ -150,7 +183,7 @@ export function VersionDiffView({
               No differences — this version matches the current doc.
             </div>
           )}
-          {!loading && diff && diff.length > 0 && (
+          {!loading && view === 'diff' && diff && diff.length > 0 && (
             <pre
               className="text-xs font-mono px-4 py-3 leading-relaxed"
               style={{ color: 'var(--text-primary)' }}

@@ -410,8 +410,14 @@ export const docsRoutes: FastifyPluginAsync = async (app) => {
         markdown: string;
         contentHash: string;
         updatedBy: string;
+        updatedAt: Date;
       }> = {
         updatedBy: auth.sub,
+        // Bump recency on any real mutation here (title change, or markdown that did
+        // NOT go through collab). When markdown was applied via collab, the debounced
+        // onStoreDocument bumps updated_at instead, so we don't touch it on the
+        // updatedBy-only no-op path below.
+        updatedAt: new Date(),
       };
       if (title !== undefined) setClause.title = title;
       if (markdown !== undefined && !appliedViaCollab) {

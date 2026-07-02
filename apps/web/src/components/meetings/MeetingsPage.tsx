@@ -14,7 +14,11 @@ export function MeetingsPage(): JSX.Element {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [projects, setProjects] = useState<ProjectLite[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Open straight to a specific meeting when arriving from the "assign a project"
+  // notification (/app/meetings?assign=<id>). The loader below respects this via `cur ??`.
+  const [selectedId, setSelectedId] = useState<string | null>(
+    () => (typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('assign')),
+  );
 
   useEffect(() => {
     void (async () => {

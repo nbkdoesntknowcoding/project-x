@@ -240,7 +240,7 @@ function TranscriptTab({ meetingId, tStatus }: { meetingId: string; tStatus: str
       {turns.map((t) => (
         <div key={t.seq}>
           <div style={{ fontSize: 11, fontWeight: 600, color: soft }}>{t.speaker || 'Speaker'}</div>
-          <div style={{ fontSize: 12.5, color: ink, lineHeight: 1.5 }}>{t.text}</div>
+          <div style={{ fontSize: 12.5, color: ink, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{t.text}</div>
         </div>
       ))}
     </div>
@@ -290,17 +290,24 @@ function ProjectSelect({ meetingId, projects, current, onChanged }: {
     try { await api.setMeetingProject(meetingId, pid || null); onChanged(); }
     finally { setBusy(false); }
   }
+  const unassigned = !current;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-      <span style={{ fontSize: 11, color: muted, flexShrink: 0 }}>Project</span>
+      <span style={{ fontSize: 11, color: unassigned ? accent : muted, flexShrink: 0 }}>
+        {unassigned ? 'Assign a project' : 'Project'}
+      </span>
       <select
         value={current ?? ''}
         disabled={busy}
         onChange={(e) => { void change(e.target.value); }}
-        title="Link this meeting (its notes + tasks) to a project"
-        style={{ flex: 1, padding: '5px 8px', borderRadius: 7, fontSize: 12, border: `0.5px solid ${line}`, background: surface, color: current ? ink : muted, maxWidth: 240 }}
+        title="Link this meeting (its notes + tasks) to a project so they show on the right board"
+        style={{
+          flex: 1, padding: '5px 8px', borderRadius: 7, fontSize: 12,
+          border: `${unassigned ? 1 : 0.5}px solid ${unassigned ? accent : line}`,
+          background: surface, color: current ? ink : muted, maxWidth: 240,
+        }}
       >
-        <option value="">— No project —</option>
+        <option value="">{unassigned ? 'Pick a project…' : '— No project —'}</option>
         {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
       </select>
     </div>

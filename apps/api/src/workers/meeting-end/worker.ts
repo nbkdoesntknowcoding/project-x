@@ -52,13 +52,35 @@ function fmtDate(d: Date | string | null): string {
 // ── Summary ───────────────────────────────────────────────────────────────────
 const SUMMARY_PROMPT = `You summarise a meeting transcript into strict JSON with this exact shape:
 { "keyPoints": string[], "decisions": string[], "actionItems": [{ "text": string, "owner": string|null }] }
-Rules: keyPoints = 3–7 concise bullets capturing what mattered. decisions = explicit decisions made (may be empty). actionItems = concrete tasks someone committed to, with the owner's name if stated (else null). Return ONLY the JSON object, no prose.`;
+
+keyPoints = 3–7 concise bullets capturing what actually mattered.
+decisions = explicit decisions the group made (may be empty).
+
+actionItems — BE STRICT. An action item is a concrete task a specific person EXPLICITLY committed to doing after the meeting ("I'll send the deck by Friday", "Priya will file the ticket"). It has a doer and a deliverable.
+DO NOT create an action item from any of these:
+  - a question someone asked (including questions put to the assistant/bot),
+  - a request for information or a lookup the assistant answered live in the meeting,
+  - general discussion, opinions, status updates, or things already done,
+  - vague intentions with no owner and no deliverable ("we should think about X").
+If nobody clearly committed to a concrete follow-up, actionItems MUST be an empty array. An empty array is the correct, common answer — do not invent tasks to fill it.
+Set owner to the committer's name if stated, else null. Return ONLY the JSON object, no prose.`;
+
+const SUMMARY_MODEL = process.env.MNEMA_MEETING_SUMMARY_MODEL || 'gpt-4.1';
+
+/** Drop "action items" that are really questions or too thin to be a real task. */
+function isRealActionItem(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 8) return false;                 // too short to be a task
+  if (t.endsWith('?')) return false;              // a question, not a commitment
+  if (/^(what|who|when|where|why|how|is|are|do|does|did|can|could|should|would|will)\b/i.test(t)) return false;
+  return true;
+}
 
 async function summarise(turns: TranscriptTurn[]): Promise<MeetingSummary | null> {
   if (!process.env.OPENAI_API_KEY) return null;
   const transcript = turns.map((t) => `${t.speaker ?? 'Speaker'}: ${t.text}`).join('\n').slice(0, 48_000);
   const res = await openai().chat.completions.create({
-    model: 'gpt-4o-mini', max_tokens: 1500, response_format: { type: 'json_object' },
+    model: SUMMARY_MODEL, max_tokens: 1500, response_format: { type: 'json_object' },
     messages: [{ role: 'system', content: SUMMARY_PROMPT }, { role: 'user', content: transcript }],
   });
   const parsed = JSON.parse(res.choices[0]?.message?.content ?? '{}') as Partial<MeetingSummary>;
@@ -66,7 +88,9 @@ async function summarise(turns: TranscriptTurn[]): Promise<MeetingSummary | null
     keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints.map(String) : [],
     decisions: Array.isArray(parsed.decisions) ? parsed.decisions.map(String) : [],
     actionItems: Array.isArray(parsed.actionItems)
-      ? parsed.actionItems.map((a) => ({ text: String((a as { text?: unknown }).text ?? ''), owner: (a as { owner?: string | null }).owner ?? null })).filter((a) => a.text)
+      ? parsed.actionItems
+          .map((a) => ({ text: String((a as { text?: unknown }).text ?? '').trim(), owner: (a as { owner?: string | null }).owner ?? null }))
+          .filter((a) => a.text && isRealActionItem(a.text))
       : [],
   };
 }
@@ -124,6 +148,34 @@ async function resolveDecisionApprover(meeting: MeetingRow): Promise<string | nu
   return admin?.userId ?? null;
 }
 
+// ── Prompt: assign a project when the meeting has none ───────────────────────────
+// Ad-hoc bot meetings often join with no project, which orphans their notes + tasks
+// (a project-less task never shows under any project board). Rather than guess a project,
+// Mnema proactively asks the organizer/admin to pick one; POST /api/meetings/:id/project
+// then cascades the choice to the notes docs, folder, AND every meeting task. Idempotent:
+// won't re-prompt on worker re-runs (dedupes on the per-meeting link).
+async function promptProjectAssignment(meeting: MeetingRow): Promise<void> {
+  if (meeting.projectId) return;
+  const recipientId = await resolveDecisionApprover(meeting);
+  if (!recipientId) return;
+  const link = `/app/meetings?assign=${meeting.id}`;
+  const existing = await db
+    .select({ id: notifications.id })
+    .from(notifications)
+    .where(and(eq(notifications.recipientId, recipientId), eq(notifications.link, link)))
+    .limit(1);
+  if (existing.length) return;
+  await db.insert(notifications).values({
+    workspaceId: meeting.workspaceId,
+    recipientId,
+    actorId: recipientId,
+    kind: 'meeting_project',
+    title: 'Which project is this meeting under?',
+    body: `"${meeting.title ?? 'A meeting'}" isn't linked to a project yet. Assign one so its notes and tasks land on the right board.`,
+    link,
+  });
+}
+
 // ── Tasks from action items ─────────────────────────────────────────────────────
 async function createMeetingTasks(meeting: MeetingRow, summary: MeetingSummary | null): Promise<CreatedTask[]> {
   // Idempotent: if tasks already exist for this meeting (re-run), return them.
@@ -171,7 +223,10 @@ function renderNotes(meeting: MeetingRow, summary: MeetingSummary | null, turns:
   }
   if (turns.length) {
     lines.push('## Transcript', '');
-    for (const t of turns) lines.push(`**${t.speaker ?? 'Speaker'}:** ${t.text}`, '');
+    // Raw speech can contain markdown metacharacters (*, _, [], `, #, backslash) that would
+    // otherwise render as bold/links/code and mangle the transcript. Escape them.
+    const esc = (s: string): string => s.replace(/([\\`*_{}\[\]()#+\-.!>])/g, '\\$1');
+    for (const t of turns) lines.push(`**${esc(t.speaker ?? 'Speaker')}:** ${esc(t.text)}`, '');
   } else {
     lines.push('_No transcript was captured for this meeting._');
   }
@@ -355,6 +410,10 @@ export function startMeetingEndWorker(): Worker<MeetingEndJobData> {
       const docMd = renderNotes(meeting, summary, turns, createdTasks);
       const docId = await writeDoc(workspaceId, folderId, meeting, meeting.postMeetingDocId, `Post-Meeting Notes — ${meeting.title || 'Meeting'}`, docMd);
       await db.update(meetings).set({ postMeetingDocId: docId }).where(eq(meetings.id, meetingId));
+
+      // ── 4b. Prompt for a project if the meeting has none (orphans notes + tasks). ──
+      try { await promptProjectAssignment(meeting); }
+      catch (e) { console.error('[meeting-end] project-assignment prompt failed:', e); } // eslint-disable-line no-console
 
       // ── 5. Auto-link related meetings ────────────────────────────────────────
       await autoLink(meeting);

@@ -9,7 +9,14 @@ import type { ConnectionContext } from './auth.js';
 import { markdownToYjsState, yjsStateToMarkdown } from './markdown-bridge.js';
 
 const EMPTY_DOC_STATE_LEN = Y.encodeStateAsUpdate(new Y.Doc()).length;
+// Within a single long editing session, snapshot at most this often as a ceiling so a
+// marathon session still leaves periodic recovery anchors.
 const SNAPSHOT_EVERY = 50;
+// "Once per editing session": if the last snapshot for a doc was longer ago than this,
+// the next content-changing store snapshots. Stores fire every few seconds while a doc is
+// actively edited, so this yields ~one version per sitting (a new session after an idle gap
+// re-arms it) instead of the old 50-store cadence that meant hand edits almost never versioned.
+const SESSION_SNAPSHOT_MS = Number(process.env.DOC_VERSION_SESSION_MS ?? 120_000);
 
 function contentHash(s: string): string {
   return createHash('sha256').update(s).digest('hex');
@@ -56,6 +63,8 @@ export interface AiVersionMeta {
 // Per-process counter of successful content-changing stores per doc.
 // Resets on restart — snapshots are best-effort recovery anchors, not audit.
 const storeCounts = new Map<string, number>();
+// Per-doc wall-clock of the last snapshot, driving the once-per-session cadence.
+const lastSnapshotAt = new Map<string, number>();
 
 /**
  * Atomic write of yjs_state + markdown + content_hash for a single doc.
@@ -104,6 +113,13 @@ export async function storeDocumentState(
         markdown: newMarkdown,
         contentHash: newHash,
         updatedBy: ctx.user_id,
+        // Bump the recency clock ONLY when the body actually changed. This is the
+        // single chokepoint every content edit passes through — the live editor
+        // AND every MCP write tool (append/replace/create via IPC → onStoreDocument).
+        // Without this, updated_at stayed frozen at creation, so edited docs never
+        // surfaced in recency feeds (list_recent_activity, list_docs). Skipped on
+        // no-op stores (anchor assignment, reconnect flush) so idle opens don't churn it.
+        ...(contentChanged ? { updatedAt: new Date() } : {}),
       })
       .where(and(eq(docs.id, ctx.doc_id), isNull(docs.deletedAt)));
 
@@ -112,8 +128,13 @@ export async function storeDocumentState(
       const count = (storeCounts.get(ctx.doc_id) ?? 0) + 1;
       storeCounts.set(ctx.doc_id, count);
 
-      // AI writes always snapshot; human edits snapshot every SNAPSHOT_EVERY stores.
-      const shouldSnapshot = aiMeta != null || count % SNAPSHOT_EVERY === 0;
+      // Snapshot when: an AI write (always), OR this is the first content change of a new
+      // editing session (last snapshot older than SESSION_SNAPSHOT_MS), OR the within-session
+      // ceiling is hit. This gives ~one human version per sitting instead of the old
+      // 50-store-only rule that left hand-edited docs with no version history.
+      const now = Date.now();
+      const sinceLast = now - (lastSnapshotAt.get(ctx.doc_id) ?? 0);
+      const shouldSnapshot = aiMeta != null || sinceLast >= SESSION_SNAPSHOT_MS || count % SNAPSHOT_EVERY === 0;
 
       if (shouldSnapshot) {
         const nextRow = await tx.execute(
@@ -129,9 +150,10 @@ export async function storeDocumentState(
           authorKind: aiMeta != null ? 'ai' : 'human',
           comment: aiMeta != null
             ? `AI write: ${aiMeta.toolName}`
-            : `Auto-snapshot at ${count} store events`,
+            : 'Auto-snapshot (editing session)',
         });
         snapshotted = true;
+        lastSnapshotAt.set(ctx.doc_id, now);
         // Reset the human counter after an AI-triggered snapshot so the 50-store
         // cycle doesn't immediately fire again on the very next human keystroke.
         if (aiMeta != null) storeCounts.set(ctx.doc_id, 0);
