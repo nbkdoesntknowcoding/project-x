@@ -344,6 +344,7 @@ export const invitationsRoutes: FastifyPluginAsync = async (app) => {
     );
 
     return {
+      workspace_id: inviteRow.workspaceId,
       workspace_name: ws?.name,
       workspace_slug: ws?.slug,
       inviter_name: inviter?.displayName || inviter?.email,

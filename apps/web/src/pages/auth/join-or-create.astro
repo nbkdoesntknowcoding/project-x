@@ -34,15 +34,27 @@ if (loginNext?.startsWith('/invite/')) {
         `${apiUrl}/api/invitations/lookup?token=${encodeURIComponent(inviteToken)}`,
       );
       if (lookupRes.ok) {
-        const lookup = (await lookupRes.json()) as { workspace_slug?: string };
-        // Match by slug against the domain_workspaces list to get the id
-        if (lookup.workspace_slug) {
-          const match = domain_workspaces.find((w) => w.slug === lookup.workspace_slug);
-          invitedWorkspaceId = match?.id ?? null;
+        const lookup = (await lookupRes.json()) as { workspace_id?: string; workspace_slug?: string };
+        // Prefer matching by id (exact); fall back to slug. Either identifies the workspace
+        // this user was actually invited to so its card shows "Accept & enter", not "Request to join".
+        const match = domain_workspaces.find(
+          (w) => (lookup.workspace_id && w.id === lookup.workspace_id)
+            || (lookup.workspace_slug && w.slug === lookup.workspace_slug),
+        );
+        invitedWorkspaceId = match?.id ?? null;
+        if (!invitedWorkspaceId) {
+          // Token valid but the invited workspace isn't in the same-domain list we're offering —
+          // log enough to diagnose in prod (do NOT log the token itself).
+          console.warn('[join-or-create] invite lookup matched no offered workspace', {
+            lookup_id: lookup.workspace_id, lookup_slug: lookup.workspace_slug,
+            offered: domain_workspaces.map((w) => ({ id: w.id, slug: w.slug })),
+          });
         }
+      } else {
+        console.warn('[join-or-create] invite lookup failed', { status: lookupRes.status });
       }
-    } catch {
-      // Lookup failure is non-fatal — fall back to showing all as "Request to join"
+    } catch (err) {
+      console.warn('[join-or-create] invite lookup threw', err instanceof Error ? err.message : String(err));
     }
   }
 }
