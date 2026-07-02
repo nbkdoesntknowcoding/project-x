@@ -195,6 +195,9 @@ export interface MeetingRow {
   calendar_event_id: string | null;
   participant_count: number;
   unresolved_count: number;
+  // Whose meeting this is (calendar owner) — drives the per-person filter.
+  organizer_user_id?: string | null;
+  organizer_name?: string | null;
   // Phase 2 — post-meeting data availability (present after the API redeploys).
   transcript_status?: string | null; // 'none' | 'pending' | 'ready' | 'failed'
   post_meeting_doc_id?: string | null;
@@ -439,7 +442,7 @@ export const api = {
     apiFetch('/api/org/import/apply', { method: 'POST', body }),
 
   // Phase 2b — meetings + post-meeting identity mapping
-  listMeetings: (): Promise<{ meetings: MeetingRow[] }> => apiFetch('/api/meetings'),
+  listMeetings: (): Promise<{ meetings: MeetingRow[]; viewer_can_see_all?: boolean; viewer_user_id?: string }> => apiFetch('/api/meetings'),
   getMeeting: (id: string): Promise<{ meeting: MeetingDetail; tasks: MeetingTask[]; linked_meetings: LinkedMeeting[] }> =>
     apiFetch(`/api/meetings/${id}`),
   listMeetingProjects: (): Promise<{ projects: ProjectLite[] }> => apiFetch('/api/projects'),

@@ -14,6 +14,9 @@ export function MeetingsPage(): JSX.Element {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [projects, setProjects] = useState<ProjectLite[]>([]);
   const [loading, setLoading] = useState(true);
+  // Whether this viewer (owner/admin) can see other members' meetings — drives the person filter.
+  const [canSeeAll, setCanSeeAll] = useState(false);
+  const [personFilter, setPersonFilter] = useState<string>('all'); // 'all' | organizer_user_id
   // Open straight to a specific meeting when arriving from the "assign a project"
   // notification (/app/meetings?assign=<id>). The loader below respects this via `cur ??`.
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -27,6 +30,7 @@ export function MeetingsPage(): JSX.Element {
           api.listMeetings(), api.listMembers(), api.listMeetingProjects().catch(() => ({ projects: [] })),
         ]);
         setMeetings(m.meetings);
+        setCanSeeAll(Boolean(m.viewer_can_see_all));
         setMembers(mem.members);
         setProjects(proj.projects);
         // Default-select the latest meeting that actually has a RECORDING (transcript/doc/
@@ -46,19 +50,50 @@ export function MeetingsPage(): JSX.Element {
 
   if (loading) return <p style={{ color: muted, fontSize: 14 }}>Loading…</p>;
 
-  const selected = meetings.find((m) => m.id === selectedId) || null;
-  const latest = meetings[0] ? meetingDate(meetings[0]) : new Date();
+  // Distinct organizers present in the visible meetings (for the person filter).
+  const people = Array.from(
+    new Map(
+      meetings
+        .filter((m) => m.organizer_user_id)
+        .map((m) => [m.organizer_user_id as string, m.organizer_name || 'Unknown']),
+    ).entries(),
+  ).map(([id, name]) => ({ id, name }));
+  // Only admins/owners with more than one person's meetings get a filter.
+  const showPersonFilter = canSeeAll && people.length > 1;
+  const visibleMeetings = showPersonFilter && personFilter !== 'all'
+    ? meetings.filter((m) => m.organizer_user_id === personFilter)
+    : meetings;
+
+  const selected = visibleMeetings.find((m) => m.id === selectedId)
+    || meetings.find((m) => m.id === selectedId)
+    || null;
+  const latest = visibleMeetings[0] ? meetingDate(visibleMeetings[0]) : new Date();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <CalendarBar onSynced={refresh} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <CalendarBar onSynced={refresh} />
+        {showPersonFilter && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: muted }}>Meetings for</span>
+            <select
+              value={personFilter}
+              onChange={(e) => setPersonFilter(e.target.value)}
+              style={{ padding: '5px 8px', borderRadius: 7, fontSize: 12, border: `0.5px solid ${line}`, background: surface, color: ink, maxWidth: 220 }}
+            >
+              <option value="all">Everyone</option>
+              {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
 
       {meetings.length === 0 ? (
         <EmptyAll />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 18, alignItems: 'start' }}>
           <MeetingCalendar
-            meetings={meetings}
+            meetings={visibleMeetings}
             selectedId={selectedId}
             onSelect={setSelectedId}
             initialMonth={selected ? meetingDate(selected) : latest}

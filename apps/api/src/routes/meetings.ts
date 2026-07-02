@@ -71,21 +71,35 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
   // ── GET /api/meetings ──────────────────────────────────────────────────────
   app.get('/api/meetings', async (req, reply) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
-    try { await requireRole(req, 'viewer'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
+    let role;
+    try { role = await requireRole(req, 'viewer'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
+
+    // Visibility: workspace owners/admins see every member's meetings; everyone else sees
+    // ONLY meetings they organize (meetings.organizer_user_id = them). Own meetings are always
+    // visible. The frontend per-person filter is bounded by this — a non-admin only ever has
+    // their own to filter.
+    const isAdmin = role === 'owner' || role === 'admin';
+    const scope = isAdmin
+      ? sql``
+      : sql`AND m.organizer_user_id = ${req.auth.sub}::uuid`;
 
     const rows = await db.execute(sql`
       SELECT m.id, m.title, m.meeting_url, m.started_at, m.ended_at,
              m.scheduled_start_at, m.scheduled_end_at, m.status, m.admitted, m.calendar_event_id,
              m.transcript_status, m.post_meeting_doc_id, (m.summary IS NOT NULL) AS has_summary,
+             m.organizer_user_id,
+             COALESCE(u.display_name, u.email) AS organizer_name,
              count(mp.id)::int AS participant_count,
              count(mp.id) FILTER (WHERE mp.resolved_user_id IS NULL)::int AS unresolved_count
       FROM meetings m
       LEFT JOIN meeting_participants mp ON mp.meeting_id = m.id
+      LEFT JOIN users u ON u.id = m.organizer_user_id
       WHERE m.workspace_id = ${req.auth.tenant_id}::uuid
-      GROUP BY m.id
+        ${scope}
+      GROUP BY m.id, u.display_name, u.email
       ORDER BY COALESCE(m.scheduled_start_at, m.started_at) DESC
       LIMIT 100`);
-    return reply.send({ meetings: rows });
+    return reply.send({ meetings: rows, viewer_can_see_all: isAdmin, viewer_user_id: req.auth.sub });
   });
 
   // ── GET /api/meetings/:id ──────────────────────────────────────────────────
@@ -95,12 +109,17 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
     const { id } = req.params as { id: string };
     if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
-    try { await requireRole(req, 'viewer'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
+    let role;
+    try { role = await requireRole(req, 'viewer'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
 
     const meeting = await db.query.meetings.findFirst({
       where: and(eq(meetings.id, id), eq(meetings.workspaceId, req.auth.tenant_id)),
     });
     if (!meeting) return reply.code(404).send({ error: 'not_found' });
+    // Non-admins may only read their own meetings (mirrors the list-endpoint visibility gate).
+    if (role !== 'owner' && role !== 'admin' && meeting.organizerUserId && meeting.organizerUserId !== req.auth.sub) {
+      return reply.code(404).send({ error: 'not_found' });
+    }
 
     // Tasks auto-created from this meeting (with assignee name).
     const taskRows = await db
@@ -152,12 +171,17 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
     const { id } = req.params as { id: string };
     if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
-    try { await requireRole(req, 'viewer'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
+    let role;
+    try { role = await requireRole(req, 'viewer'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
 
     const meeting = await db.query.meetings.findFirst({
       where: and(eq(meetings.id, id), eq(meetings.workspaceId, req.auth.tenant_id)),
     });
     if (!meeting) return reply.code(404).send({ error: 'not_found' });
+    // Non-admins may only read their own meetings (mirrors the list-endpoint visibility gate).
+    if (role !== 'owner' && role !== 'admin' && meeting.organizerUserId && meeting.organizerUserId !== req.auth.sub) {
+      return reply.code(404).send({ error: 'not_found' });
+    }
 
     const turns = await db
       .select({
@@ -178,12 +202,17 @@ export const meetingsRoutes: FastifyPluginAsync = async (app) => {
     if (!req.auth) return reply.code(401).send({ error: 'unauthorized' });
     const { id } = req.params as { id: string };
     if (!UUID_RE.test(id)) return reply.code(400).send({ error: 'invalid_id' });
-    try { await requireRole(req, 'viewer'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
+    let role;
+    try { role = await requireRole(req, 'viewer'); } catch (e) { if (roleGuard(e, reply)) return; throw e; }
 
     const meeting = await db.query.meetings.findFirst({
       where: and(eq(meetings.id, id), eq(meetings.workspaceId, req.auth.tenant_id)),
     });
     if (!meeting) return reply.code(404).send({ error: 'not_found' });
+    // Non-admins may only read their own meetings (mirrors the list-endpoint visibility gate).
+    if (role !== 'owner' && role !== 'admin' && meeting.organizerUserId && meeting.organizerUserId !== req.auth.sub) {
+      return reply.code(404).send({ error: 'not_found' });
+    }
 
     const rows = await db
       .select({
