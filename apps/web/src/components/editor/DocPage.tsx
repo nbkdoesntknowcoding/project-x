@@ -6,6 +6,7 @@ import type { EditorView } from 'prosemirror-view';
 import { api, setAuthToken } from '../../lib/api';
 import { CommentComposer } from '../comments/CommentComposer';
 import { CommentsSidebar } from '../comments/CommentsSidebar';
+import { SelectionCommentButton } from '../comments/SelectionCommentButton';
 import { SaveVersionMenu } from '../versions/SaveVersionMenu';
 import { VersionDiffView } from '../versions/VersionDiffView';
 import { VersionsSidebar } from '../versions/VersionsSidebar';
@@ -137,21 +138,26 @@ export function DocPage({ initialDoc, jwt, user, collabUrl, activeView = 'edit' 
     if (sel) lastSelectionRef.current = sel;
   }, []);
 
+  // --- start a comment on a selection (floating button + ⌘⇧M share this) --
+  const startComment = useCallback((sel: EditorSelection | null) => {
+    const s = sel ?? lastSelectionRef.current;
+    if (!s || s.from === s.to) return;
+    setComposerSelection(s);
+    setCommentsSidebarOpen(true);
+  }, []);
+
   // --- ⌘⇧M shortcut -------------------------------------------------------
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
       const isModShiftM =
         (e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'm' || e.key === 'M');
       if (!isModShiftM) return;
-      const sel = selection ?? lastSelectionRef.current;
-      if (!sel || sel.from === sel.to) return;
       e.preventDefault();
-      setComposerSelection(sel);
-      setCommentsSidebarOpen(true);
+      startComment(selection);
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selection]);
+  }, [selection, startComment]);
 
   const handleComposerPosted = useCallback(() => {
     setComposerSelection(null);
@@ -227,6 +233,16 @@ export function DocPage({ initialDoc, jwt, user, collabUrl, activeView = 'edit' 
             selectionEnd={composerSelection.to}
             onPosted={handleComposerPosted}
             onCancel={() => setComposerSelection(null)}
+          />
+        )}
+        {/* Google-Docs-style discoverable entry: floating "Comment" button on text selection.
+            Hidden while the composer is already open, and for viewers (who can't post). */}
+        {!composerSelection && (
+          <SelectionCommentButton
+            view={view}
+            selection={selection}
+            canComment={role !== 'viewer'}
+            onAdd={startComment}
           />
         )}
       </div>

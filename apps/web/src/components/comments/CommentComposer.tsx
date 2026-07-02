@@ -37,16 +37,24 @@ export function CommentComposer({
 
   async function handleSubmit(): Promise<void> {
     if (!body.trim()) return;
-    const anchorStart = pmPosToRelative(view, selectionStart);
-    const anchorEnd = pmPosToRelative(view, selectionEnd);
-    if (!anchorStart || !anchorEnd) {
-      // Mount race — sync plugin hasn't bound yet. Surface to the user
-      // rather than silently posting a useless thread.
-      setError('Editor not ready yet. Try again in a moment.');
-      return;
-    }
     setSubmitting(true);
     setError(null);
+    // Self-heal the mount race: the y-prosemirror sync binding can lag a beat behind mount,
+    // making pmPosToRelative return null. Retry briefly before giving up instead of a dead-end
+    // "editor not ready" the user has to guess about.
+    let anchorStart: string | null = null;
+    let anchorEnd: string | null = null;
+    for (let i = 0; i < 6; i++) {
+      anchorStart = pmPosToRelative(view, selectionStart);
+      anchorEnd = pmPosToRelative(view, selectionEnd);
+      if (anchorStart && anchorEnd) break;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    if (!anchorStart || !anchorEnd) {
+      setError('Editor is still syncing — give it a second and try again.');
+      setSubmitting(false);
+      return;
+    }
     try {
       const res = await fetch(`/api/comment-threads`, {
         method: 'POST',
