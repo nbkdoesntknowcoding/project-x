@@ -318,6 +318,18 @@ if (loginNext?.startsWith('/invite/')) {
           const err = await res.json().catch(function() { return {}; });
           throw new Error(err.error || 'join_failed');
         }
+        const data = await res.json().catch(function() { return {}; });
+        if (data.requested) {
+          // Not an instant join — a request was sent for the owner to approve.
+          loading.classList.remove('active');
+          var meta = btn.closest('.jc-ws-card').querySelector('.jc-ws-meta');
+          if (meta) meta.textContent = 'Request sent — waiting for approval';
+          btn.textContent = 'Requested';
+          btn.disabled = true;
+          enableAll();
+          btn.disabled = true;
+          return;
+        }
         // Session cookie is now set server-side — redirect straight to app.
         window.location.href = loginNext || '/app';
       } catch (e) {

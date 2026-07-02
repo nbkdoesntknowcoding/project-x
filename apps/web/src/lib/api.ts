@@ -204,6 +204,14 @@ export interface MeetingRow {
   has_summary?: boolean;
 }
 
+export interface JoinRequestRow {
+  id: string;
+  requester_id: string;
+  requester_name: string | null;
+  requester_email: string;
+  created_at: string;
+}
+
 export interface MeetingSummary {
   keyPoints: string[];
   decisions: string[];
@@ -355,6 +363,12 @@ export const api = {
     apiFetch(`/api/decision-approvals?box=${box}`),
   resolveDecisionApproval: (id: string, body: { action: 'confirm' | 'reject' }): Promise<{ status: string }> =>
     apiFetch(`/api/decision-approvals/${id}`, { method: 'PATCH', body }),
+  // Workspace join requests (admin review of same-domain self-join requests).
+  listJoinRequests: (): Promise<{ requests: JoinRequestRow[] }> => apiFetch('/api/workspace/join-requests'),
+  approveJoinRequest: (id: string, role: 'viewer' | 'editor' | 'admin'): Promise<{ ok: true; granted_role: string }> =>
+    apiFetch(`/api/workspace/join-requests/${id}/approve`, { method: 'POST', body: { role } }),
+  denyJoinRequest: (id: string): Promise<{ ok: true }> =>
+    apiFetch(`/api/workspace/join-requests/${id}/deny`, { method: 'POST', body: {} }),
   listDocs: (): Promise<{ docs: DocSummary[] }> => apiFetch('/api/docs'),
   createDoc: (body: DocCreatePayload): Promise<{ doc: DocFull }> =>
     apiFetch('/api/docs', { method: 'POST', body }),

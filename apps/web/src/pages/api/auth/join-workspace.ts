@@ -68,8 +68,10 @@ export const POST: APIRoute = async ({ request, cookies }) => {
       }),
     });
   } else {
-    // Same-domain user: join as viewer
-    upstream = await fetch(`${BACKEND}/api/_internal/join-workspace`, {
+    // Same-domain user who was NOT invited: this is a REQUEST, not an instant join. The backend
+    // creates a pending request and notifies the workspace owners/admins — no membership until
+    // one of them approves. (Previously this auto-added them as an editor with no approval.)
+    upstream = await fetch(`${BACKEND}/api/_internal/request-join`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -88,11 +90,23 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     });
   }
 
-  const { user_id, tenant_id, jwt } = (await upstream.json()) as {
-    user_id: string;
-    tenant_id: string;
-    jwt: string;
+  const data = (await upstream.json()) as {
+    user_id?: string;
+    tenant_id?: string;
+    jwt?: string;
+    requested?: boolean;
+    already_member?: boolean;
   };
+
+  // Pending request created — the user does NOT get a session; they wait for approval.
+  if (data.requested) {
+    return new Response(JSON.stringify({ requested: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const { user_id, tenant_id, jwt } = data as { user_id: string; tenant_id: string; jwt: string };
 
   // ── Seal the full session (including access_token from the pending cookie) ─
   await setSession(cookies, {

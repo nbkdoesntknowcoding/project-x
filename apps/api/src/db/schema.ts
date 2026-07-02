@@ -856,6 +856,28 @@ export const decisionApprovals = pgTable(
   }),
 );
 
+// Approval-gated same-domain self-join (migration 0062). A same-domain user requesting to
+// join a workspace lands here as 'pending'; an owner/admin approves (choosing granted_role,
+// which creates the membership) or denies. Sibling to decision_approvals — app-layer enforced.
+export const workspaceJoinRequests = pgTable(
+  'workspace_join_requests',
+  {
+    id:          uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    workspaceId: uuid('workspace_id').notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+    requesterId: uuid('requester_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    status:      text('status').notNull().default('pending'), // 'pending' | 'approved' | 'denied'
+    grantedRole: text('granted_role'),                        // role chosen at approval: viewer|editor|admin
+    reviewedBy:  uuid('reviewed_by').references(() => users.id),
+    reviewedAt:  timestamp('reviewed_at', { withTimezone: true }),
+    createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    pendingUq:    uniqueIndex('workspace_join_requests_pending_uq').on(table.workspaceId, table.requesterId).where(sql`status = 'pending'`),
+    workspaceIdx: index('workspace_join_requests_workspace_idx').on(table.workspaceId, table.status),
+    requesterIdx: index('workspace_join_requests_requester_idx').on(table.requesterId, table.status),
+  }),
+);
+
 export const toolAudit = pgTable(
   'tool_audit',
   {
