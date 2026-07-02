@@ -70,7 +70,10 @@ const server = new Server<ConnectionContext>({
     // Consume any pending AI-version signal for this doc (set by IPC handlers).
     const aiToolName = consumeAiWrite(ctx.doc_id);
     const aiMeta = aiToolName ? { toolName: aiToolName } : null;
-    const result = await storeDocumentState(ctx, data.document, aiMeta);
+    // clientsCount === 0 means this is the final flush after the last editor disconnected —
+    // the end of an editing session. storeDocumentState uses it to always version the closing state.
+    const isSessionEnd = (data as { clientsCount?: number }).clientsCount === 0;
+    const result = await storeDocumentState(ctx, data.document, aiMeta, isSessionEnd);
     if (result.snapshotted) {
       const label = aiMeta ? `AI write (${aiMeta.toolName})` : '50-store anchor';
       console.log(`[collab] Version snapshot for ${ctx.doc_id} — ${label}`);

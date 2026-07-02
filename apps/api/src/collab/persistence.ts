@@ -65,6 +65,10 @@ export interface AiVersionMeta {
 const storeCounts = new Map<string, number>();
 // Per-doc wall-clock of the last snapshot, driving the once-per-session cadence.
 const lastSnapshotAt = new Map<string, number>();
+// Per-doc content hash of the last snapshot. Lets the session-end flush snapshot the
+// FINAL state whenever it differs from the last snapshot — even though the docs row hash
+// already matches (every store writes it), so `contentChanged` alone is false by then.
+const lastSnapshotHash = new Map<string, string>();
 
 /**
  * Atomic write of yjs_state + markdown + content_hash for a single doc.
@@ -88,6 +92,7 @@ export async function storeDocumentState(
   ctx: ConnectionContext,
   yjsDoc: Y.Doc,
   aiMeta?: AiVersionMeta | null,
+  isSessionEnd = false,
 ): Promise<StoreResult> {
   const encoded = Y.encodeStateAsUpdate(yjsDoc);
   const newMarkdown = await yjsStateToMarkdown(encoded);
@@ -124,17 +129,23 @@ export async function storeDocumentState(
       .where(and(eq(docs.id, ctx.doc_id), isNull(docs.deletedAt)));
 
     let snapshotted = false;
-    if (contentChanged) {
+    // Session-end flush (last client left): capture the FINAL state as a version whenever it
+    // differs from the last snapshot. By now the docs row already holds this content, so
+    // `contentChanged` is false — we compare against the last SNAPSHOT's hash instead. This is
+    // what guarantees a short session's closing edits get their own version.
+    const endCapture = isSessionEnd && newHash !== (lastSnapshotHash.get(ctx.doc_id) ?? '');
+    if (contentChanged || endCapture) {
       const count = (storeCounts.get(ctx.doc_id) ?? 0) + 1;
-      storeCounts.set(ctx.doc_id, count);
+      if (contentChanged) storeCounts.set(ctx.doc_id, count);
 
-      // Snapshot when: an AI write (always), OR this is the first content change of a new
-      // editing session (last snapshot older than SESSION_SNAPSHOT_MS), OR the within-session
-      // ceiling is hit. This gives ~one human version per sitting instead of the old
-      // 50-store-only rule that left hand-edited docs with no version history.
+      // Snapshot when: an AI write (always), OR the session just ended with unsaved-since-snapshot
+      // changes, OR this is the first content change of a new editing session (last snapshot older
+      // than SESSION_SNAPSHOT_MS), OR the within-session ceiling is hit. Gives ~one human version
+      // per sitting PLUS the closing state, vs the old 50-store-only rule that left hand-edited
+      // docs with essentially no version history.
       const now = Date.now();
       const sinceLast = now - (lastSnapshotAt.get(ctx.doc_id) ?? 0);
-      const shouldSnapshot = aiMeta != null || sinceLast >= SESSION_SNAPSHOT_MS || count % SNAPSHOT_EVERY === 0;
+      const shouldSnapshot = aiMeta != null || endCapture || sinceLast >= SESSION_SNAPSHOT_MS || count % SNAPSHOT_EVERY === 0;
 
       if (shouldSnapshot) {
         const nextRow = await tx.execute(
@@ -150,10 +161,13 @@ export async function storeDocumentState(
           authorKind: aiMeta != null ? 'ai' : 'human',
           comment: aiMeta != null
             ? `AI write: ${aiMeta.toolName}`
-            : 'Auto-snapshot (editing session)',
+            : endCapture
+              ? 'Auto-snapshot (session end)'
+              : 'Auto-snapshot (editing session)',
         });
         snapshotted = true;
         lastSnapshotAt.set(ctx.doc_id, now);
+        lastSnapshotHash.set(ctx.doc_id, newHash);
         // Reset the human counter after an AI-triggered snapshot so the 50-store
         // cycle doesn't immediately fire again on the very next human keystroke.
         if (aiMeta != null) storeCounts.set(ctx.doc_id, 0);
