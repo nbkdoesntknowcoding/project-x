@@ -64,7 +64,9 @@ if (loginNext?.startsWith('/invite/')) {
   </script>
   <style is:global>
     .jc-page * { box-sizing: border-box; }
-    .jc-page { margin: 0; padding: 0; min-height: 100vh; position: relative; overflow-x: hidden; }
+    /* Base page surface — without this the body fell through to browser white, so the
+       dark translucent card looked grey on white and clashed with the app's dark theme. */
+    .jc-page { margin: 0; padding: 0; min-height: 100vh; position: relative; overflow-x: hidden; background: var(--canvas); color: var(--ink); }
 
     /* FLUID BG */
     .jc-bg { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
@@ -239,7 +241,7 @@ if (loginNext?.startsWith('/invite/')) {
               data-workspace-id={ws.id}
               data-invite-token={isInvited ? inviteToken : undefined}
             >
-              {isInvited ? 'Join' : 'Request to join'}
+              {isInvited ? 'Accept & enter' : 'Request to join'}
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
             </button>
           </div>
